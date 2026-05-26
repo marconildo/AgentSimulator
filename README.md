@@ -70,20 +70,43 @@ security at each layer, networking/infrastructure/containers, and where data liv
 
 ## 🏗️ Architecture
 
-```
-Browser (React + Vite + TS)            Backend (FastAPI, Python 3.12)
-  ChatPanel ─ POST /api/chat ─────────▶ /api/chat ─ creates trace, opens SSE
-  FlowCanvas ◀──── SSE events ───────── TraceEmitter (normalize + persist)
-  InspectorPanel / Timeline                 │
-                                       LangGraph: route ▶ think ▶ [rag | mcp] ▶ generate ▶ respond
-                                            │            │      │
-                                       RAG (Chroma)   MCP client   LLM provider (OpenAI | Mock)
-                                                         │
-                                                   MCP server (FastMCP): calculator, time, kb_lookup
+```mermaid
+flowchart LR
+    subgraph CLIENT["🖥️ Client Tier"]
+        FE["<b>Frontend</b><br/>React + Vite"]
+    end
+    subgraph APIT["⚙️ API Tier"]
+        BE["<b>Backend</b><br/>FastAPI · SSE"]
+    end
+    subgraph AGENTT["🧠 Agent Tier"]
+        AG["<b>LangGraph agent</b><br/>route → think ⇄ tools → generate"]
+    end
+    subgraph SVC["📦 AI &amp; Data Services"]
+        RAG["📚 RAG · Chroma"]
+        MCP["🔧 MCP server<br/>calculator · time · kb_lookup"]
+        LLM["✨ LLM<br/>OpenAI / Mock"]
+    end
+
+    FE -- "POST /api/chat · 🔒 HTTPS/TLS 1.3" --> BE
+    BE -. "SSE stream ↩ (tokens)" .-> FE
+    BE -- "in-cluster · 🔒 mTLS" --> AG
+    AG -- "TCP · vector query" --> RAG
+    AG -- "MCP · stdio" --> MCP
+    AG -- "🔒 HTTPS/TLS" --> LLM
+
+    classDef client fill:#0b2233,stroke:#38bdf8,stroke-width:1.5px,color:#e6ecff;
+    classDef api fill:#191333,stroke:#a78bfa,stroke-width:1.5px,color:#e6ecff;
+    classDef agent fill:#2a1430,stroke:#f472b6,stroke-width:1.5px,color:#e6ecff;
+    classDef svc fill:#0f2a22,stroke:#34d399,stroke-width:1.5px,color:#e6ecff;
+    class FE client;
+    class BE api;
+    class AG agent;
+    class RAG,MCP,LLM svc;
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) and [`docs/how-it-works.md`](docs/how-it-works.md)
-for the full walkthrough.
+The solid arrows are the request path; the dotted arrow is the answer **streaming back** over the
+same SSE connection. See [`docs/architecture.md`](docs/architecture.md) and
+[`docs/how-it-works.md`](docs/how-it-works.md) for the full walkthrough.
 
 ## 🚀 Quickstart
 
@@ -132,10 +155,66 @@ presence of `OPENAI_API_KEY`.
 
 ## 📁 Project layout
 
-```
-backend/   FastAPI + LangGraph agent, RAG, MCP server/client, LLM providers
-frontend/  React + Vite visualization (React Flow canvas, inspector, timeline)
-docs/      architecture & how-it-works
+```text
+AgentSimulator/
+├── backend/                      # FastAPI + LangGraph agent (Python 3.12)
+│   ├── app/
+│   │   ├── main.py               # FastAPI app: POST /api/chat (SSE), /api/trace/{id}, /api/health
+│   │   ├── config.py             # pydantic-settings — demo vs OpenAI mode (auto-detected)
+│   │   ├── schemas.py            # event protocol (TraceEvent, Stage, Phase) — the BE↔FE contract
+│   │   ├── trace.py              # TraceEmitter (stage events) + in-memory TraceStore (replay)
+│   │   ├── agent/                # the LangGraph state machine
+│   │   │   ├── graph.py          # route → retrieve → think ⇄ tools → generate → respond
+│   │   │   ├── state.py          # typed AgentState
+│   │   │   └── prompts.py        # system prompt
+│   │   ├── rag/                  # retrieval pipeline
+│   │   │   ├── ingest.py         # chunk + embed + build the Chroma index
+│   │   │   ├── retriever.py      # embed query + cosine top-k search
+│   │   │   ├── store.py          # Chroma vector store wiring
+│   │   │   └── embeddings.py     # OpenAI embeddings / deterministic mock
+│   │   ├── mcp/                  # Model Context Protocol
+│   │   │   ├── server.py         # FastMCP server: calculator, current_time, kb_lookup
+│   │   │   └── client.py         # loads MCP tools into the agent (+ local fallback)
+│   │   ├── llm/                  # provider abstraction (Strategy pattern)
+│   │   │   ├── provider.py       # LLMProvider interface + factory
+│   │   │   ├── openai_provider.py# real ChatOpenAI (streaming)
+│   │   │   └── mock_provider.py  # deterministic, offline provider
+│   │   └── data/corpus/          # markdown knowledge base (RAG source + learning material)
+│   ├── tests/                    # pytest — runs fully offline in demo mode
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── pyproject.toml            # ruff + pytest config
+│   └── .env.example
+├── frontend/                     # React + Vite + TypeScript visualization
+│   ├── src/
+│   │   ├── App.tsx               # layout + Simulator / Learn page toggle
+│   │   ├── components/
+│   │   │   ├── FlowCanvas.tsx     # React Flow canvas (tiers, stations, hops)
+│   │   │   ├── ChatPanel.tsx      # input + streamed answer
+│   │   │   ├── InspectorPanel.tsx # per-station data, protocols, network hops
+│   │   │   ├── Timeline.tsx       # play / pause / step / replay
+│   │   │   ├── nodes/             # StationNode, TierNode (container boxes)
+│   │   │   └── edges/             # FlowEdge (animated, directional, labeled hops)
+│   │   ├── learn/                # the "Learn" content map (roadmap.sh-style)
+│   │   │   ├── content.ts         # all educational content (easy to edit / translate)
+│   │   │   ├── LearnMap.tsx        # the interactive graph
+│   │   │   ├── LearnNodes.tsx      # root / section / topic nodes
+│   │   │   ├── TopicDetail.tsx     # what / why / where panel
+│   │   │   └── LearnPage.tsx
+│   │   ├── store/useSimulator.ts # zustand event store (live + replay)
+│   │   ├── lib/
+│   │   │   ├── sse.ts             # fetch-based SSE client
+│   │   │   ├── derive.ts          # pure view projection (events + cursor → state)
+│   │   │   └── stations.ts        # tiers, stations, hops & Azure mapping (single source)
+│   │   └── types/events.ts       # TypeScript mirror of the event protocol
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── package.json
+│   └── vite.config.ts
+├── docs/                         # architecture.md, how-it-works.md, images/
+├── docker-compose.yml            # one-command full stack
+├── .github/workflows/ci.yml      # lint (ruff) + tests (pytest) + frontend build
+└── LICENSE                       # MIT
 ```
 
 ## 🤝 Contributing & license
