@@ -13,7 +13,7 @@ import {
   type StationId,
   type StationMeta,
 } from "../lib/stations";
-import type { Phase, Stage, TraceEvent } from "../types/events";
+import type { JsonRpcFrames, Phase, RequestBody, Stage, TraceEvent } from "../types/events";
 
 type I = Strings["inspector"];
 
@@ -149,13 +149,20 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
 function renderDetail(id: StationId, events: TraceEvent[], i: I) {
   switch (id) {
     case "frontend": {
-      const msg = events.find((e) => typeof e.data.message === "string")?.data.message as string | undefined;
+      const sent = pick(events, "frontend", "end");
+      const msg = (sent?.data.message as string | undefined) ?? undefined;
+      const request = sent?.data.request as RequestBody | undefined;
       const respond = pick(events, "respond", "end");
       return (
         <>
           {msg && (
             <Section title={i.requestSent}>
               <Mono>{msg}</Mono>
+            </Section>
+          )}
+          {request && (
+            <Section title={i.requestBody}>
+              <Scroll>{JSON.stringify(request, null, 2)}</Scroll>
             </Section>
           )}
           {respond?.data.answer !== undefined && (
@@ -266,7 +273,12 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                 {chunks.map((c, idx) => (
                   <div key={idx} className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
                     <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <span className="truncate font-mono text-[var(--color-text-soft)]">{c.source}</span>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="shrink-0 rounded bg-[var(--color-line)] px-1 font-mono text-[10px] text-[var(--color-muted)]">
+                          #{c.rank ?? idx + 1}
+                        </span>
+                        <span className="truncate font-mono text-[var(--color-text-soft)]">{c.source}</span>
+                      </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {c.uploaded && (
                           <span className="rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-ok-soft)]">
@@ -277,6 +289,20 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                       </div>
                     </div>
                     <ScoreBar value={c.score} />
+                    {(c.similarity !== undefined || c.distance !== undefined) && (
+                      <div className="mt-1 flex gap-3 font-mono text-[10px] text-[var(--color-label)]">
+                        {c.similarity !== undefined && (
+                          <span>
+                            {i.similarity}: {c.similarity.toFixed(4)}
+                          </span>
+                        )}
+                        {c.distance !== undefined && (
+                          <span>
+                            {i.distance}: {c.distance.toFixed(4)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-[var(--color-muted)]">{c.text}</p>
                   </div>
                 ))}
@@ -303,6 +329,9 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                   </div>
                 ))}
               </div>
+              {discover.data.jsonrpc !== undefined && (
+                <JsonRpc frames={discover.data.jsonrpc as JsonRpcFrames} i={i} />
+              )}
             </Section>
           )}
           {calls.map((call, idx) => (
@@ -310,6 +339,9 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
               <KeyVal k={i.tool} v={String(call.data.tool)} />
               <KeyVal k={i.args} v={JSON.stringify(call.data.args)} />
               <KeyVal k={i.result} v={String(call.data.result)} />
+              {call.data.jsonrpc !== undefined && (
+                <JsonRpc frames={call.data.jsonrpc as JsonRpcFrames} i={i} />
+              )}
             </Section>
           ))}
         </>
@@ -364,6 +396,11 @@ interface RagChunk {
   title: string;
   score: number;
   uploaded?: boolean;
+  // 007-numeric-transparency: raw distance, its inverse similarity, and a stable
+  // rank, so the inspector can render a ranked similarity table.
+  distance?: number;
+  similarity?: number;
+  rank?: number;
 }
 
 // PDF ingestion detail (002-interactive-chat): chunking strategy, per-chunk
@@ -499,6 +536,34 @@ function Mono({ children }: { children: ReactNode }) {
     <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-snug text-[var(--color-ink)]">
       {children}
     </p>
+  );
+}
+
+// Collapsible JSON-RPC request/response frames (007-numeric-transparency). The
+// frames are reconstructed for the in-process local fallback — badged so they
+// never masquerade as real wire traffic.
+function JsonRpc({ frames, i }: { frames: JsonRpcFrames; i: I }) {
+  return (
+    <details className="mt-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)]">
+      <summary className="cursor-pointer select-none px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+        {i.jsonrpc}
+        {frames.reconstructed && (
+          <span className="ml-1.5 rounded-full border border-[var(--color-line)] px-1.5 py-px text-[9px] font-normal normal-case tracking-normal text-[var(--color-label)]">
+            {i.reconstructed}
+          </span>
+        )}
+      </summary>
+      <div className="space-y-1 px-2 pb-2">
+        <div className="text-[10px] uppercase tracking-wider text-[var(--color-label)]">
+          {i.request}
+        </div>
+        <Scroll>{JSON.stringify(frames.request, null, 2)}</Scroll>
+        <div className="text-[10px] uppercase tracking-wider text-[var(--color-label)]">
+          {i.response}
+        </div>
+        <Scroll>{JSON.stringify(frames.response, null, 2)}</Scroll>
+      </div>
+    </details>
   );
 }
 

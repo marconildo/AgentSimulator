@@ -94,6 +94,15 @@ export interface Strings {
     tool: string;
     args: string;
     result: string;
+    // Raw protocol/data transparency (007-numeric-transparency).
+    jsonrpc: string;
+    request: string;
+    response: string;
+    requestBody: string;
+    reconstructed: string;
+    rank: string;
+    distance: string;
+    similarity: string;
     assembledPrompt: string;
     system: string;
     retrievedContext: string;
@@ -322,6 +331,14 @@ const en: Strings = {
     tool: "tool",
     args: "args",
     result: "result",
+    jsonrpc: "JSON-RPC frames",
+    request: "Request",
+    response: "Response",
+    requestBody: "Request body",
+    reconstructed: "reconstructed (local fallback)",
+    rank: "rank",
+    distance: "distance",
+    similarity: "similarity",
     assembledPrompt: "Assembled prompt",
     system: "system",
     retrievedContext: "retrieved context",
@@ -579,6 +596,14 @@ const pt: Strings = {
     tool: "ferramenta",
     args: "args",
     result: "resultado",
+    jsonrpc: "Frames JSON-RPC",
+    request: "Requisição",
+    response: "Resposta",
+    requestBody: "Corpo da requisição",
+    reconstructed: "reconstruído (fallback local)",
+    rank: "posição",
+    distance: "distância",
+    similarity: "similaridade",
     assembledPrompt: "Prompt montado",
     system: "sistema",
     retrievedContext: "contexto recuperado",

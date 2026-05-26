@@ -26,6 +26,41 @@ class RegisteredTool:
     runner: Callable[[dict[str, Any]], Awaitable[str]]
 
 
+def jsonrpc_frames(
+    method: str,
+    params: dict[str, Any],
+    result: Any,
+    *,
+    reconstructed: bool,
+    request_id: int = 1,
+) -> dict[str, Any]:
+    """Build canonical JSON-RPC 2.0 request/response frames for an MCP exchange.
+
+    Returns ``{request, response, reconstructed}`` (007-numeric-transparency), the
+    shape the inspector renders. ``langchain-mcp-adapters`` abstracts the stdio
+    transport and does not surface the literal wire bytes, so even on the
+    ``mcp-stdio`` path these frames are *assembled* from the real exchange
+    (method/params/result) — they are faithful to the MCP protocol (``tools/list``,
+    ``tools/call``). ``reconstructed`` is ``True`` only for the in-process local
+    fallback, where nothing actually travelled; the UI badges that case so it
+    never masquerades as real wire traffic (constitution §3 — honesty).
+    """
+    return {
+        "request": {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params,
+        },
+        "response": {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": result,
+        },
+        "reconstructed": reconstructed,
+    }
+
+
 class ToolRegistry:
     def __init__(self, tools: list[RegisteredTool], transport: str) -> None:
         self._tools = {t.name: t for t in tools}

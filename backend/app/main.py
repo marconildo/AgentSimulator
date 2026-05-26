@@ -113,13 +113,29 @@ async def chat(req: ChatRequest):
     session = await store.ensure_session(req.session_id or uuid.uuid4().hex)
     session_id = session["id"]
 
+    # The resolved POST body the backend actually acted on, echoed onto the
+    # frontend event so the client/backend inspector can show it verbatim
+    # (007-numeric-transparency, Q2). top_k is the resolved value (default when
+    # omitted); the 006 overrides are included only when the client sent them, so
+    # the body reflects exactly what executed.
+    request_body: dict[str, Any] = {
+        "message": req.message,
+        "session_id": session_id,
+        "top_k": top_k,
+        "mode": req.mode,
+    }
+    if req.system_prompt is not None:
+        request_body["system_prompt"] = req.system_prompt
+    if req.enabled_tools is not None:
+        request_body["enabled_tools"] = req.enabled_tools
+
     async def producer() -> None:
         try:
             await emitter.emit(
                 Stage.FRONTEND,
                 Phase.END,
                 "User sent a message",
-                {"message": req.message, "session_id": session_id},
+                {"message": req.message, "session_id": session_id, "request": request_body},
             )
             async with emitter.stage(
                 Stage.BACKEND, "API received the request", {"message": req.message}

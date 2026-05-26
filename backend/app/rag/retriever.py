@@ -81,14 +81,24 @@ async def retrieve(
 
     async with emitter.stage(Stage.RAG_RETRIEVE, "Selecting top-k chunks") as rec:
         chunks: list[dict[str, Any]] = []
-        for doc, distance in results:
-            similarity = round(max(0.0, 1.0 - float(distance)), 4)
+        # Chroma returns results already sorted by ascending distance (closest
+        # first), so the enumeration index is a stable rank (1-based).
+        for rank, (doc, distance) in enumerate(results, start=1):
+            dist = round(float(distance), 4)
+            # similarity = 1 − distance (cosine). `score` keeps the existing
+            # clamped-at-0 value used for the bar; `similarity` is the raw inverse
+            # of `distance` so the inspector's ranked table can show both as exact
+            # complements (007-numeric-transparency).
+            similarity = round(1.0 - dist, 4)
             chunks.append(
                 {
                     "text": doc.page_content,
                     "source": doc.metadata.get("source") or doc.metadata.get("filename", ""),
                     "title": doc.metadata.get("title", ""),
-                    "score": similarity,
+                    "score": round(max(0.0, similarity), 4),
+                    "distance": dist,
+                    "similarity": similarity,
+                    "rank": rank,
                     # True for user-uploaded PDFs, False for the built-in corpus —
                     # lets the UI badge a chunk as coming from the user's document.
                     "uploaded": not doc.metadata.get("corpus", False),

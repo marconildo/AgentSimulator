@@ -38,6 +38,29 @@ export interface DoneEvent {
   session_id: string;
 }
 
+// 007-numeric-transparency — optional enrichments on existing event `data`
+// payloads (no new Stage). `TraceEvent.data` stays an open record; these typed
+// shapes let the inspector read the new fields safely.
+
+// Canonical JSON-RPC frames for an MCP exchange, on mcp.discover / mcp.call.
+// `reconstructed` is true only for the in-process local fallback (badged in UI).
+export interface JsonRpcFrames {
+  request: { jsonrpc: string; id: number; method: string; params: Record<string, unknown> };
+  response: { jsonrpc: string; id: number; result: unknown };
+  reconstructed: boolean;
+}
+
+// The resolved POST /api/chat body the backend acted on, echoed on the
+// `frontend` event (top_k resolved; 006 overrides present only when sent).
+export interface RequestBody {
+  message: string;
+  session_id: string;
+  top_k: number;
+  mode: string;
+  system_prompt?: string;
+  enabled_tools?: string[];
+}
+
 export interface TraceSummary {
   trace_id: string;
   message: string;

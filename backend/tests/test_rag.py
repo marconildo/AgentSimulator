@@ -44,6 +44,25 @@ async def test_retrieve_emits_rag_stages():
     assert "rag.retrieve" in stages
 
 
+async def test_retrieve_chunks_expose_distance_similarity_rank():
+    # AC4 (007-numeric-transparency) — each top-k chunk carries the raw `distance`,
+    # `similarity = 1 − distance`, and a stable `rank` ascending by distance, so the
+    # RAG inspector can render a ranked similarity table.
+    emitter = TraceEmitter("t", "q")
+    _, chunks = await retrieve("What is RAG and how does retrieval work?", k=3, emitter=emitter)
+
+    assert chunks
+    for c in chunks:
+        assert "distance" in c and "similarity" in c and "rank" in c
+        # similarity and distance are exact inverses (both rounded to 4 dp).
+        assert c["similarity"] == round(1.0 - c["distance"], 4)
+
+    ranks = [c["rank"] for c in chunks]
+    assert ranks == list(range(1, len(chunks) + 1))  # stable, 1-based
+    distances = [c["distance"] for c in chunks]
+    assert distances == sorted(distances)  # ascending by distance
+
+
 async def test_retrieve_with_session_filter_still_returns_corpus():
     # D3 — a session with no uploads still retrieves the base corpus through the
     # `corpus == true OR session_id == active` filter (corpus tagged corpus=True).

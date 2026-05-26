@@ -107,6 +107,50 @@ def test_batch_returns_full_trace_in_one_json_response():
         assert client.get(f"/api/trace/{body['trace_id']}").status_code == 200
 
 
+@pytest.mark.openai
+def test_frontend_event_carries_resolved_request_body():
+    # AC3 (007) — the frontend event echoes the resolved POST body the backend
+    # acted on: message, session_id, top_k, mode, plus the 006 overrides when sent.
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/chat",
+            json={
+                "message": "What is RAG?",
+                "mode": "batch",
+                "top_k": 2,
+                "enabled_tools": ["calculator"],
+                "system_prompt": "You are concise.",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        fe = next(e for e in body["events"] if e["stage"] == "frontend")
+        rb = fe["data"]["request"]
+        assert rb["message"] == "What is RAG?"
+        assert rb["session_id"]
+        assert rb["top_k"] == 2
+        assert rb["mode"] == "batch"
+        assert rb["enabled_tools"] == ["calculator"]
+        assert rb["system_prompt"] == "You are concise."
+
+
+@pytest.mark.openai
+def test_frontend_request_body_resolves_default_top_k_and_omits_absent_overrides():
+    # AC3 — top_k resolves to the configured default when omitted; overrides that
+    # weren't sent are not echoed (the body reflects exactly what the server used).
+    from app.config import get_settings
+
+    with TestClient(app) as client:
+        resp = client.post("/api/chat", json={"message": "What is RAG?", "mode": "batch"})
+        body = resp.json()
+        fe = next(e for e in body["events"] if e["stage"] == "frontend")
+        rb = fe["data"]["request"]
+        assert rb["top_k"] == get_settings().rag_top_k
+        assert rb["mode"] == "batch"  # faithfully echoes the mode that executed
+        assert "system_prompt" not in rb
+        assert "enabled_tools" not in rb
+
+
 def test_unknown_trace_returns_404():
     with TestClient(app) as client:
         assert client.get("/api/trace/nope").status_code == 404

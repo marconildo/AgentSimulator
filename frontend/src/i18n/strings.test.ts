@@ -17,6 +17,34 @@ function leafKeys(obj: Record<string, unknown>, prefix = ""): string[] {
   );
 }
 
+describe("inspector i18n (007-numeric-transparency)", () => {
+  const enI = UI.en.inspector;
+  const ptI = UI.pt.inspector;
+
+  it("has the same leaf keys in en and pt", () => {
+    expect(leafKeys(enI).sort()).toEqual(leafKeys(ptI).sort());
+  });
+
+  it("includes the new numeric-transparency labels in both languages", () => {
+    const keys = [
+      "jsonrpc",
+      "request",
+      "response",
+      "requestBody",
+      "rank",
+      "distance",
+      "similarity",
+      "reconstructed",
+    ] as const;
+    for (const k of keys) {
+      expect(typeof enI[k]).toBe("string");
+      expect((enI[k] as string).trim()).toBeTruthy();
+      expect(typeof ptI[k]).toBe("string");
+      expect((ptI[k] as string).trim()).toBeTruthy();
+    }
+  });
+});
+
 describe("settings.experiment i18n", () => {
   it("has the same keys in en and pt", () => {
     expect(leafKeys(en).sort()).toEqual(leafKeys(pt).sort());

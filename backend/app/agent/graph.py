@@ -21,7 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
 from ..llm.provider import LLMProvider, get_provider
-from ..mcp.client import ToolRegistry, get_registry
+from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import TraceEmitter
@@ -64,6 +64,23 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         rec.data = {
             "transport": registry.transport,
             "tools": [{"name": s.name, "description": s.description} for s in specs],
+            # The actual JSON-RPC discovery exchange (007); reconstructed for the
+            # in-process fallback, faithful to the wire for mcp-stdio.
+            "jsonrpc": jsonrpc_frames(
+                "tools/list",
+                {},
+                {
+                    "tools": [
+                        {
+                            "name": s.name,
+                            "description": s.description,
+                            "inputSchema": s.schema,
+                        }
+                        for s in specs
+                    ]
+                },
+                reconstructed=registry.transport == "local-fallback",
+            ),
         }
     return {}
 
@@ -120,7 +137,22 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
             start_data={"tool": tc["name"], "args": tc["args"]},
         ) as rec:
             output = await registry.call(tc["name"], tc["args"], enabled=state["enabled_tools"])
-            rec.data = {"tool": tc["name"], "args": tc["args"], "result": output}
+            rec.data = {
+                "tool": tc["name"],
+                "args": tc["args"],
+                "result": output,
+                # The actual JSON-RPC tool-call exchange (007): a `tools/call`
+                # request and a CallToolResult response with text content.
+                "jsonrpc": jsonrpc_frames(
+                    "tools/call",
+                    {"name": tc["name"], "arguments": tc["args"]},
+                    {
+                        "content": [{"type": "text", "text": output}],
+                        "isError": str(output).startswith("error:"),
+                    },
+                    reconstructed=registry.transport == "local-fallback",
+                ),
+            }
         results.append({"tool": tc["name"], "args": tc["args"], "result": output})
         used.append(tc["name"])
 

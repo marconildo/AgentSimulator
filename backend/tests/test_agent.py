@@ -74,6 +74,18 @@ async def test_math_question_invokes_calculator_tool():
     assert "4" in answer
 
 
+async def test_tool_call_carries_jsonrpc_frames():
+    # AC2 (007) — a tool-calling chat yields non-empty request AND response
+    # JSON-RPC frames on the mcp.call event (whatever transport is active).
+    _answer, events = await _run("What is 2 + 2?")
+    call = next(e for e in events if e.stage == "mcp.call" and e.phase == "end")
+    jr = call.data["jsonrpc"]
+    assert jr["request"]["method"] == "tools/call"
+    assert jr["request"]["params"]  # non-empty request frame
+    assert jr["response"]["result"]  # non-empty response frame
+    assert isinstance(jr["reconstructed"], bool)
+
+
 async def test_llm_generate_streams_tokens():
     _answer, events = await _run("What is an embedding?")
     progress = [e for e in events if e.stage == "llm.generate" and e.phase == "progress"]

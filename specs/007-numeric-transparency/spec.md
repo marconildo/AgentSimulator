@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 007-numeric-transparency |
-| **Status** | draft → clarified → planned → in-progress → done |
+| **Status** | ~~draft~~ → ~~clarified~~ → ~~planned~~ → ~~in-progress~~ → **done** |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-26 |
 
@@ -70,9 +70,11 @@ fetched.
    `params`/`result`), for both the stdio and local-fallback transports.
 2. **AC2** — The MCP inspector renders the `jsonrpc` frames (collapsible); a chat
    that calls a tool shows a non-empty request **and** response frame.
-3. **AC3** — The exact request body sent to `POST /api/chat` is available to the
-   client and rendered in the client/backend inspector (message, session_id,
-   top_k, mode, `006` overrides when present).
+3. **AC3** — The `frontend` (request-received) event carries the resolved request
+   body the backend acted on — `message`, `session_id`, `top_k` (resolved to the
+   default when omitted), `mode`, and the `006` overrides when present — and the
+   client/backend inspector renders it verbatim. *(Resolved Q2: trace-derived, not
+   client-captured.)*
 4. **AC4** — `rag.retrieve` END exposes, per top-k chunk, both `distance` and
    `similarity = 1 − distance` (and a stable rank); the RAG inspector renders them
    as a ranked table with bars.
@@ -85,31 +87,44 @@ fetched.
 §1 & §6.
 
 - New/changed `Stage`(s): **none**. This adds **keys to the `data` payloads** of
-  existing events (`mcp.discover`/`mcp.call` gain `jsonrpc`; `rag.retrieve` chunks
-  gain `distance`/`similarity`/`rank`). Because `TraceEvent.data` is an open
-  `dict`, `events.ts` types may need a small optional-field update for the
-  inspector to read them type-safely (document in `plan.md`).
+  existing events:
+  - `mcp.discover` / `mcp.call` gain `jsonrpc` (`{request, response, reconstructed}`).
+  - `rag.retrieve` chunks gain `distance`/`similarity`/`rank`.
+  - `frontend` gains a `request` object echoing the resolved POST body (AC3,
+    resolved Q2 — now a **trace field**, not client-only state).
+
+  Because `TraceEvent.data` is an open `dict`, `events.ts` types may need a small
+  optional-field update for the inspector to read them type-safely (document in
+  `plan.md`).
 - Station mapping: **unchanged** (`mcp`, `rag`, `frontend`/`backend`).
-- The request body (AC3) is **client-side state** (what the browser sent), not a
-  new trace field.
 
-## Open questions (clarify before planning)
+## Clarifications (resolved 2026-05-26)
 
-- [ ] **Q1 — JSON-RPC fidelity.** For the **local-fallback** transport (no real
-  stdio frames), synthesize equivalent JSON-RPC frames that mirror what stdio
-  would send, or label them "reconstructed"? (The app already treats fallback as
-  behaviorally identical via `transport`.)
-- [ ] **Q2 — Request-body source.** Capture the body in `useChat.send` / the SSE
-  client and stash it in the store, or reconstruct it from the `frontend` event's
-  `data`? (The `frontend` event already carries `message`/`session_id`.)
-- [ ] **Q3 — "Matrix" scope.** Just the query-vs-chunk ranking (rank/distance/
-  similarity), or also pairwise chunk-to-chunk similarity (a true matrix, more
-  compute/clutter)? Proposed: the ranked table first; pairwise deferred.
-- [ ] **Q4 — Payload size.** Truncate long JSON-RPC results / large bodies in the
-  event to keep traces bounded (the `TraceStore` is in-memory, §8)?
+- [x] **Q1 — JSON-RPC fidelity → reconstruct + label.** Build canonical JSON-RPC
+  frames from the real exchange (name/args/result) on **both** transports. Tag the
+  **local-fallback** frames `reconstructed: true` (badge "reconstructed (local
+  fallback)") since nothing actually traveled in-process; the `mcp-stdio` frames —
+  which mirror what genuinely goes over the wire — carry `reconstructed: false`
+  and no badge. Honesty over polish (§3): the badge prevents the fallback from
+  masquerading as real traffic.
+- [x] **Q2 — Request-body source → reconstruct from trace.** Enrich the backend
+  `frontend` event with a `request` object echoing what the server received/
+  resolved (`message`, `session_id`, `top_k` *resolved* to the default when
+  omitted, `mode`, plus `006` overrides when present), and render it from the
+  trace. This makes the body part of the trace (pure projection, §7) rather than
+  client-only state, and moves AC3's authoritative test to the backend.
+- [x] **Q3 — "Matrix" scope → ranked table only.** Render the top-k as a ranked
+  table (rank · source · distance · similarity, with bars). Pairwise
+  chunk-to-chunk similarity (a true NxN matrix) is **deferred** — more compute and
+  visual clutter for little teaching gain here.
+- [x] **Q4 — Payload size → no truncation.** Store full JSON-RPC frames and the
+  request body uncapped. The corpus is small-k and the tools return short strings,
+  so the in-memory `TraceStore` (§8) stays modest; the bloat risk is documented in
+  `plan.md` and revisited only if a tool starts returning large payloads.
 
 ## Out of scope / deferred
 
 - Raw OpenAI request/response dumps.
-- Pairwise chunk-to-chunk similarity matrix (Q3) — deferred unless clarified in.
+- Pairwise chunk-to-chunk similarity matrix — **deferred** (Q3 resolved: ranked
+  table only).
 - Exporting/downloading a trace as JSON (could be a small later spec).
