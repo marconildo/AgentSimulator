@@ -18,6 +18,9 @@ class AgentState(TypedDict):
     #   enabled_tools: tool names to expose (None = all, [] = none)
     system_prompt: str | None
     enabled_tools: list[str] | None
+    # Maturity-ladder rung (008-scenario-framework), request-only. Carried for
+    # later specs to branch on; node logic does not read it yet.
+    scenario: str
     context: str
     chunks: list[dict[str, Any]]
     # Long-term memory: prior {message, answer} turns from the application DB.

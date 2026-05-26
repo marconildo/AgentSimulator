@@ -15,7 +15,7 @@ import {
   STAGE_TO_PHASE,
   type TimelinePhase,
 } from "./phases";
-import { STAGE_TO_STATION } from "./stations";
+import { STAGE_TO_STATION, stationByIdFor } from "./stations";
 
 let seq = 0;
 function ev(stage: Stage, phase: Phase, data: Record<string, unknown> = {}): TraceEvent {
@@ -98,6 +98,16 @@ describe("STAGE_TO_PHASE — exhaustive grouping (AC1)", () => {
   it("every phase in PHASE_ORDER owns at least one stage (no orphan phase)", () => {
     const used = new Set<TimelinePhase>(Object.values(STAGE_TO_PHASE));
     for (const phase of PHASE_ORDER) expect(used.has(phase)).toBe(true);
+  });
+
+  it("no live Stage maps to a coming-soon preview station (008 AC7)", () => {
+    // Scenario scoping (008) adds preview nodes that carry no stages. The
+    // protocol's totality is preserved precisely because no live Stage ever
+    // resolves to a non-executing node — guards §3 (nothing fakes a run).
+    const byId = stationByIdFor("en");
+    for (const stationId of Object.values(STAGE_TO_STATION)) {
+      expect(byId[stationId].comingSoon ?? false).toBe(false);
+    }
   });
 });
 

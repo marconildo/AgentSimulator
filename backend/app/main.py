@@ -83,12 +83,49 @@ async def health() -> dict:
     }
 
 
+# The maturity ladder (008-scenario-framework). The bilingual name/blurb live
+# here so the scenario switcher prefills from /api/config (like the tools and the
+# default prompt) — nothing about the ladder is hardcoded client-side. Only the
+# `simple` rung executes today; the upper rungs are non-executing previews until
+# their own specs (009+) light up their real nodes (`available` flips then).
+SCENARIOS: list[dict[str, Any]] = [
+    {
+        "id": "simple",
+        "name": {"en": "Simple", "pt": "Simples"},
+        "blurb": {
+            "en": "ReAct + vector RAG + MCP tools, single-turn — today's app.",
+            "pt": "ReAct + RAG vetorial + ferramentas MCP, turno único — o app de hoje.",
+        },
+        "available": True,
+    },
+    {
+        "id": "intermediate",
+        "name": {"en": "Intermediate", "pt": "Intermediário"},
+        "blurb": {
+            "en": "Adds reranking, hybrid search and real token/cost accounting.",
+            "pt": "Adiciona reranking, busca híbrida e contagem real de tokens/custo.",
+        },
+        "available": False,
+    },
+    {
+        "id": "advanced",
+        "name": {"en": "Advanced", "pt": "Avançado"},
+        "blurb": {
+            "en": "Production AI-Ops: gateway, guardrails, cache, evals, observability.",
+            "pt": "AI-Ops de produção: gateway, guardrails, cache, evals, observabilidade.",
+        },
+        "available": False,
+    },
+]
+
+
 @app.get("/api/config")
 async def config() -> dict:
     """Defaults the experiment panel (006-interactive-experiments) prefills with,
     so nothing about the agent is hardcoded client-side. Like ``/api/health`` it
     is inspectable without an OpenAI key (the registry is independent of the LLM).
-    The top-k bounds mirror ``ChatRequest.top_k`` (1..8)."""
+    The top-k bounds mirror ``ChatRequest.top_k`` (1..8); ``scenarios`` is the
+    008 maturity ladder."""
     settings = get_settings()
     registry = await get_registry()
     return {
@@ -97,6 +134,7 @@ async def config() -> dict:
         "top_k_min": 1,
         "top_k_max": 8,
         "tools": [{"name": s.name, "description": s.description} for s in registry.specs()],
+        "scenarios": SCENARIOS,
     }
 
 
@@ -123,6 +161,7 @@ async def chat(req: ChatRequest):
         "session_id": session_id,
         "top_k": top_k,
         "mode": req.mode,
+        "scenario": req.scenario.value,
     }
     if req.system_prompt is not None:
         request_body["system_prompt"] = req.system_prompt
@@ -160,6 +199,7 @@ async def chat(req: ChatRequest):
                     session_id=session_id,
                     system_prompt=req.system_prompt,
                     enabled_tools=req.enabled_tools,
+                    scenario=req.scenario,
                 )
 
                 # Persist the finished message + the chunks retrieved for it

@@ -16,10 +16,30 @@
 import type { Lang } from "../i18n";
 import type { Stage } from "../types/events";
 import type { CloudMap } from "./cloud";
+import type { Scenario } from "./scenario";
 
-export type StationId = "frontend" | "backend" | "agent" | "rag" | "mcp" | "llm" | "database";
-export type TierId = "client" | "api" | "agent" | "services";
+export type StationId =
+  | "frontend"
+  | "backend"
+  | "agent"
+  | "rag"
+  | "mcp"
+  | "llm"
+  | "database"
+  // 008-scenario-framework preview nodes (non-executing until their own spec):
+  | "reranker" // intermediate
+  | "gateway" // advanced — AI-Ops tier
+  | "guardrails"
+  | "cache"
+  | "eval"
+  | "observability";
+export type TierId = "client" | "api" | "agent" | "services" | "aiops";
 export type NetworkZone = "public" | "private";
+
+// Every element belongs to one or more rungs of the maturity ladder. Base
+// elements (today's app) live in all three; a missing `scenarios` defaults to
+// this set so existing data needs no annotation.
+const ALL_SCENARIOS: Scenario[] = ["simple", "intermediate", "advanced"];
 
 /** A translatable string: either identical across languages, or per-language. */
 type Tr = string | { en: string; pt: string };
@@ -46,6 +66,10 @@ export interface StationMeta {
   tech: TechRow[];
   stages: Stage[];
   position: { x: number; y: number };
+  // Maturity-ladder membership (008). A preview node (`comingSoon`) carries no
+  // live `stages` — nothing fakes a run on it.
+  scenarios: Scenario[];
+  comingSoon?: boolean;
 }
 
 export interface TierMeta {
@@ -56,6 +80,8 @@ export interface TierMeta {
   clouds: CloudMap; // example: what hosts this container/tier per provider
   accent: string;
   box: { x: number; y: number; w: number; h: number };
+  scenarios: Scenario[];
+  comingSoon?: boolean;
 }
 
 // How a hop communicates: a blocking request/response, or an asynchronous
@@ -76,6 +102,7 @@ export interface HopMeta {
   // Which node handles the edge attaches to (the API↔Agent hop is vertical).
   sourceHandle: "right" | "bottom";
   targetHandle: "left" | "top";
+  scenarios: Scenario[];
 }
 
 export interface BoundaryMeta {
@@ -93,23 +120,29 @@ interface TechRowSrc {
   k: Tr;
   v: string;
 }
-type StationSrc = Omit<StationMeta, "title" | "subtitle" | "blurb" | "generic" | "tech"> & {
+type StationSrc = Omit<
+  StationMeta,
+  "title" | "subtitle" | "blurb" | "generic" | "tech" | "scenarios"
+> & {
   title: Tr;
   subtitle: Tr;
   blurb: Tr;
   generic: Tr;
   tech: TechRowSrc[];
+  scenarios?: Scenario[]; // omitted ⇒ ALL_SCENARIOS (base element, in every rung)
 };
-type TierSrc = Omit<TierMeta, "title" | "alias" | "generic"> & {
+type TierSrc = Omit<TierMeta, "title" | "alias" | "generic" | "scenarios"> & {
   title: Tr;
   alias: Tr;
   generic: Tr;
+  scenarios?: Scenario[];
 };
-type HopSrc = Omit<HopMeta, "label" | "protocol" | "detail" | "controls"> & {
+type HopSrc = Omit<HopMeta, "label" | "protocol" | "detail" | "controls" | "scenarios"> & {
   label: Tr;
   protocol: Tr;
   detail: Tr;
   controls: Tr;
+  scenarios?: Scenario[];
 };
 type BoundarySrc = Omit<BoundaryMeta, "label" | "generic"> & { label: Tr; generic: Tr };
 
@@ -167,6 +200,27 @@ const TIERS_SRC: TierSrc[] = [
     },
     accent: "var(--color-ok)",
     box: { x: 956, y: 64, w: 300, h: 586 },
+  },
+  // 008-scenario-framework: the "AI Ops" tier the assessment called for — the
+  // control + observability plane of a production agent. Advanced rung only;
+  // its nodes are previews (coming soon) until their own specs land.
+  {
+    id: "aiops",
+    title: { en: "AI Ops", pt: "Operações de IA" },
+    alias: { en: "Observability & control plane", pt: "Plano de observabilidade e controle" },
+    generic: {
+      en: "Gateway, guardrails, cache, evals and observability",
+      pt: "Gateway, guardrails, cache, evals e observabilidade",
+    },
+    clouds: {
+      azure: "API Management · AI Content Safety · Monitor",
+      aws: "API Gateway · Bedrock Guardrails · CloudWatch",
+      gcp: "Apigee · Model Armor · Cloud Monitoring",
+    },
+    accent: "var(--color-warn)",
+    box: { x: 1320, y: 64, w: 300, h: 586 },
+    scenarios: ["advanced"],
+    comingSoon: true,
   },
 ];
 
@@ -383,6 +437,159 @@ const STATIONS_SRC: StationSrc[] = [
     stages: ["llm.prompt", "llm.generate"],
     position: { x: 980, y: 540 },
   },
+  // --- 008-scenario-framework preview nodes (non-executing; stages: []) -------
+  // Intermediate rung: RAG-quality upgrade beside the vector store.
+  {
+    id: "reranker",
+    tier: "services",
+    title: { en: "Reranker", pt: "Reranker" },
+    subtitle: { en: "Cross-encoder", pt: "Cross-encoder" },
+    icon: "🎚️",
+    accent: "var(--color-ok)",
+    tag: "RERANK",
+    blurb: {
+      en: "Re-scores the top candidates with a cross-encoder so the most relevant chunks lead.",
+      pt: "Reordena os melhores candidatos com um cross-encoder para os trechos mais relevantes liderarem.",
+    },
+    generic: { en: "Cross-encoder reranker", pt: "Reranker cross-encoder" },
+    clouds: {
+      azure: "AI Search semantic ranker",
+      aws: "Bedrock / Cohere Rerank",
+      gcp: "Vertex Ranking API",
+    },
+    tech: [
+      { k: { en: "model", pt: "modelo" }, v: "cross-encoder" },
+      { k: { en: "input", pt: "entrada" }, v: "top-N candidates" },
+    ],
+    stages: [],
+    position: { x: 980, y: 600 },
+    scenarios: ["intermediate", "advanced"],
+    comingSoon: true,
+  },
+  // Advanced rung: the AI-Ops control + observability plane.
+  {
+    id: "gateway",
+    tier: "aiops",
+    title: { en: "LLM Gateway", pt: "Gateway LLM" },
+    subtitle: { en: "Router · fallback", pt: "Roteador · fallback" },
+    icon: "🚦",
+    accent: "var(--color-warn)",
+    tag: "GATEWAY",
+    blurb: {
+      en: "A single egress for every model call: routing, retries, provider fallback and budget caps.",
+      pt: "Uma saída única para toda chamada de modelo: roteamento, retries, fallback entre provedores e limites de orçamento.",
+    },
+    generic: { en: "LLM gateway / router", pt: "Gateway / roteador de LLM" },
+    clouds: {
+      azure: "API Management (AI gateway)",
+      aws: "Bedrock + API Gateway",
+      gcp: "Apigee / Vertex endpoints",
+    },
+    tech: [
+      { k: { en: "role", pt: "papel" }, v: "router" },
+      { k: { en: "features", pt: "recursos" }, v: "retry · fallback · budget" },
+    ],
+    stages: [],
+    position: { x: 1340, y: 120 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
+  {
+    id: "guardrails",
+    tier: "aiops",
+    title: { en: "Guardrails", pt: "Guardrails" },
+    subtitle: { en: "Input / output safety", pt: "Segurança entrada/saída" },
+    icon: "🛡️",
+    accent: "var(--color-warn)",
+    tag: "SAFETY",
+    blurb: {
+      en: "Checks prompts and answers for injection, PII and unsafe content before they pass.",
+      pt: "Verifica prompts e respostas contra injection, PII e conteúdo inseguro antes de passarem.",
+    },
+    generic: { en: "Input/output safety filter", pt: "Filtro de segurança de entrada/saída" },
+    clouds: {
+      azure: "AI Content Safety",
+      aws: "Bedrock Guardrails",
+      gcp: "Model Armor",
+    },
+    tech: [{ k: { en: "checks", pt: "checagens" }, v: "injection · PII · toxicity" }],
+    stages: [],
+    position: { x: 1340, y: 240 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
+  {
+    id: "cache",
+    tier: "aiops",
+    title: { en: "Semantic Cache", pt: "Cache Semântico" },
+    subtitle: { en: "Prompt / embedding cache", pt: "Cache de prompt/embedding" },
+    icon: "⚡",
+    accent: "var(--color-warn)",
+    tag: "CACHE",
+    blurb: {
+      en: "Returns a stored answer for semantically-near queries — big latency and cost savings.",
+      pt: "Devolve uma resposta armazenada para consultas semanticamente próximas — grande economia de latência e custo.",
+    },
+    generic: { en: "Semantic / prompt cache", pt: "Cache semântico / de prompt" },
+    clouds: {
+      azure: "Azure Cache for Redis",
+      aws: "ElastiCache (Redis)",
+      gcp: "Memorystore (Redis)",
+    },
+    tech: [{ k: { en: "keys", pt: "chaves" }, v: "embedding similarity" }],
+    stages: [],
+    position: { x: 1340, y: 360 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
+  {
+    id: "eval",
+    tier: "aiops",
+    title: { en: "Eval Runner", pt: "Eval Runner" },
+    subtitle: { en: "RAGAS · LLM-judge", pt: "RAGAS · LLM-juiz" },
+    icon: "🧪",
+    accent: "var(--color-warn)",
+    tag: "EVALS",
+    blurb: {
+      en: "Scores answers against a golden set (faithfulness, relevancy) and gates regressions in CI.",
+      pt: "Pontua respostas contra um golden set (fidelidade, relevância) e barra regressões no CI.",
+    },
+    generic: { en: "Eval runner (RAGAS / LLM-judge)", pt: "Runner de avaliação (RAGAS / LLM-juiz)" },
+    clouds: {
+      azure: "Azure AI Evaluation",
+      aws: "Bedrock model evaluation",
+      gcp: "Vertex Gen AI evaluation",
+    },
+    tech: [{ k: { en: "metrics", pt: "métricas" }, v: "faithfulness · NDCG" }],
+    stages: [],
+    position: { x: 1340, y: 480 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
+  {
+    id: "observability",
+    tier: "aiops",
+    title: { en: "Observability", pt: "Observabilidade" },
+    subtitle: { en: "Traces · tokens · cost", pt: "Traces · tokens · custo" },
+    icon: "📊",
+    accent: "var(--color-warn)",
+    tag: "OTEL",
+    blurb: {
+      en: "Captures every prompt, completion, token count, latency and cost as structured LLM traces.",
+      pt: "Captura cada prompt, resposta, contagem de tokens, latência e custo como traces estruturados de LLM.",
+    },
+    generic: { en: "LLM trace / metrics sink", pt: "Coletor de traces/métricas de LLM" },
+    clouds: {
+      azure: "Azure Monitor / App Insights",
+      aws: "CloudWatch / X-Ray",
+      gcp: "Cloud Trace / Monitoring",
+    },
+    tech: [{ k: { en: "standard", pt: "padrão" }, v: "OpenTelemetry GenAI" }],
+    stages: [],
+    position: { x: 1340, y: 600 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
 ];
 
 // Network hops between stations. Cross-tier hops are real network calls; each
@@ -496,6 +703,7 @@ function resolveStation(s: StationSrc, lang: Lang): StationMeta {
     blurb: r(s.blurb, lang),
     generic: r(s.generic, lang),
     tech: s.tech.map((t) => ({ k: r(t.k, lang), v: t.v })),
+    scenarios: s.scenarios ?? ALL_SCENARIOS,
   };
 }
 
@@ -505,6 +713,7 @@ function resolveTier(t: TierSrc, lang: Lang): TierMeta {
     title: r(t.title, lang),
     alias: r(t.alias, lang),
     generic: r(t.generic, lang),
+    scenarios: t.scenarios ?? ALL_SCENARIOS,
   };
 }
 
@@ -515,6 +724,7 @@ function resolveHop(h: HopSrc, lang: Lang): HopMeta {
     protocol: r(h.protocol, lang),
     detail: r(h.detail, lang),
     controls: r(h.controls, lang),
+    scenarios: h.scenarios ?? ALL_SCENARIOS,
   };
 }
 
@@ -574,6 +784,8 @@ export const HOP_PAIRS: { source: StationId; target: StationId }[] = HOPS_SRC.ma
 }));
 
 // Lang-independent mapping from a trace stage to the station that owns it.
+// Preview nodes carry `stages: []`, so they contribute nothing here — the map
+// stays total over the unchanged `Stage` enum (008 AC7).
 export const STAGE_TO_STATION: Record<Stage, StationId> = STATIONS_SRC.reduce(
   (acc, station) => {
     for (const stage of station.stages) acc[stage] = station.id;
@@ -581,3 +793,27 @@ export const STAGE_TO_STATION: Record<Stage, StationId> = STATIONS_SRC.reduce(
   },
   {} as Record<Stage, StationId>,
 );
+
+// --- Scenario scoping (008-scenario-framework) -------------------------------
+// The visual model is scenario-aware: each element belongs to one or more rungs
+// of the maturity ladder. These builders return only the active scenario's set,
+// which the layout and the canvas render. `simple` reproduces today's set.
+
+export function visibleStationsFor(lang: Lang, scenario: Scenario): StationMeta[] {
+  return stationsFor(lang).filter((s) => s.scenarios.includes(scenario));
+}
+
+export function visibleHopsFor(lang: Lang, scenario: Scenario): HopMeta[] {
+  return hopsFor(lang).filter((h) => h.scenarios.includes(scenario));
+}
+
+export function visibleTiersFor(lang: Lang, scenario: Scenario): TierMeta[] {
+  return tiersFor(lang).filter((t) => t.scenarios.includes(scenario));
+}
+
+/** Lang-independent visible station ids for a scenario — used by the layout. */
+export function visibleStationIdsFor(scenario: Scenario): StationId[] {
+  return STATIONS_SRC.filter((s) => (s.scenarios ?? ALL_SCENARIOS).includes(scenario)).map(
+    (s) => s.id,
+  );
+}

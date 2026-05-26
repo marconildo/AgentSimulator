@@ -10,10 +10,34 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ directory (parent of the `app` package).
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+# The single `.env` both pydantic-settings and `load_env_file` read.
+ENV_FILE = BACKEND_DIR / ".env"
+
+
+def load_env_file(path: Path = ENV_FILE) -> None:
+    """Bridge the whole `.env` into ``os.environ``.
+
+    :class:`Settings` only maps the keys it declares; every other key in the
+    file falls under ``extra="ignore"`` and never reaches ``os.environ``.
+    Libraries that read the environment directly — notably LangSmith tracing
+    (``LANGSMITH_TRACING`` / ``LANGSMITH_API_KEY`` / ``LANGSMITH_PROJECT``) —
+    would then never see values placed in `backend/.env`. Loading the file here
+    makes them visible while preserving precedence: ``override=False`` keeps any
+    variable already present in the real environment (env > .env), matching how
+    pydantic-settings resolves the same keys. A missing file is a no-op.
+    """
+    load_dotenv(path, override=False)
+
+
+# Load eagerly on import so anything reading ``os.environ`` (LangSmith's tracer
+# included) sees `.env` before the agent graph is built or the first run starts.
+load_env_file()
 
 
 class MissingAPIKeyError(RuntimeError):
@@ -34,7 +58,7 @@ class MissingAPIKeyError(RuntimeError):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(BACKEND_DIR / ".env"),
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
     )

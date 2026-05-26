@@ -3,6 +3,7 @@
 // over SSE, reusing the same low-level reader as chat.
 
 import type { TraceEvent } from "../types/events";
+import type { Scenario } from "./scenario";
 import { API_BASE, consumeEventStream } from "./sse";
 
 export interface SessionMeta {
@@ -59,12 +60,21 @@ export const deleteDocument = (id: string, documentId: string) =>
 
 // Agent defaults the experiment panel prefills from (006-interactive-experiments)
 // so nothing about the backend is hardcoded client-side. Fetched once on demand.
+export interface ScenarioInfo {
+  id: Scenario;
+  name: { en: string; pt: string };
+  blurb: { en: string; pt: string };
+  available: boolean;
+}
+
 export interface AppConfig {
   default_system_prompt: string;
   default_top_k: number;
   top_k_min: number;
   top_k_max: number;
   tools: { name: string; description: string }[];
+  // 008-scenario-framework: the maturity ladder, so the switcher prefills here.
+  scenarios: ScenarioInfo[];
 }
 
 let _configPromise: Promise<AppConfig> | null = null;

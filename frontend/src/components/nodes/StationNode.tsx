@@ -16,6 +16,7 @@ export interface StationNodeData {
   isSelected: boolean;
   expanded: boolean;
   height: number;
+  comingSoon: boolean; // 008 preview node — non-executing, rendered dashed/dimmed
   [key: string]: unknown;
 }
 
@@ -23,7 +24,7 @@ export interface StationNodeData {
 const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
 
 export function StationNode(props: NodeProps) {
-  const { meta, runtime, isActive, readout, isSelected, expanded, height } =
+  const { meta, runtime, isActive, readout, isSelected, expanded, height, comingSoon } =
     props.data as StationNodeData;
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
@@ -31,8 +32,9 @@ export function StationNode(props: NodeProps) {
 
   // Spotlight model: only the station the packet is at right now is lit; every
   // other station (not yet reached, or already done) stays deactivated. Use the
-  // timeline to step back and re-light an earlier stage.
-  const spotlit = isActive;
+  // timeline to step back and re-light an earlier stage. A coming-soon preview
+  // node never lights up — it is a non-executing placeholder.
+  const spotlit = isActive && !comingSoon;
   const accent = meta.accent;
   const borderColor = spotlit ? accent : "var(--color-line)";
   const dotColor = spotlit ? accent : "var(--color-faint)";
@@ -48,13 +50,13 @@ export function StationNode(props: NodeProps) {
         className="flex h-full flex-col rounded-2xl px-4 py-3 backdrop-blur transition-colors"
         style={{
           background: "color-mix(in srgb, var(--color-panel) 92%, transparent)",
-          border: `1.5px solid ${borderColor}`,
+          border: `1.5px ${comingSoon ? "dashed" : "solid"} ${borderColor}`,
           boxShadow: isSelected
             ? `0 0 0 2px ${accent}`
             : spotlit
               ? `0 8px 30px -12px ${accent}`
               : "none",
-          opacity: spotlit ? 1 : 0.66,
+          opacity: comingSoon ? 0.5 : spotlit ? 1 : 0.66,
         }}
       >
         <Handle id="left" type="target" position={Position.Left} style={{ opacity: 0, border: "none" }} />
@@ -72,18 +74,23 @@ export function StationNode(props: NodeProps) {
             className="h-2.5 w-2.5 shrink-0 rounded-full"
             style={{ background: dotColor, boxShadow: spotlit ? `0 0 8px ${accent}` : "none" }}
           />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleExpand(meta.id);
-            }}
-            title={expanded ? t.node.collapse : t.node.expand}
-            aria-label={expanded ? t.node.collapse : t.node.expand}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-md border text-[12px] leading-none transition hover:bg-[var(--color-panel-2)]"
-            style={{ borderColor: `color-mix(in srgb, ${accent} 40%, transparent)`, color: accent }}
-          >
-            {expanded ? "⊖" : "⊕"}
-          </button>
+          {!comingSoon && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleExpand(meta.id);
+              }}
+              title={expanded ? t.node.collapse : t.node.expand}
+              aria-label={expanded ? t.node.collapse : t.node.expand}
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-md border text-[12px] leading-none transition hover:bg-[var(--color-panel-2)]"
+              style={{
+                borderColor: `color-mix(in srgb, ${accent} 40%, transparent)`,
+                color: accent,
+              }}
+            >
+              {expanded ? "⊖" : "⊕"}
+            </button>
+          )}
         </div>
 
         <div className="mt-1.5 flex items-center gap-1.5">
@@ -94,6 +101,14 @@ export function StationNode(props: NodeProps) {
           >
             {meta.tag}
           </span>
+          {comingSoon && (
+            <span
+              className="inline-flex rounded-full border border-dashed px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide"
+              style={{ borderColor: accent, color: accent }}
+            >
+              {t.node.comingSoon}
+            </span>
+          )}
         </div>
 
         {expanded ? (
@@ -219,6 +234,14 @@ function innerRows(id: StationId, events: TraceEvent[], t: ReturnType<typeof use
       if (tokens) rows.push({ k: "tokens", v: String(tokens) });
       return rows;
     }
+    // 008 preview nodes have no live events to summarize.
+    case "reranker":
+    case "gateway":
+    case "guardrails":
+    case "cache":
+    case "eval":
+    case "observability":
+      return [];
   }
 }
 

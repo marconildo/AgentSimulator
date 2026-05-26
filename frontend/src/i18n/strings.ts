@@ -45,6 +45,9 @@ export interface Strings {
     chunksStored: (n: number) => string;
     uploading: string;
     uploadFailed: string;
+    now: string;
+    attachDoc: string;
+    enterToSend: string;
   };
   inspector: {
     overviewTitle: string;
@@ -192,6 +195,11 @@ export interface Strings {
     openFull: string;
     memory: string;
     tip: string;
+    comingSoon: string;
+  };
+  scenario: {
+    label: string;
+    sendDisabled: string;
   };
   agentDetail: {
     title: string;
@@ -282,6 +290,9 @@ const en: Strings = {
     chunksStored: (n) => `${n} chunk${n === 1 ? "" : "s"}`,
     uploading: "Ingesting…",
     uploadFailed: "Upload failed",
+    now: "now",
+    attachDoc: "Attach a PDF",
+    enterToSend: "Enter to send",
   },
   inspector: {
     overviewTitle: "Inspector",
@@ -456,6 +467,11 @@ const en: Strings = {
     openFull: "Open full view",
     memory: "memory",
     tip: "Click a station to inspect · ⊕ to expand",
+    comingSoon: "Coming soon",
+  },
+  scenario: {
+    label: "Scenario",
+    sendDisabled: "This scenario is a preview — switch to Simple to send a message.",
   },
   agentDetail: {
     title: "Agent — inside the loop",
@@ -547,6 +563,9 @@ const pt: Strings = {
     chunksStored: (n) => `${n} trecho${n === 1 ? "" : "s"}`,
     uploading: "Processando…",
     uploadFailed: "Falha no envio",
+    now: "agora",
+    attachDoc: "Anexar um PDF",
+    enterToSend: "Enter para enviar",
   },
   inspector: {
     overviewTitle: "Inspetor",
@@ -721,6 +740,11 @@ const pt: Strings = {
     openFull: "Abrir visão completa",
     memory: "memória",
     tip: "Clique numa estação para inspecionar · ⊕ para expandir",
+    comingSoon: "Em breve",
+  },
+  scenario: {
+    label: "Cenário",
+    sendDisabled: "Este cenário é um preview — troque para Simples para enviar uma mensagem.",
   },
   agentDetail: {
     title: "Agente — dentro do loop",

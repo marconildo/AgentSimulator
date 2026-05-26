@@ -52,6 +52,22 @@ class Phase(StrEnum):
     END = "end"
 
 
+class Scenario(StrEnum):
+    """The maturity ladder (008-scenario-framework).
+
+    A **request-only** input (like the 006 experiment overrides) — *not* a
+    ``TraceEvent`` field — that selects how much of a production pipeline the
+    visualizer shows. ``simple`` is today's app and the only rung that executes;
+    the upper rungs are non-executing preview topologies until their own specs
+    light up their real nodes. The backend carries the value but does not branch
+    on it yet.
+    """
+
+    SIMPLE = "simple"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+
 class TraceEvent(BaseModel):
     """A single observable moment in the lifecycle of one request."""
 
@@ -87,6 +103,11 @@ class ChatRequest(BaseModel):
     # Lets the UI override RAG top-k for experimentation; bounded to the slider's
     # range (1..8). ``None`` = the configured default (``rag_top_k``).
     top_k: int | None = Field(default=None, ge=1, le=8)
+
+    # --- Scenario (008-scenario-framework) -----------------------------------
+    # Which rung of the maturity ladder this run targets. Request-only, carried
+    # through to state but not yet branched on (only ``simple`` executes today).
+    scenario: Scenario = Scenario.SIMPLE
 
 
 class TraceSummary(BaseModel):

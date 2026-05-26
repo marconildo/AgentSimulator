@@ -14,13 +14,14 @@ import type { Strings } from "../i18n/strings";
 import { cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView, StationRuntime } from "../lib/derive";
 import { computeLayout } from "../lib/layout";
+import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
 import {
   boundaryFor,
-  hopsFor,
   stationByIdFor,
-  stationsFor,
-  tiersFor,
+  visibleHopsFor,
+  visibleStationsFor,
+  visibleTiersFor,
   type StationId,
 } from "../lib/stations";
 import { useSimulator } from "../store/useSimulator";
@@ -41,19 +42,21 @@ interface FlowCanvasProps {
 export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const lang = useLang((s) => s.lang);
   const cloud = useCloud((s) => s.cloud);
+  const scenario = useScenario((s) => s.scenario);
   const mode = useSettings((s) => s.mode);
   const expanded = useSimulator((s) => s.expanded);
   const t = useT();
-  const stations = stationsFor(lang);
-  const tiers = tiersFor(lang);
-  const hops = hopsFor(lang);
+  // Scenario-scoped visual model: only the active rung's stations/tiers/hops.
+  const stations = visibleStationsFor(lang, scenario);
+  const tiers = visibleTiersFor(lang, scenario);
+  const hops = visibleHopsFor(lang, scenario);
   const boundary = boundaryFor(lang);
   const stationById = stationByIdFor(lang);
   const ro = t.readout;
   const comms = t.comms;
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
-  const layout = useMemo(() => computeLayout(expandedSet), [expandedSet]);
+  const layout = useMemo(() => computeLayout(expandedSet, scenario), [expandedSet, scenario]);
 
   const nodes: Node[] = useMemo(() => {
     // The private-network boundary sits behind everything (inserted first).
@@ -96,6 +99,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
         isSelected: selected === meta.id,
         expanded: expandedSet.has(meta.id),
         height: layout.heights[meta.id],
+        comingSoon: meta.comingSoon ?? false,
       },
       draggable: false,
       zIndex: 1,
@@ -246,5 +250,14 @@ function readoutFor(id: StationId, rt: StationRuntime, ro: Strings["readout"]): 
       if (lastWith(rt.events, (e) => e.stage === "llm.prompt")) return ro.promptAssembled;
       return rt.status === "idle" ? "" : "…";
     }
+    // 008-scenario-framework preview nodes: non-executing, so no live readout —
+    // the "coming soon" badge on the node carries the message instead.
+    case "reranker":
+    case "gateway":
+    case "guardrails":
+    case "cache":
+    case "eval":
+    case "observability":
+      return "";
   }
 }

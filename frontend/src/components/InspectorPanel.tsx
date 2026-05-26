@@ -4,12 +4,13 @@ import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView } from "../lib/derive";
+import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
 import {
   hopsFor,
   stationByIdFor,
-  stationsFor,
   tierByIdFor,
+  visibleStationsFor,
   type StationId,
   type StationMeta,
 } from "../lib/stations";
@@ -25,6 +26,7 @@ interface InspectorPanelProps {
 
 export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps) {
   const lang = useLang((s) => s.lang);
+  const scenario = useScenario((s) => s.scenario);
   const t = useT();
   const i = t.inspector;
 
@@ -37,7 +39,8 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
     scrollRef.current?.scrollTo({ top: 0 });
   }, [selected]);
 
-  if (!selected) return <Overview onSelect={onSelect} stations={stationsFor(lang)} i={i} />;
+  if (!selected)
+    return <Overview onSelect={onSelect} stations={visibleStationsFor(lang, scenario)} i={i} />;
 
   const meta = stationByIdFor(lang)[selected];
   const rt = view.stations[selected];
@@ -65,6 +68,15 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
       </div>
 
       <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{meta.blurb}</p>
+
+      {meta.comingSoon && (
+        <p
+          className="rounded-lg border border-dashed px-2.5 py-1.5 text-[12px] font-medium"
+          style={{ borderColor: meta.accent, color: meta.accent }}
+        >
+          ⌛ {t.node.comingSoon} — {t.scenario.sendDisabled}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         {lastEnd?.metrics.latency_ms !== undefined && (

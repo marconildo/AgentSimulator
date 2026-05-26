@@ -232,6 +232,7 @@ async def run_agent(
     session_id: str | None = None,
     system_prompt: str | None = None,
     enabled_tools: list[str] | None = None,
+    scenario: str = "simple",
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -257,6 +258,7 @@ async def run_agent(
         "mode": mode,
         "system_prompt": system_prompt,
         "enabled_tools": enabled_tools,
+        "scenario": scenario,
         "context": "",
         "chunks": [],
         "history": history or [],
