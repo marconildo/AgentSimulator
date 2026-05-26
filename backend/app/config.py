@@ -1,8 +1,8 @@
 """Application configuration.
 
-Loads settings from environment / `.env`. The single most important decision
-here is *demo mode*: when on, the app uses deterministic mock implementations
-for the LLM and embeddings so the whole simulator runs with zero API keys.
+Loads settings from environment / `.env`. The app runs **only** against OpenAI
+and requires an `OPENAI_API_KEY`; there is no offline/mock mode. When the key is
+missing, the provider/embedding factories fail fast with :class:`MissingAPIKeyError`.
 """
 
 from __future__ import annotations
@@ -16,6 +16,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
+class MissingAPIKeyError(RuntimeError):
+    """Raised when an OpenAI-backed component is used without an API key.
+
+    The app is OpenAI-only: rather than silently starting in a mock/fallback
+    mode, the provider and embedding factories raise this so the failure is
+    clear and names the variable to set.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "OPENAI_API_KEY is required — this app runs only against OpenAI and has "
+            "no offline/demo mode. Set OPENAI_API_KEY in backend/.env (or the "
+            "environment) and restart."
+        )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(BACKEND_DIR / ".env"),
@@ -25,8 +41,6 @@ class Settings(BaseSettings):
 
     # --- LLM / embeddings ---
     openai_api_key: str = ""
-    # Tri-state: None means "auto-detect from openai_api_key".
-    demo_mode: bool | None = None
     llm_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
 
@@ -42,15 +56,8 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property
-    def is_demo(self) -> bool:
-        """Whether to use mock LLM/embeddings.
-
-        Explicit ``DEMO_MODE`` wins; otherwise we infer it from the presence
-        of an API key (no key -> demo).
-        """
-        if self.demo_mode is not None:
-            return self.demo_mode
-        return not bool(self.openai_api_key.strip())
+    def has_openai_key(self) -> bool:
+        return bool(self.openai_api_key.strip())
 
     @property
     def chroma_path(self) -> Path:

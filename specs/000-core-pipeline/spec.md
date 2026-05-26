@@ -82,8 +82,9 @@ Each is testable; the guarding test is named in `plan.md` → *Test strategy*.
    is idempotent per trace id (same id replaces, not appends); a chat run emits both
    `db.read` and `db.write`.
 10. **AC10 — Replay.** A finished trace is retrievable by id; an unknown id returns 404.
-11. **AC11 — Offline demo mode.** With no API key the app reports `demo_mode: true` and the
-    full pipeline runs deterministically.
+11. **AC11 — Offline demo mode.** ~~With no API key the app reports `demo_mode: true` and the
+    full pipeline runs deterministically.~~ **Superseded by [spec 003](../003-openai-only/spec.md)**
+    (2026-05-26): demo mode was removed — the app now runs only against OpenAI and requires a key.
 
 ## Open questions (clarify before planning)
 

@@ -9,8 +9,6 @@ export interface Strings {
     tagline: string;
     learn: string;
     simulator: string;
-    demoMode: string;
-    demoTitle: string;
     liveTitle: string;
     language: string;
     cloud: string;
@@ -52,7 +50,6 @@ export interface Strings {
     requestSent: string;
     answerReceived: string;
     routes: string;
-    demoModeKey: string;
     query: string;
     agentLoop: string;
     reasoningTurns: string;
@@ -180,8 +177,6 @@ const en: Strings = {
       "A chat message's journey through RAG, MCP tools and an LLM — visualized live.",
     learn: "Learn",
     simulator: "Simulator",
-    demoMode: "demo mode",
-    demoTitle: "Deterministic mock — no API key",
     liveTitle: "Live OpenAI calls",
     language: "Language",
     cloud: "Cloud provider",
@@ -229,7 +224,6 @@ const en: Strings = {
     requestSent: "Request sent",
     answerReceived: "Answer received",
     routes: "Routes",
-    demoModeKey: "demo mode",
     query: "Query",
     agentLoop: "Agent loop",
     reasoningTurns: "reasoning turns",
@@ -362,8 +356,6 @@ const pt: Strings = {
       "A jornada de uma mensagem de chat por RAG, ferramentas MCP e um LLM — visualizada ao vivo.",
     learn: "Aprender",
     simulator: "Simulador",
-    demoMode: "modo demo",
-    demoTitle: "Mock determinístico — sem chave de API",
     liveTitle: "Chamadas reais à OpenAI",
     language: "Idioma",
     cloud: "Provedor de nuvem",
@@ -411,7 +403,6 @@ const pt: Strings = {
     requestSent: "Requisição enviada",
     answerReceived: "Resposta recebida",
     routes: "Rotas",
-    demoModeKey: "modo demo",
     query: "Consulta",
     agentLoop: "Loop do agente",
     reasoningTurns: "ciclos de raciocínio",

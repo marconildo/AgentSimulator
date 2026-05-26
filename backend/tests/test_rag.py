@@ -1,12 +1,21 @@
-"""Retrieval returns scored chunks and ranks the obviously-relevant doc first."""
+"""Retrieval returns scored chunks and ranks the obviously-relevant doc first.
+
+Uses real OpenAI embeddings, so the whole module needs a key (AC6).
+"""
+
+import pytest
 
 from app.rag.retriever import retrieve
 from app.trace import TraceEmitter
 
+pytestmark = pytest.mark.openai
+
 
 async def test_retrieve_returns_scored_chunks():
     emitter = TraceEmitter("t", "q")
-    context, chunks = await retrieve("What is RAG and how does retrieval work?", k=3, emitter=emitter)
+    context, chunks = await retrieve(
+        "What is RAG and how does retrieval work?", k=3, emitter=emitter
+    )
 
     assert chunks, "expected at least one chunk"
     assert all("score" in c and "source" in c and "text" in c for c in chunks)

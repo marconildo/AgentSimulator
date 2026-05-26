@@ -17,7 +17,6 @@ import { useSimulator } from "./store/useSimulator";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 interface Health {
-  demo_mode: boolean;
   llm_provider: string;
   llm_model: string;
 }
@@ -69,13 +68,10 @@ export default function App() {
         {health && (
           <span
             className="rounded-full border px-2.5 py-1 font-mono text-[11px]"
-            style={{
-              borderColor: health.demo_mode ? "var(--color-violet)" : "var(--color-ok)",
-              color: health.demo_mode ? "var(--color-violet-soft)" : "var(--color-ok-soft)",
-            }}
-            title={health.demo_mode ? t.app.demoTitle : t.app.liveTitle}
+            style={{ borderColor: "var(--color-ok)", color: "var(--color-ok-soft)" }}
+            title={t.app.liveTitle}
           >
-            {health.demo_mode ? t.app.demoMode : `openai · ${health.llm_model}`}
+            {`openai · ${health.llm_model}`}
           </span>
         )}
         <a

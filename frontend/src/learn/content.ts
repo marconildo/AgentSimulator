@@ -174,12 +174,12 @@ const SECTIONS_SRC: SectionSrc[] = [
         id: "provider-pattern",
         title: { en: "Provider pattern (Strategy)", pt: "Padrão Provider (Strategy)" },
         what: {
-          en: "An LLMProvider interface with two implementations: real OpenAI and a deterministic mock.",
-          pt: "Uma interface LLMProvider com duas implementações: OpenAI real e um mock determinístico.",
+          en: "An LLMProvider interface with one implementation today (OpenAI); the seam keeps the agent decoupled from any single model SDK.",
+          pt: "Uma interface LLMProvider com uma implementação hoje (OpenAI); a costura mantém o agente desacoplado de qualquer SDK de modelo específico.",
         },
         why: {
-          en: "The Strategy pattern lets the agent stay identical while you swap the model out — that's what makes the app run offline with zero keys.",
-          pt: "O padrão Strategy mantém o agente idêntico enquanto você troca o modelo — é isso que faz o app rodar offline sem nenhuma chave.",
+          en: "The Strategy pattern lets the agent stay identical while the model behind it changes — so swapping models (or adding Azure OpenAI / Bedrock / Vertex later) never touches the agent loop.",
+          pt: "O padrão Strategy mantém o agente idêntico enquanto o modelo por trás muda — então trocar de modelo (ou adicionar Azure OpenAI / Bedrock / Vertex depois) nunca mexe no loop do agente.",
         },
         where: "backend/app/llm/provider.py",
       },
@@ -211,16 +211,16 @@ const SECTIONS_SRC: SectionSrc[] = [
       },
       {
         id: "testing-demo",
-        title: { en: "Deterministic tests & demo mode", pt: "Testes determinísticos e modo demo" },
+        title: { en: "Structural tests", pt: "Testes estruturais" },
         what: {
-          en: "A mock provider + mock embeddings let the whole pipeline run offline; pytest covers the protocol, RAG, MCP and the agent.",
-          pt: "Um provider mock + embeddings mock fazem todo o pipeline rodar offline; o pytest cobre o protocolo, o RAG, o MCP e o agente.",
+          en: "pytest covers the protocol, RAG, MCP and the agent against real OpenAI; assertions are structural (stages fired, tool used, answer non-empty, relevant doc ranks first) so they tolerate model variability.",
+          pt: "O pytest cobre o protocolo, o RAG, o MCP e o agente contra a OpenAI real; as asserções são estruturais (etapas disparadas, ferramenta usada, resposta não vazia, doc relevante em primeiro) para tolerar a variabilidade do modelo.",
         },
         why: {
-          en: "CI runs with no API keys and no network — fast, free and reproducible. Demo mode is also what lets anyone clone and run instantly.",
-          pt: "O CI roda sem chaves de API e sem rede — rápido, gratuito e reproduzível. O modo demo também é o que permite a qualquer um clonar e rodar na hora.",
+          en: "The app is OpenAI-only — there is no mock to fall back on, so tests exercise the real provider (CI supplies the key as a secret). Structural assertions keep them stable despite nondeterministic generations.",
+          pt: "O app é exclusivamente OpenAI — não há mock para usar como fallback, então os testes exercitam o provider real (o CI fornece a chave como secret). As asserções estruturais os mantêm estáveis apesar das gerações não determinísticas.",
         },
-        where: "backend/tests/ · backend/app/llm/mock_provider.py",
+        where: "backend/tests/",
       },
       {
         id: "config",
@@ -230,8 +230,8 @@ const SECTIONS_SRC: SectionSrc[] = [
           pt: "A configuração vem de variáveis de ambiente / .env via pydantic-settings; nada fica codificado no código.",
         },
         why: {
-          en: "The same container image runs in every environment; secrets are injected at runtime, never committed. Mode auto-detects from the presence of a key.",
-          pt: "A mesma imagem de container roda em todos os ambientes; segredos são injetados em tempo de execução, nunca comitados. O modo é detectado automaticamente pela presença de uma chave.",
+          en: "The same container image runs in every environment; secrets are injected at runtime, never committed. OPENAI_API_KEY is required — with no key the app fails fast at startup.",
+          pt: "A mesma imagem de container roda em todos os ambientes; segredos são injetados em tempo de execução, nunca comitados. A OPENAI_API_KEY é obrigatória — sem chave, o app falha rápido na inicialização.",
         },
         where: "backend/app/config.py · .env.example",
       },

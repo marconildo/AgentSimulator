@@ -12,7 +12,7 @@ The simulator is two apps connected by a streaming event protocol.
 ┌──────────────────────── Backend (FastAPI, Python 3.12) ──────────────────────┐
 │  POST /api/chat   → create trace_id, open EventSourceResponse                 │
 │  GET  /api/trace/{id} → replay a finished trace                               │
-│  GET  /api/health → demo/openai mode, model, index status                     │
+│  GET  /api/health → provider (openai), model, has_key, index status           │
 │                                                                               │
 │  TraceEmitter  → normalizes every stage into TraceEvents (queue + store)      │
 │  App database (SQLite ConversationStore) → db.read history / db.write convo   │
@@ -24,7 +24,7 @@ The simulator is two apps connected by a streaming event protocol.
 │                          └──(no tool calls)──▶ generate → respond              │
 │       │                      │          │                                     │
 │   RAG retriever         MCP client   LLM provider                             │
-│   (Chroma + cosine)   (langchain-mcp- (OpenAI | Mock)                         │
+│   (Chroma + cosine)   (langchain-mcp- (OpenAI)                                │
 │                        adapters, stdio)                                       │
 │                            │                                                  │
 │                      MCP server (FastMCP): calculator, current_time, kb_lookup │
@@ -119,11 +119,12 @@ service names are centralized in
 in [`frontend/src/lib/cloud.ts`](../frontend/src/lib/cloud.ts). "Generic" shows the agnostic role;
 Azure/AWS/GCP show concrete example services.
 
-## Demo mode vs. OpenAI mode
+## OpenAI-only
 
-Only the **LLM reasoning/generation and embeddings** are swapped between modes
-([`backend/app/llm`](../backend/app/llm), [`backend/app/rag/embeddings.py`](../backend/app/rag/embeddings.py)).
-Everything else — the LangGraph loop, the Chroma vector store, the SQLite application database,
-the MCP server and tool execution — is real in both modes. Mode is chosen in
-[`backend/app/config.py`](../backend/app/config.py): explicit `DEMO_MODE` wins, otherwise it is
-inferred from the presence of `OPENAI_API_KEY`.
+The app runs **only against OpenAI** — there is no demo/mock mode. `get_provider()`
+([`backend/app/llm/provider.py`](../backend/app/llm/provider.py)) and `get_embeddings()`
+([`backend/app/rag/embeddings.py`](../backend/app/rag/embeddings.py)) always construct the OpenAI
+implementations; with no `OPENAI_API_KEY` they raise `MissingAPIKeyError`
+([`backend/app/config.py`](../backend/app/config.py)) so the app fails fast rather than falling
+back. **Everything is real** — reasoning, embeddings, the LangGraph loop, the Chroma vector store,
+the SQLite application database, the MCP server and tool execution.

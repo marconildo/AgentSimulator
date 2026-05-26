@@ -20,9 +20,12 @@ jobs:
         run: pip install -r requirements.txt
       - name: Lint (ruff)
         run: ruff check .
-      - name: Tests (pytest, demo mode)
+      - name: Tests (pytest)
+        # The app is OpenAI-only; the suite runs against the real provider.
+        # Fork PRs without the secret skip the [openai] tests; the keyless
+        # guard tests still run.
         env:
-          DEMO_MODE: "true"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: pytest -q
 
   frontend:

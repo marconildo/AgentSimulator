@@ -1,10 +1,10 @@
 """LLM provider abstraction.
 
 The agent never talks to OpenAI directly — it goes through an ``LLMProvider``.
-This is what lets the simulator run with zero API keys: ``get_provider()``
-returns a deterministic :class:`MockProvider` in demo mode and the real
-:class:`OpenAIProvider` otherwise. Tool *execution* is always real (via MCP);
-only the model's reasoning/generation is swapped.
+The ABC stays as a thin seam, but there is exactly one implementation:
+``get_provider()`` always returns the real :class:`OpenAIProvider`, and fails
+fast with :class:`MissingAPIKeyError` when no key is configured. Tool
+*execution* is always real (via MCP).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..config import get_settings
+from ..config import MissingAPIKeyError, get_settings
 
 
 @dataclass
@@ -77,12 +77,10 @@ class LLMProvider(ABC):
 
 
 def get_provider() -> LLMProvider:
-    """Return the configured provider (mock in demo mode, OpenAI otherwise)."""
+    """Return the OpenAI provider, or fail fast if no key is configured."""
     settings = get_settings()
-    if settings.is_demo:
-        from .mock_provider import MockProvider
-
-        return MockProvider()
+    if not settings.has_openai_key:
+        raise MissingAPIKeyError()
     from .openai_provider import OpenAIProvider
 
     return OpenAIProvider(model=settings.llm_model, api_key=settings.openai_api_key)

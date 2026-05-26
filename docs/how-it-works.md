@@ -66,8 +66,7 @@ Tools are exposed by a real **MCP server** (FastMCP) and loaded by the agent ove
 `langchain-mcp-adapters`. The inspector's **discovered tools** section lists each tool with its
 description and the transport in use. For a math question the model chooses `calculator`, and the
 **tool call** section shows the exact arguments (`{"expression": "12 * (3 + 1)"}`) and the result
-(`48`). Tool execution is real in both demo and OpenAI mode — only the model's *choice* is mocked
-in demo mode.
+(`48`). Tool execution is always real — the model (OpenAI) only decides *which* tool to call.
 
 ## 6. LLM — prompt assembly and generation
 

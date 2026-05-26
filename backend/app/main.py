@@ -19,7 +19,6 @@ from sse_starlette.sse import EventSourceResponse
 from .agent import run_agent
 from .config import get_settings
 from .db.store import get_store
-from .llm.provider import get_provider
 from .rag.ingest import build_index
 from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
 from .schemas import ChatRequest, Phase, Stage
@@ -29,8 +28,8 @@ from .trace import TraceEmitter, trace_store
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Build the vector index on first boot if it's missing, or rebuild it if the
-    # persisted index was built with a different embedding model (e.g. it was
-    # created in demo mode at 512 dims and we're now running OpenAI at 1536).
+    # persisted index was built with a different embedding model (e.g. EMBEDDING_MODEL
+    # changed, so the persisted dimension no longer matches the live one).
     try:
         if not is_indexed():
             count = build_index()
@@ -57,13 +56,15 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health() -> dict:
+    # Read the model straight from settings so health stays inspectable even
+    # without a key (constructing the provider would fail fast). `has_key` lets
+    # the frontend surface a clear "OpenAI key required" state.
     settings = get_settings()
-    provider = get_provider()
     return {
         "status": "ok",
-        "demo_mode": settings.is_demo,
-        "llm_provider": provider.name,
-        "llm_model": provider.model_name,
+        "llm_provider": "openai",
+        "llm_model": settings.llm_model,
+        "has_key": settings.has_openai_key,
         "indexed": is_indexed(),
     }
 
@@ -97,14 +98,11 @@ async def chat(req: ChatRequest):
                 )
 
                 # Persist the finished conversation — separate from the RAG vector store.
-                async with emitter.stage(
-                    Stage.DB_WRITE, "Persisting the conversation"
-                ) as db_rec:
+                async with emitter.stage(Stage.DB_WRITE, "Persisting the conversation") as db_rec:
                     db_rec.data = await store.write(trace_id, req.message, emitter.answer)
 
                 rec.data = {
                     "answer": emitter.answer,
-                    "demo_mode": settings.is_demo,
                     "delivery": req.mode,
                 }
         except Exception as exc:  # noqa: BLE001 - report to the client, don't hang

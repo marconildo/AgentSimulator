@@ -3,48 +3,163 @@
 | | |
 |---|---|
 | **ID** | 002-interactive-chat |
-| **Status** | draft |
+| **Status** | clarified |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-26 |
 
-Criar um chat interativo de verdade, mostrar mensagens no historico, permitir enviar mensagem para o agente, etc.
-Tudo deve ser persistido no banco de dados local com session_id para distinguir os chats, na tela teremos a opção de criar novos chats para zerar a conversa.
-No chat tambem teremos a opção de subir arquivos PDFs para serem embedados no banco vetorial e fazermos RAG dele e pesquisas vetoriais, nas conversas com arquivos quero ver todo o fluxo de RAG funcionando, buscando os Chunks no banco vetorial, mostrando como tudo funciona.
-quero usar o Chroma DB para isso, vamos usar com LangChain/LangGraph, tudo sempre usando os modelos da OpenAI para embedding, ou seja pra usar arquivos é obrigatorio ter uma openAI key configurada. 
-O Chat deve continuar na lateral esquerda onde ele esta, mas agora como se fosse um chat igual do whatsapp, onde temos a lista de conversas recentes e quando clica em uma conversa, abre o chat. 
+> Turn the left sidebar into a **real, WhatsApp-style chat**: a list of recent
+> conversations, each opening into its own message thread; the ability to send
+> messages to the agent and see the full history persisted per conversation; a
+> "New chat" action; and per-conversation PDF upload that is embedded into the
+> vector store so RAG can ground answers on the user's own documents — with the
+> retrieved chunks surfaced inside each chat message. The central canvas keeps
+> animating the request pipeline on every send, and additionally **animates PDF
+> ingestion** when a document is uploaded.
+> We want to see all the detail of the embedding process — chunking strategy,
+> tokenization, vectors — surfaced as the ingestion animates.
+
+> **Depends on `003-openai-only`.** This spec assumes there is **no demo mode**: the
+> app is OpenAI-only and a key is always present, so PDF ingestion (which needs real
+> embeddings) is just part of the normal path and all tests run against OpenAI.
 
 ## Problem / motivation
-Atualmente o chat so envia uma mensagem por vez e nao tem historico visual, quero que seja um chat de verdade com conversas, mensagens, etc
+
+Today the sidebar sends **one message at a time** with no visual history — there
+is no notion of a conversation, no list of past threads, and the agent's RAG is
+limited to the fixed built-in corpus. For the visualizer to tell a complete,
+believable story, a user should be able to hold a real multi-turn conversation,
+revisit prior threads, and — crucially — **bring their own documents** and watch
+both the RAG **ingestion** and **retrieval** pipelines run over them, down to the
+chunking, tokenization and embedding detail. This makes the "long-term memory" and
+"RAG" stations concrete and personal instead of abstract.
 
 ## Goals
-- Fazer um front que mostre uma lista de conversas na lateral esquerda
-- Ao clicar em uma conversa, mostrar o historico da conversa e permitir enviar novas mensagens
-- No chat, mostrar o historico real (pode usar um banco local para isso com session_id)
-- No chat ter um botao de "Novo Chat" que cria uma nova conversa
-- No chat ter um botao de "Upload PDF" que faz upload do PDF e embeda no banco vetorial
-- No chat ter um botao de "Limpar conversa" que apaga a conversa atual
-- Dentro da conversa quando tiver PDF carregado, quero ver os documentos que estao carregados para aquela conversa e permitir remover e apagar os embeddings relacionados aquele documento.
-- Em cada mensagem de RAG quero ver o conteudo do Chunk que foi encontrado e usar alguma ferramenta para destacar isso na mensagem.
+
+- A conversation **list** in the left sidebar (recent threads); selecting one opens
+  its message thread (list ↔ thread toggle within the existing sidebar width).
+- Opening a thread shows its **real history**, loaded from the application database,
+  scoped per conversation by a `session_id`.
+- Send new messages within a thread; the user message and the agent's answer both
+  appear in the thread and are persisted.
+- A **"New chat"** action that starts a fresh, empty conversation (new `session_id`).
+- A **"Clear conversation"** action that deletes the current conversation and shows a
+  new one.
+- A **"Upload PDF"** action that ingests a PDF into the vector store so the agent can
+  retrieve from it, **animating the ingestion pipeline on the canvas** with full detail
+  (chunking strategy, per-chunk tokenization, embedding model/dimensions, vector preview).
+- Within a conversation, **list the documents** loaded for it, and allow **removing** a
+  document — which deletes its embeddings from the vector store.
+- For RAG-grounded answers, surface the **retrieved chunk content** inside the chat
+  message, highlighted, **for every message in the history** (chunks are persisted).
+- Keep using **Chroma** (one shared collection, metadata-scoped), wired through
+  LangChain/LangGraph.
 
 ## Non-goals
-Não vamos fazer multi-usuário agora, so um usuario por vez e sempre tudo local.
+
+- No multi-user / multi-tenant. Single local user, single instance, all state local
+  (constitution §8).
+- No production auth, sharing, or cross-device sync.
+- No editing/renaming of past messages or conversations.
 
 ## User-facing behavior
-O usuario deve poder criar quantas conversas quiser, ver o historico de cada uma, enviar mensagens, fazer upload de PDFs, remover PDFs e limpar conversa. 
+
+The chat lives in the **left sidebar** (where it is today). It shows a scrollable
+**list of recent conversations**, each labeled by its first message; selecting one
+toggles into that thread's history. The user can create as many conversations as
+they want ("New chat"), send messages, upload PDFs ("Upload PDF"), see and remove the
+PDFs attached to a conversation, and clear a conversation. When an answer was grounded
+by RAG, the chat shows the retrieved chunks (highlighted) attached to that answer — for
+both live and historical messages. The central canvas continues to animate the full
+request pipeline for every message sent, and animates **chunk → embed → store** (with
+chunking/tokenization/embedding detail) when a PDF is uploaded.
+
+*(All new prose ships in English **and** Portuguese — constitution §4.)*
+
+## Decisions (clarified)
+
+- **D1 — OpenAI-only, no gating.** Per `003-openai-only`, the app always runs against
+  OpenAI, so PDF ingestion uses real embeddings as a normal part of the path — no demo
+  gate, no offline/online split. All tests run against OpenAI (CI key secret, per 003).
+- **D2 — One shared Chroma collection, metadata-scoped.** Documents carry metadata:
+  `corpus: bool`, `session_id`, `document_id`. A manual corpus rebuild (`build_index()`)
+  deletes only `where={"corpus": True}` so it never wipes user uploads. (With a single
+  embedding model there is no dimension-mismatch to handle.)
+- **D3 — Unified retrieval.** A query retrieves a single top-k over `corpus == true` **OR**
+  `session_id == <active>`, so base corpus + this conversation's PDFs rank together; other
+  conversations' PDFs are excluded.
+- **D4 — Ingestion is visualized in full.** New stages `rag.ingest.chunk`,
+  `rag.ingest.embed`, `rag.ingest.store`; the upload endpoint streams them over SSE and the
+  canvas animates the `rag` station, carrying chunking strategy, per-chunk token counts,
+  embedding model/dimensions and a vector preview (constitution §1/§6).
+- **D5 — Chunks persisted per message.** Each message row stores its retrieved chunks, so
+  reopening a thread shows highlights for historical messages.
+- **D6 — Clear keeps embeddings.** Deleting a conversation removes its messages/session but
+  **leaves** its PDF embeddings in the store (orphaned, tagged with the old `session_id`,
+  never retrieved by an active session). Granular per-document removal is the only path
+  that deletes embeddings.
+- **D7 — Title from first message.** A conversation is labeled by its first user message
+  (truncated).
+- **D8 — Fresh schema.** Replace the global `conversations` table with session-scoped
+  `sessions` + `messages` + `documents` tables (drop & recreate; no migration of old rows).
+- **D9 — Sidebar layout.** Keep the current sidebar width; toggle between the conversation
+  list and the open thread.
 
 ## Acceptance criteria
 
-1. **AC1** — Given eu criar uma conversa, quando eu enviar uma mensagem, então a mensagem deve aparecer no historico da conversa e eu devo ver a resposta do agente na conversa.
-2. **AC2** — Given eu fizer upload de um PDF, quando o upload for concluido, então o PDF deve aparecer na lista de documentos da conversa e os chunks devem ser embedados no banco vetorial.
-3. **AC3** — Given eu remover um PDF, quando o documento for removido, então os chunks relacionados aquele documento devem ser removidos do banco vetorial.
-4. **AC4** — Given eu limpar a conversa, quando o botao "Limpar conversa" for clicado, então a conversa atual deve ser apagada e eu devo ver uma nova conversa.
+> Numbered and testable. Each becomes a failing test first (TDD, §9). All tests run against
+> OpenAI (per `003-openai-only`).
+
+1. **AC1** — Given I create a conversation, when I send a message, then the message and the
+   agent's answer appear in that conversation's history and are persisted under its
+   `session_id`.
+2. **AC2** — When I upload a PDF, then the PDF appears in the conversation's document list and
+   its chunks are embedded into the vector store tagged with `session_id` and `document_id`
+   (`corpus = false`).
+3. **AC3** — Given I remove a PDF, when the document is removed, then exactly the chunks for
+   that `document_id` are deleted from the vector store (corpus and other documents untouched).
+4. **AC4** — Given I clear the conversation, when "Clear conversation" is clicked, then the
+   current conversation (session + messages) is deleted and a new conversation is shown; the
+   conversation's PDF embeddings remain in the store and are not retrieved by the new session.
+5. **AC5** — The conversation list shows sessions most-recent-first, each labeled by its first
+   message; selecting one loads that session's message history from the DB.
+6. **AC6** — "New chat" creates a fresh, empty conversation with a new `session_id` and makes
+   it the active thread.
+7. **AC7** — When the active conversation has PDFs, a query returns a unified top-k over the
+   base corpus **and** that conversation's PDFs (filtered `corpus == true` OR `session_id ==
+   active`), and never includes another conversation's PDFs.
+8. **AC8** — Each message persists the chunks retrieved for it; reopening a thread shows the
+   highlighted chunks for historical messages.
+9. **AC9** — Uploading a PDF emits the ingestion stages `rag.ingest.chunk` → `rag.ingest.embed`
+   → `rag.ingest.store` over SSE, in order, each carrying its detail payload (chunking
+   strategy + chunk count, per-chunk token counts, embedding model/dimensions + vector
+   preview, stored count), animating the `rag` station.
 
 ## Protocol / stage impact
 
+Constitution §1 & §6.
+
+- **New `Stage`s** (D4): `rag.ingest.chunk`, `rag.ingest.embed`, `rag.ingest.store`.
+  - Mirror in `frontend/src/types/events.ts`: **required**.
+  - Emitted in: the PDF ingestion path (new backend module), over an SSE upload endpoint.
+  - Station in `stations.ts`: mapped to the existing **`rag`** station (added to its
+    `stages` array).
+  - `readoutFor` (FlowCanvas) + `renderDetail` (InspectorPanel): the `rag` case is extended
+    to handle the ingestion stages (no new `StationId`).
+- **`ChatRequest` gains `session_id`** — request-only field; not a `Stage`/`Phase`/`TraceEvent`
+  change. The SSE `done` payload (and `DoneEvent` mirror) gains `session_id`.
+- **`db.read` / `db.write` payloads become session-scoped** — same `Stage`s, changed `data`
+  shape only.
+- **New REST endpoints** (not part of the SSE trace protocol): list/create/delete sessions;
+  list a session's messages; upload (SSE) / list / delete a session's documents. Enumerated
+  in `plan.md`.
+
 ## Open questions (clarify before planning)
 
-- [ ] …
+None — resolved; see **Decisions** above.
 
 ## Out of scope / deferred
 
-- [ ] …
+- Multi-user / cross-replica shared state (constitution §8).
+- Renaming/editing past messages or conversations; exporting conversations.
+- Garbage-collecting orphaned embeddings from cleared conversations (D6 leaves them).
+- Non-PDF document types (txt/docx/etc.).

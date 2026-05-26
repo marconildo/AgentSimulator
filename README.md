@@ -113,11 +113,12 @@ same SSE connection. See [`docs/architecture.md`](docs/architecture.md) and
 ### Option A — Docker (one command)
 
 ```bash
-docker compose up --build
+OPENAI_API_KEY=sk-... docker compose up --build
 # Frontend: http://localhost:5173   Backend: http://localhost:8000/docs
 ```
 
-Runs in **demo mode** by default (deterministic mock LLM + mock embeddings — no API key needed).
+The app runs **only against OpenAI** — an `OPENAI_API_KEY` is required (there is no demo/mock
+mode). With no key the backend fails fast at startup.
 
 ### Option B — Local dev
 
@@ -126,7 +127,7 @@ Runs in **demo mode** by default (deterministic mock LLM + mock embeddings — n
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # optional: add OPENAI_API_KEY for real mode
+cp .env.example .env            # then add your OPENAI_API_KEY (required)
 python -m app.rag.ingest        # build the local vector index
 uvicorn app.main:app --reload --port 8000
 
@@ -136,17 +137,20 @@ npm install
 npm run dev                     # http://localhost:5173
 ```
 
-## 🔌 Demo mode vs. OpenAI mode
+## 🔌 OpenAI-only
 
-| | Demo mode (default) | OpenAI mode |
-|---|---|---|
-| API key | none | `OPENAI_API_KEY` required |
-| LLM | deterministic mock | `gpt-4o-mini` (streaming) |
-| Embeddings | deterministic hash vectors | `text-embedding-3-small` |
-| Cost | free | spends tokens |
+The app runs **only against OpenAI** — there is no demo/mock mode. An `OPENAI_API_KEY` is
+required; with no key it fails fast at startup and `/api/chat` returns a clear error.
 
-Set the mode in `backend/.env` (`DEMO_MODE=true|false`). If unset, it auto-detects from the
-presence of `OPENAI_API_KEY`.
+| | |
+|---|---|
+| API key | `OPENAI_API_KEY` **required** |
+| LLM | `gpt-4o-mini` (streaming) |
+| Embeddings | `text-embedding-3-small` |
+| Cost | spends tokens |
+
+Set it in `backend/.env` (`OPENAI_API_KEY=sk-...`); the models are configurable via `LLM_MODEL`
+and `EMBEDDING_MODEL`.
 
 ## 🧱 Tech stack
 
@@ -160,7 +164,7 @@ AgentSimulator/
 ├── backend/                      # FastAPI + LangGraph agent (Python 3.12)
 │   ├── app/
 │   │   ├── main.py               # FastAPI app: POST /api/chat (SSE), /api/trace/{id}, /api/health
-│   │   ├── config.py             # pydantic-settings — demo vs OpenAI mode (auto-detected)
+│   │   ├── config.py             # pydantic-settings — OpenAI config (OPENAI_API_KEY required)
 │   │   ├── schemas.py            # event protocol (TraceEvent, Stage, Phase) — the BE↔FE contract
 │   │   ├── trace.py              # TraceEmitter (stage events) + in-memory TraceStore (replay)
 │   │   ├── agent/                # the LangGraph state machine
@@ -171,16 +175,15 @@ AgentSimulator/
 │   │   │   ├── ingest.py         # chunk + embed + build the Chroma index
 │   │   │   ├── retriever.py      # embed query + cosine top-k search
 │   │   │   ├── store.py          # Chroma vector store wiring
-│   │   │   └── embeddings.py     # OpenAI embeddings / deterministic mock
+│   │   │   └── embeddings.py     # OpenAI embeddings
 │   │   ├── mcp/                  # Model Context Protocol
 │   │   │   ├── server.py         # FastMCP server: calculator, current_time, kb_lookup
 │   │   │   └── client.py         # loads MCP tools into the agent (+ local fallback)
 │   │   ├── llm/                  # provider abstraction (Strategy pattern)
-│   │   │   ├── provider.py       # LLMProvider interface + factory
-│   │   │   ├── openai_provider.py# real ChatOpenAI (streaming)
-│   │   │   └── mock_provider.py  # deterministic, offline provider
+│   │   │   ├── provider.py       # LLMProvider interface + factory (OpenAI, fail-fast)
+│   │   │   └── openai_provider.py# real ChatOpenAI (streaming)
 │   │   └── data/corpus/          # markdown knowledge base (RAG source + learning material)
-│   ├── tests/                    # pytest — runs fully offline in demo mode
+│   ├── tests/                    # pytest — runs against OpenAI (structural assertions)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── pyproject.toml            # ruff + pytest config

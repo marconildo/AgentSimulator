@@ -47,7 +47,8 @@ For each new feature:
 4. **Tasks** — fill `tasks.md`: an ordered checklist where each implement task is preceded by the
    failing test that should drive it.
 5. **Implement (TDD)** — for each task: write the failing test (**red**) → implement (**green**) →
-   **refactor**. Check the box. Keep the tests offline and deterministic (`DEMO_MODE=true`).
+   **refactor**. Check the box. Tests run against real OpenAI (`OPENAI_API_KEY` set) and assert
+   structurally; mark model/embedding-dependent tests `@pytest.mark.openai` (skipped without a key).
 6. **Verify** — all quality gates pass and every acceptance criterion maps to a passing test. Move
    the spec's status to `done`.
 
@@ -89,10 +90,11 @@ These mirror [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):
 # Backend (from backend/)
 ruff check .          # lint — line-length 100, E501 ignored
 ruff format .         # formatting
-pytest -q             # tests, Python 3.12, offline (DEMO_MODE=true)
+pytest -q             # tests, Python 3.12, with OPENAI_API_KEY (keyless guards still run)
 
 # Frontend (from frontend/)
 npm run build         # tsc --noEmit + vite build, Node 20
+npm test              # Vitest
 ```
 
 Plus the cross-cutting gates from the constitution:

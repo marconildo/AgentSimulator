@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An educational visualizer of an agentic AI request lifecycle. The user types a message; the backend runs a real LangGraph agent (RAG → MCP tools → LLM) and emits every stage as a stream of trace events; the frontend animates those events across a graph of "stations" and lets you inspect the real data at each one. It runs fully offline in **demo mode** (deterministic mock LLM + mock embeddings, no API key).
+An educational visualizer of an agentic AI request lifecycle. The user types a message; the backend runs a real LangGraph agent (RAG → MCP tools → LLM) and emits every stage as a stream of trace events; the frontend animates those events across a graph of "stations" and lets you inspect the real data at each one. It runs **only against OpenAI** — an `OPENAI_API_KEY` is required (there is no offline/demo mode); with no key it fails fast at startup. Reasoning, embeddings, the vector store, the relational DB and MCP are all real.
 
 ## How we build here — SDD + TDD (non-negotiable)
 
 This project is **spec-first (Spec-Driven Development)** and **test-first (Test-Driven Development)**, and that applies to **every task — even when the user does not ask for it.** The intent is written and reviewed *before* the code; acceptance criteria become failing tests. Two documents govern this, and the constitution wins on any conflict:
 
-- **`.specify/constitution.md`** — the 10 non-negotiable principles (protocol-is-the-contract, deterministic offline demo, mock only reasoning/embeddings, bilingual en/pt, cloud-agnostic, one source of truth for the visual model, pure projection, single-instance, **§9 TDD**, **§10 SDD**) + the quality gates + the amendment process.
+- **`.specify/constitution.md`** — the 10 non-negotiable principles (protocol-is-the-contract, single provider (OpenAI) required, everything is real, bilingual en/pt, cloud-agnostic, one source of truth for the visual model, pure projection, single-instance, **§9 TDD**, **§10 SDD**) + the quality gates + the amendment process.
 - **`specs/README.md`** — the workflow: `specify → clarify → plan → tasks → implement (TDD) → verify`. `specs/000-core-pipeline/` is a worked example (every acceptance criterion points at a passing test); `specs/_template/` is what you copy to start.
 
 ### New feature → write a spec first (stop and do this)
@@ -23,7 +23,7 @@ When the user asks for a new feature or a behavior change, **do not jump to code
 5. Implement **red → green → refactor**, checking boxes, and move the spec's status along (`draft → clarified → planned → in-progress → done`).
 
 ### TDD always
-Acceptance criteria (for a feature) or a reproducing case (for a bug) become a **failing test first**; then code makes it pass; then refactor. Tests must run **fully offline and deterministically** (`DEMO_MODE=true`) — no exceptions.
+Acceptance criteria (for a feature) or a reproducing case (for a bug) become a **failing test first**; then code makes it pass; then refactor. Tests run against **real OpenAI** (CI provides the key as a secret) and assert **structurally** (stages fired, tool used, answer non-empty, relevant doc ranks first) to tolerate model variability. Keyless guard tests (e.g. fail-fast-without-a-key) still run without a key; `[openai]` tests are skipped when none is configured.
 
 ### Does this change need a spec?
 Specs are for **features and behavior changes**, not every edit. TDD, by contrast, applies to anything that changes behavior.
@@ -37,12 +37,12 @@ Specs are for **features and behavior changes**, not every edit. TDD, by contras
 **Gray-zone rule:** if a change touches the event protocol (§1), adds/removes a `Stage`, or adds a station/hop/tier, treat it as a **feature → spec required**, however small it looks. When unsure, write the spec.
 
 ### Done means the gates are green
-Mirror of `ci.yml` + the constitution: `ruff check .` · `ruff format .` · `pytest -q` (offline) · `npm run build` (`tsc --noEmit` + build) — **plus** the protocol mirror in sync (§1), every `Stage` mapped to a station (§6), all new user-facing text in **en + pt** (§4), and the cloud map filled for any new tier/station (§5).
+Mirror of `ci.yml` + the constitution: `ruff check .` · `ruff format .` · `pytest -q` (with `OPENAI_API_KEY`) · `npm run build` (`tsc --noEmit` + build) · `npm test` (Vitest) — **plus** the protocol mirror in sync (§1), every `Stage` mapped to a station (§6), all new user-facing text in **en + pt** (§4), and the cloud map filled for any new tier/station (§5).
 
 ## Commands
 
 ```bash
-# Full stack (demo mode, no keys)
+# Full stack (requires OPENAI_API_KEY in backend/.env)
 docker compose up --build          # frontend :5173, backend :8000/docs
 
 # Backend (from backend/)
@@ -52,7 +52,7 @@ python -m app.rag.ingest           # build/rebuild the Chroma index (idempotent)
 uvicorn app.main:app --reload --port 8000
 ruff check .                       # lint (CI gate)
 ruff format .
-pytest -q                          # all tests; force offline with DEMO_MODE=true
+pytest -q                          # all tests (needs OPENAI_API_KEY; keyless guard tests still run)
 pytest tests/test_agent.py -q                              # one file
 pytest tests/test_agent.py::test_math_question_invokes_calculator_tool   # one test
 python -m app.mcp.server           # run the MCP server standalone (stdio)
@@ -74,7 +74,7 @@ CI (`.github/workflows/ci.yml`) runs `ruff check` + `pytest` (Python 3.12) and `
 **The agent** (`backend/app/agent/graph.py`) is a bounded ReAct loop:
 `START → route → retrieve → think ⇄ tools → generate → respond → END`. `think` decides (via the provider) whether to call tools; `_should_continue` loops back to `tools` while there are pending calls and `iterations <= MAX_ITERATIONS (3)`. Nodes get their dependencies (`emitter`, `provider`, `registry`) from `config["configurable"]`, **not** from globals — see `_deps()`. State is the `AgentState` TypedDict in `state.py`. The compiled graph is `lru_cache`d.
 
-**Demo vs OpenAI mode** is the central swap and is governed by `config.py`'s `Settings.is_demo`: explicit `DEMO_MODE` wins, otherwise it auto-detects from the presence of `OPENAI_API_KEY`. The swap happens behind the `LLMProvider` ABC (`llm/provider.py`, Strategy pattern): `get_provider()` returns `MockProvider` or `OpenAIProvider`. Embeddings swap the same way (`rag/embeddings.py`). **Only model reasoning/generation and embeddings are mocked — the LangGraph loop, the Chroma vector store, the SQLite app database, and MCP tool *execution* are always real.**
+**OpenAI is required — there is no demo/mock mode.** The `LLMProvider` ABC (`llm/provider.py`, Strategy pattern) stays as a thin seam, but `get_provider()` always returns `OpenAIProvider`; with no `OPENAI_API_KEY` it raises `MissingAPIKeyError` (defined in `config.py`) rather than falling back. `get_embeddings()` (`rag/embeddings.py`) does the same. **Everything is real** — reasoning, embeddings, the LangGraph loop, the Chroma vector store, the SQLite app database, and MCP tool *execution*. `/api/health` reads the model straight from settings (and reports `has_key`) so it stays inspectable even without a key.
 
 **MCP** (`backend/app/mcp/`). `server.py` is a real FastMCP server (`calculator`, `current_time`, `kb_lookup`) speaking over stdio. `client.py`'s `ToolRegistry` prefers loading those tools via `langchain-mcp-adapters` over stdio, but **falls back to calling the tool functions in-process** if the transport is unavailable — the agent and UI behave identically (`transport` is `mcp-stdio` vs `local-fallback`). The tool logic lives in plain `_`-prefixed functions in `server.py` precisely so the fallback can reuse it; **if you add/change a tool, update both the `@mcp.tool()` registration and the `_load_local()` mirror in `client.py`.**
 
@@ -101,7 +101,7 @@ CI (`.github/workflows/ci.yml`) runs `ruff check` + `pytest` (Python 3.12) and `
 ## Conventions
 
 - **SDD + TDD are mandatory** (see "How we build here" above): a new feature gets a spec under `specs/` before code; a behavior change is driven by a failing test first. This holds even when the request doesn't mention it.
-- Backend is async throughout; `ruff` with `line-length=100` (E501 ignored), `pytest` in `asyncio_mode=auto`. Tests must run fully offline — keep `DEMO_MODE=true` paths deterministic.
+- Backend is async throughout; `ruff` with `line-length=100` (E501 ignored), `pytest` in `asyncio_mode=auto`. Tests run against real OpenAI (mark model/embedding-dependent tests `@pytest.mark.openai`; they're skipped without a key) and assert structurally to tolerate model variability.
 - Frontend uses React 18 + Vite + TS + `@xyflow/react` (React Flow) + Framer Motion + Tailwind v4 (via `@tailwindcss/vite`). `npm run build` type-checks with `tsc --noEmit`, so keep types clean.
 - Config is read from `backend/.env` (see `.env.example`); `VITE_API_BASE` (build-time) points the frontend at the backend (empty = same origin, set in `docker-compose.yml`).
 - **Bilingual by default:** any new user-facing text must be added in both English and Portuguese (`{ en, pt }`) — see the i18n rule above.

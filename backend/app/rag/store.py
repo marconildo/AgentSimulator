@@ -42,9 +42,14 @@ def reset_vectorstore_cache() -> None:
 
 
 def is_indexed() -> bool:
-    """True if the collection already has at least one document."""
-    store = get_vectorstore()
+    """True if the collection already has at least one document.
+
+    Opening the store needs the embedding function, which requires a key; with
+    no key (or any other failure) we simply report "not indexed" so callers like
+    ``/api/health`` stay inspectable.
+    """
     try:
+        store = get_vectorstore()
         return len(store.get(limit=1).get("ids", [])) > 0
     except Exception:
         return False
@@ -65,12 +70,12 @@ def _persisted_dim() -> int | None:
 def index_matches_model() -> bool:
     """True iff a persisted index exists and matches the active embedding model.
 
-    The vector dimension is baked into the collection at build time (512 for the
-    mock embeddings, 1536 for ``text-embedding-3-small``). Switching demo<->OpenAI
-    therefore leaves an index whose dimension no longer matches the live model,
-    which makes search fail or return nonsense. Comparing dimensions lets the app
-    detect that and rebuild. If the current dimension can't be determined
-    (e.g. offline), we assume a match rather than force a rebuild.
+    The vector dimension is baked into the collection at build time (e.g. 1536
+    for ``text-embedding-3-small``, 3072 for ``text-embedding-3-large``). Changing
+    ``EMBEDDING_MODEL`` therefore leaves an index whose dimension no longer matches
+    the live model, which makes search fail or return nonsense. Comparing
+    dimensions lets the app detect that and rebuild. If the current dimension can't
+    be determined, we assume a match rather than force a rebuild.
     """
     persisted = _persisted_dim()
     if persisted is None:

@@ -3,8 +3,8 @@
 # - backend  -> FastAPI + LangGraph agent on http://localhost:8000
 # - frontend -> static React build served by nginx on http://localhost:5173
 #
-# By default it runs in DEMO_MODE (no API key). To use real OpenAI, create
-# backend/.env with OPENAI_API_KEY and set DEMO_MODE=false.
+# The app runs ONLY against OpenAI — set OPENAI_API_KEY. With no key the
+# backend fails fast at startup.
 
 services:
   backend:
@@ -12,10 +12,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Runs out of the box with no keys. For real OpenAI, start with:
-      #   DEMO_MODE=false OPENAI_API_KEY=sk-... docker compose up
-      # (or put those in a .env file next to this docker-compose.yml).
-      DEMO_MODE: ${DEMO_MODE:-true}
+      # Required — the app is OpenAI-only and has no demo/mock mode. Start with:
+      #   OPENAI_API_KEY=sk-... docker compose up
+      # (or put it in a .env file next to this docker-compose.yml).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
     volumes:

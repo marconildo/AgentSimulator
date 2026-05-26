@@ -148,14 +148,12 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
       );
     }
     case "backend": {
-      const ev = pick(events, "backend", "end");
       const routes = ["POST /api/chat", "GET /api/trace/{id}", "GET /api/health"];
       return (
         <Section title={i.routes}>
           {routes.map((r) => (
             <Mono key={r}>{r}</Mono>
           ))}
-          {ev && <KeyVal k={i.demoModeKey} v={String(ev.data.demo_mode ?? "—")} />}
         </Section>
       );
     }

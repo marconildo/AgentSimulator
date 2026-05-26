@@ -1,27 +1,58 @@
-"""Test configuration: force demo mode and isolate generated data.
+"""Test configuration: isolate generated data and gate the OpenAI-backed suite.
 
-All tests run fully offline (mock LLM + mock embeddings), so CI needs no keys.
-The application database is pointed at a throwaway file so test runs never
-touch a developer's local data.
+The app is OpenAI-only. Tests that exercise the model or embeddings are marked
+``@pytest.mark.openai`` and are skipped when no ``OPENAI_API_KEY`` is configured;
+the keyless guard tests (AC1–AC4) always run. The application database and the
+vector store are pointed at throwaway temp paths so test runs never touch a
+developer's local data.
 """
 
 import os
 import tempfile
 from pathlib import Path
 
-os.environ["DEMO_MODE"] = "true"
-os.environ["APP_DB_PATH"] = str(Path(tempfile.gettempdir()) / "agentsim_test.sqlite3")
+import pytest
+
+_TMP = Path(tempfile.gettempdir())
+os.environ["APP_DB_PATH"] = str(_TMP / "agentsim_test.sqlite3")
+os.environ["CHROMA_DIR"] = str(_TMP / "agentsim_test_chroma")
+
+
+def _has_openai_key() -> bool:
+    from app.config import get_settings
+
+    return get_settings().has_openai_key
 
 
 def pytest_configure(config):
-    # Build a fresh index once before the test session.
+    config.addinivalue_line(
+        "markers", "openai: test needs a real OPENAI_API_KEY (skipped without one)"
+    )
+
     from app.config import get_settings
     from app.db.store import get_store
-    from app.rag.ingest import build_index
 
     get_settings.cache_clear()
     get_store.cache_clear()
     db_path = get_settings().app_db_path_abs
     if db_path.exists():
         db_path.unlink()
-    build_index()
+
+    # Build a fresh vector index once per session — but only when we can reach
+    # OpenAI embeddings. Without a key the index build is skipped and the
+    # [openai] suite is skipped too (see pytest_collection_modifyitems).
+    if get_settings().has_openai_key:
+        from app.rag.ingest import build_index
+        from app.rag.store import reset_vectorstore_cache
+
+        reset_vectorstore_cache()
+        build_index()
+
+
+def pytest_collection_modifyitems(config, items):
+    if _has_openai_key():
+        return
+    skip = pytest.mark.skip(reason="needs OPENAI_API_KEY (OpenAI-only app)")
+    for item in items:
+        if "openai" in item.keywords:
+            item.add_marker(skip)

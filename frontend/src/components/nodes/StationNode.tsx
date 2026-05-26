@@ -170,11 +170,7 @@ function innerRows(id: StationId, events: TraceEvent[], t: ReturnType<typeof use
       return msg ? [{ k: i.requestSent, v: `"${truncate(msg, 18)}"` }] : [];
     }
     case "backend": {
-      const ev = lastWith(events, (e) => e.stage === "backend" && e.phase === "end");
-      return [
-        { k: "routes", v: "3" },
-        ...(ev ? [{ k: i.demoModeKey, v: String(ev.data.demo_mode ?? "—") }] : []),
-      ];
+      return [{ k: "routes", v: "3" }];
     }
     case "agent": {
       const thinks = events.filter((e) => e.stage === "agent.think" && e.phase === "end");

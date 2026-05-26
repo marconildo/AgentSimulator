@@ -287,7 +287,7 @@ const STATIONS_SRC: StationSrc[] = [
       gcp: "Cloud SQL / AlloyDB",
     },
     tech: [
-      { k: { en: "engine", pt: "engine" }, v: "SQLite (demo) / managed SQL" },
+      { k: { en: "engine", pt: "engine" }, v: "SQLite (dev) / managed SQL" },
       { k: { en: "access", pt: "acesso" }, v: "backend · private network" },
       { k: { en: "data", pt: "dados" }, v: "conversations, history" },
       { k: { en: "isolation", pt: "isolamento" }, v: "per-request connection" },

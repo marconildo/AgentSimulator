@@ -7,7 +7,7 @@
 
 **Project:** an educational visualizer of an agentic AI request lifecycle. A real
 LangGraph agent (RAG → MCP tools → LLM) emits trace events that the frontend
-animates across a graph of "stations". Runs fully offline in demo mode.
+animates across a graph of "stations". Runs only against OpenAI (a key is required).
 
 ---
 
@@ -19,15 +19,18 @@ animates across a graph of "stations". Runs fully offline in demo mode.
 the other in the same commit.** A spec that adds a pipeline stage must list the new
 `Stage` and where it is emitted.
 
-### 2. Demo mode is deterministic and offline
-The default experience needs no API key and no network. Tests run with
-`DEMO_MODE=true` and must stay deterministic. No feature may make the offline path
-depend on an external service.
+### 2. Single provider (OpenAI), required
+The app runs only against OpenAI and requires an `OPENAI_API_KEY`; there is no
+offline/mock mode. With no key it fails fast with a clear, typed error rather than
+falling back. Tests exercise the real provider (CI provides the key as a secret) and
+assert **structurally** — stages fired, tool used, answer non-empty, relevant doc
+ranks first — to tolerate model variability. *(Amended by spec 003; was "Demo mode is
+deterministic and offline".)*
 
-### 3. Mock only reasoning and embeddings — everything else is real
-Only the LLM reasoning/generation (`LLMProvider`) and embeddings are swapped for
-mocks. The LangGraph loop, the Chroma vector store, the SQLite application database,
-and MCP tool *execution* are always real, in both modes.
+### 3. Everything is real
+Reasoning, embeddings, the Chroma vector store, the SQLite application database and
+MCP tool *execution* are all real. Nothing is mocked. *(Amended by spec 003; was
+"Mock only reasoning and embeddings".)*
 
 ### 4. Bilingual by default (en/pt)
 Every user-facing string the app renders ships in **both** English and Portuguese
@@ -57,7 +60,9 @@ require shared cross-replica state without saying so explicitly in its spec.
 
 ### 9. Test-first (TDD)
 Acceptance criteria become failing tests **before** implementation. Cycle:
-red → green → refactor. Tests must run fully offline and deterministically.
+red → green → refactor. Tests run against real OpenAI and assert **structurally** (see §2);
+keyless guard tests run without a key, and model/embedding-dependent tests are marked
+`@pytest.mark.openai` so they skip when none is configured.
 
 ### 10. Spec-first (SDD)
 No feature code without a spec under `specs/`. The spec is the source of truth for
@@ -70,8 +75,10 @@ No feature code without a spec under `specs/`. The spec is the source of truth f
 These mirror `.github/workflows/ci.yml`:
 
 - `ruff check .` and `ruff format .` — backend lint (line-length 100, E501 ignored).
-- `pytest -q` — backend tests, Python 3.12, offline (`DEMO_MODE=true`).
+- `pytest -q` — backend tests, Python 3.12, run with `OPENAI_API_KEY` set (CI provides
+  it as a secret). The keyless guard tests still pass without one.
 - `npm run build` — frontend `tsc --noEmit` + `vite build`, Node 20.
+- `npm test` — frontend Vitest.
 
 Plus the cross-cutting gates from the principles above: protocol mirror (§1),
 bilingual strings (§4), cloud map filled (§5), every Stage mapped to a station (§6).

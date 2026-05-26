@@ -1,9 +1,17 @@
-"""End-to-end agent runs in demo mode emit the expected stage sequence."""
+"""End-to-end agent runs against OpenAI emit the expected stage sequence.
+
+Assertions are structural (stages fired, tool used, answer non-empty, history
+carried) so they tolerate model variability. The whole module needs a key.
+"""
 
 import asyncio
 
+import pytest
+
 from app.agent import run_agent
 from app.trace import TraceEmitter
+
+pytestmark = pytest.mark.openai
 
 
 async def _run(message: str, top_k: int = 3, history=None):

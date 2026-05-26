@@ -89,7 +89,7 @@ def build_index() -> int:
 
 def main() -> None:
     settings = get_settings()
-    print(f"Embedding model : {embedding_model_name()} (demo={settings.is_demo})")
+    print(f"Embedding model : {embedding_model_name()}")
     print(f"Corpus          : {settings.corpus_path}")
     print(f"Collection      : {COLLECTION_NAME} @ {settings.chroma_path}")
     count = build_index()

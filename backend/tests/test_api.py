@@ -2,20 +2,25 @@
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 
-def test_health_reports_demo_mode():
+def test_health_reports_live_model_and_no_demo():
+    # AC4 [offline] — health is inspectable without a key; demo mode is gone.
     with TestClient(app) as client:
         resp = client.get("/api/health")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        assert body["demo_mode"] is True
+        assert "demo_mode" not in body
+        assert body["llm_provider"] == "openai"
+        assert body["llm_model"]
 
 
+@pytest.mark.openai
 def test_chat_streams_events_then_done_and_replays():
     with TestClient(app) as client:
         trace_id = None
@@ -46,6 +51,7 @@ def test_chat_streams_events_then_done_and_replays():
         assert len(data["events"]) > 5
 
 
+@pytest.mark.openai
 def test_chat_emits_database_stages():
     with TestClient(app) as client:
         stages = set()
@@ -60,6 +66,7 @@ def test_chat_emits_database_stages():
         assert "db.write" in stages
 
 
+@pytest.mark.openai
 def test_batch_returns_full_trace_in_one_json_response():
     with TestClient(app) as client:
         resp = client.post("/api/chat", json={"message": "What is RAG?", "mode": "batch"})
