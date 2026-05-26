@@ -43,6 +43,7 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         rec.data = {
             "query": state["message"],
             "plan": "Retrieve context from the knowledge base, then decide whether to call tools.",
+            "memory_turns": len(state["history"]),
         }
 
     async with emitter.stage(Stage.MCP_DISCOVER, "Discovering MCP tools") as rec:
@@ -71,6 +72,7 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
             context=state["context"],
             tools=registry.specs(),
             used_tools=used,
+            history=state["history"],
         )
         rec.data = {
             "model": provider.model_name,
@@ -120,6 +122,7 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
             messages=messages,
             context=state["context"],
             tool_results=state["tool_results"],
+            history=state["history"],
         ):
             tokens.append(token)
             await emitter.emit(Stage.LLM_GENERATE, Phase.PROGRESS, data={"token": token})
@@ -164,8 +167,17 @@ def get_compiled_graph():
     return builder.compile()
 
 
-async def run_agent(message: str, top_k: int, emitter: TraceEmitter) -> str:
-    """Run the full agent for one message, emitting trace events as it goes."""
+async def run_agent(
+    message: str,
+    top_k: int,
+    emitter: TraceEmitter,
+    history: list[dict[str, str]] | None = None,
+) -> str:
+    """Run the full agent for one message, emitting trace events as it goes.
+
+    ``history`` is long-term memory (prior turns) loaded from the application
+    database; it is folded into the prompt context.
+    """
     provider = get_provider()
     registry = await get_registry()
     graph = get_compiled_graph()
@@ -175,6 +187,7 @@ async def run_agent(message: str, top_k: int, emitter: TraceEmitter) -> str:
         "top_k": top_k,
         "context": "",
         "chunks": [],
+        "history": history or [],
         "pending_tool_calls": [],
         "tool_results": [],
         "used_tools": [],

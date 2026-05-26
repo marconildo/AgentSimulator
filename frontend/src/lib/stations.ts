@@ -67,6 +67,9 @@ export interface HopMeta {
   secure: boolean; // draw a lock
   zone: NetworkZone; // public internet vs inside the private network
   controls: string; // network/security controls on this hop (WAF, mTLS, …)
+  // Which node handles the edge attaches to (the API↔Agent hop is vertical).
+  sourceHandle: "right" | "bottom";
+  targetHandle: "left" | "top";
 }
 
 export interface BoundaryMeta {
@@ -110,7 +113,7 @@ const TIERS_SRC: TierSrc[] = [
   {
     id: "client",
     title: { en: "Client Tier", pt: "Camada Cliente" },
-    alias: { en: "Presentation tier", pt: "Camada de apresentação" },
+    alias: { en: "Presentation", pt: "Apresentação" },
     generic: { en: "Static hosting / CDN + WAF", pt: "Hospedagem estática / CDN + WAF" },
     clouds: {
       azure: "Azure Static Web Apps + Front Door",
@@ -118,12 +121,12 @@ const TIERS_SRC: TierSrc[] = [
       gcp: "Cloud Storage + Cloud CDN + Cloud Armor",
     },
     accent: "#38bdf8",
-    box: { x: 8, y: 150, w: 272, h: 236 },
+    box: { x: 8, y: 64, w: 272, h: 196 },
   },
   {
     id: "api",
     title: { en: "API Tier", pt: "Camada de API" },
-    alias: { en: "Application tier", pt: "Camada de aplicação" },
+    alias: { en: "Application", pt: "Aplicação" },
     generic: { en: "Containerized web service", pt: "Serviço web em container" },
     clouds: {
       azure: "Azure Container Apps (public ingress)",
@@ -131,12 +134,12 @@ const TIERS_SRC: TierSrc[] = [
       gcp: "Cloud Run (HTTPS LB)",
     },
     accent: "#a78bfa",
-    box: { x: 312, y: 150, w: 272, h: 236 },
+    box: { x: 312, y: 64, w: 272, h: 196 },
   },
   {
     id: "agent",
     title: { en: "Agent Tier", pt: "Camada do Agente" },
-    alias: { en: "Compute / worker (private)", pt: "Compute / worker (privado)" },
+    alias: { en: "Compute (private)", pt: "Compute (privado)" },
     generic: { en: "Private agent runtime service", pt: "Serviço de runtime privado do agente" },
     clouds: {
       azure: "Azure Container Apps (internal)",
@@ -144,7 +147,7 @@ const TIERS_SRC: TierSrc[] = [
       gcp: "Cloud Run (internal ingress)",
     },
     accent: "#f472b6",
-    box: { x: 616, y: 150, w: 272, h: 236 },
+    box: { x: 312, y: 320, w: 272, h: 320 },
   },
   {
     id: "services",
@@ -157,7 +160,7 @@ const TIERS_SRC: TierSrc[] = [
       gcp: "Vertex AI · Vector Search · Cloud SQL",
     },
     accent: "#34d399",
-    box: { x: 956, y: 20, w: 300, h: 560 },
+    box: { x: 956, y: 64, w: 300, h: 586 },
   },
 ];
 
@@ -173,7 +176,7 @@ const BOUNDARY_SRC: BoundarySrc = {
     gcp: "Google Cloud VPC",
   },
   accent: "#5b7cfa",
-  box: { x: 298, y: 6, w: 972, h: 588 },
+  box: { x: 298, y: 6, w: 972, h: 656 },
 };
 
 const STATIONS_SRC: StationSrc[] = [
@@ -203,7 +206,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "security", pt: "segurança" }, v: "HTTPS · TLS 1.3" },
     ],
     stages: ["frontend", "respond"],
-    position: { x: 40, y: 250 },
+    position: { x: 40, y: 112 },
   },
   {
     id: "backend",
@@ -230,7 +233,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "middleware", pt: "middleware" }, v: "CORS" },
     ],
     stages: ["backend"],
-    position: { x: 340, y: 250 },
+    position: { x: 340, y: 112 },
   },
   {
     id: "agent",
@@ -257,7 +260,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "state", pt: "estado" }, v: "in-process per request" },
     ],
     stages: ["agent.route", "agent.think"],
-    position: { x: 640, y: 250 },
+    position: { x: 340, y: 430 },
   },
   {
     id: "database",
@@ -284,7 +287,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "isolation", pt: "isolamento" }, v: "per-request connection" },
     ],
     stages: ["db.read", "db.write"],
-    position: { x: 980, y: 60 },
+    position: { x: 980, y: 112 },
   },
   {
     id: "rag",
@@ -311,7 +314,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "embeddings", pt: "embeddings" }, v: "text-embedding-3-small / mock" },
     ],
     stages: ["rag.embed", "rag.search", "rag.retrieve"],
-    position: { x: 980, y: 195 },
+    position: { x: 980, y: 320 },
   },
   {
     id: "mcp",
@@ -337,7 +340,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "tools", pt: "ferramentas" }, v: "calculator, current_time, kb_lookup" },
     ],
     stages: ["mcp.discover", "mcp.call"],
-    position: { x: 980, y: 330 },
+    position: { x: 980, y: 430 },
   },
   {
     id: "llm",
@@ -364,7 +367,7 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "security", pt: "segurança" }, v: "HTTPS · TLS" },
     ],
     stages: ["llm.prompt", "llm.generate"],
-    position: { x: 980, y: 465 },
+    position: { x: 980, y: 540 },
   },
 ];
 
@@ -383,6 +386,8 @@ const HOPS_SRC: HopSrc[] = [
     secure: true,
     zone: "public",
     controls: { en: "WAF · DDoS · TLS 1.3", pt: "WAF · DDoS · TLS 1.3" },
+    sourceHandle: "right",
+    targetHandle: "left",
   },
   {
     source: "backend",
@@ -396,6 +401,8 @@ const HOPS_SRC: HopSrc[] = [
     secure: true,
     zone: "private",
     controls: { en: "mTLS · NSG / Security Group", pt: "mTLS · NSG / Security Group" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
   },
   {
     source: "backend",
@@ -409,6 +416,8 @@ const HOPS_SRC: HopSrc[] = [
     secure: true,
     zone: "private",
     controls: { en: "Private Endpoint · NSG", pt: "Private Endpoint · NSG" },
+    sourceHandle: "right",
+    targetHandle: "left",
   },
   {
     source: "agent",
@@ -422,6 +431,8 @@ const HOPS_SRC: HopSrc[] = [
     secure: false,
     zone: "private",
     controls: { en: "Private Endpoint", pt: "Private Endpoint" },
+    sourceHandle: "right",
+    targetHandle: "left",
   },
   {
     source: "agent",
@@ -435,6 +446,8 @@ const HOPS_SRC: HopSrc[] = [
     secure: false,
     zone: "private",
     controls: { en: "local IPC (stdio)", pt: "IPC local (stdio)" },
+    sourceHandle: "right",
+    targetHandle: "left",
   },
   {
     source: "agent",
@@ -448,6 +461,8 @@ const HOPS_SRC: HopSrc[] = [
     secure: true,
     zone: "private",
     controls: { en: "Private Endpoint · TLS (egress)", pt: "Private Endpoint · TLS (egress)" },
+    sourceHandle: "right",
+    targetHandle: "left",
   },
 ];
 

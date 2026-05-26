@@ -1,71 +1,221 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
 
+import { useT } from "../../i18n";
 import type { StationRuntime } from "../../lib/derive";
-import type { StationMeta } from "../../lib/stations";
+import { NODE_WIDTH } from "../../lib/layout";
+import type { StationId, StationMeta } from "../../lib/stations";
+import { useSimulator } from "../../store/useSimulator";
+import type { TraceEvent } from "../../types/events";
 
 export interface StationNodeData {
   meta: StationMeta;
   runtime: StationRuntime;
   readout: string;
   isSelected: boolean;
+  expanded: boolean;
+  height: number;
   [key: string]: unknown;
 }
 
+// Stations that have a dedicated focused drill-in view.
+const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
+
 export function StationNode(props: NodeProps) {
-  const { meta, runtime, readout, isSelected } = props.data as StationNodeData;
+  const { meta, runtime, readout, isSelected, expanded, height } = props.data as StationNodeData;
+  const t = useT();
+  const toggleExpand = useSimulator((s) => s.toggleExpand);
+  const openDetail = useSimulator((s) => s.openDetail);
+
   const active = runtime.status === "active";
   const done = runtime.status === "done";
   const accent = meta.accent;
-
   const borderColor = active || done ? accent : "var(--color-line)";
-  const dotColor = active ? accent : done ? accent : "#3a466b";
+  const dotColor = active || done ? accent : "#3a466b";
 
   return (
     <motion.div
-      animate={{ scale: active ? 1.04 : 1 }}
+      animate={{ scale: active ? 1.03 : 1 }}
       transition={{ type: "spring", stiffness: 280, damping: 18 }}
       className={active ? "station-pulse" : ""}
-      style={{ color: accent, width: 196 }}
+      style={{ color: accent, width: NODE_WIDTH, height }}
     >
       <div
-        className="rounded-2xl px-4 py-3 backdrop-blur transition-colors"
+        className="flex h-full flex-col rounded-2xl px-4 py-3 backdrop-blur transition-colors"
         style={{
           background: "color-mix(in srgb, var(--color-panel) 92%, transparent)",
           border: `1.5px solid ${borderColor}`,
           boxShadow: isSelected ? `0 0 0 2px ${accent}` : active ? `0 8px 30px -12px ${accent}` : "none",
-          opacity: runtime.status === "idle" ? 0.62 : 1,
+          opacity: runtime.status === "idle" ? 0.66 : 1,
         }}
       >
-        <Handle type="target" position={Position.Left} style={{ opacity: 0, border: "none" }} />
-        <Handle type="source" position={Position.Right} style={{ opacity: 0, border: "none" }} />
+        <Handle id="left" type="target" position={Position.Left} style={{ opacity: 0, border: "none" }} />
+        <Handle id="top" type="target" position={Position.Top} style={{ opacity: 0, border: "none" }} />
+        <Handle id="right" type="source" position={Position.Right} style={{ opacity: 0, border: "none" }} />
+        <Handle id="bottom" type="source" position={Position.Bottom} style={{ opacity: 0, border: "none" }} />
 
         <div className="flex items-center gap-2.5">
           <span className="text-xl leading-none">{meta.icon}</span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-semibold text-[var(--color-ink)]">
-              {meta.title}
-            </div>
+            <div className="truncate text-[13px] font-semibold text-[var(--color-ink)]">{meta.title}</div>
             <div className="truncate text-[10px] text-[var(--color-muted)]">{meta.subtitle}</div>
           </div>
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-full"
             style={{ background: dotColor, boxShadow: active ? `0 0 8px ${accent}` : "none" }}
           />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleExpand(meta.id);
+            }}
+            title={expanded ? t.node.collapse : t.node.expand}
+            aria-label={expanded ? t.node.collapse : t.node.expand}
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-md border text-[12px] leading-none transition hover:bg-[var(--color-panel-2)]"
+            style={{ borderColor: `${accent}66`, color: accent }}
+          >
+            {expanded ? "⊖" : "⊕"}
+          </button>
         </div>
 
-        <div className="mt-1.5 inline-flex rounded border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide"
-          style={{ borderColor: `${accent}55`, color: accent }}>
-          {meta.tag}
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span
+            className="inline-flex rounded border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide"
+            style={{ borderColor: `${accent}55`, color: accent }}
+          >
+            {meta.tag}
+          </span>
         </div>
 
-        <div
-          className="mt-2 h-[18px] truncate font-mono text-[10.5px]"
-          style={{ color: readout ? accent : "transparent" }}
-        >
-          {readout || "·"}
-        </div>
+        {expanded ? (
+          <div className="mt-2 flex min-h-0 flex-1 flex-col">
+            <ExpandedBody meta={meta} rt={runtime} />
+            {HAS_DETAIL[meta.id] && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDetail(meta.id);
+                }}
+                className="mt-auto w-full rounded-lg border px-2 py-1 text-[10.5px] font-semibold transition hover:bg-[var(--color-panel-2)]"
+                style={{ borderColor: accent, color: accent }}
+              >
+                {t.node.openFull} ▸
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className="mt-2 h-[18px] truncate font-mono text-[10.5px]"
+            style={{ color: readout ? accent : "transparent" }}
+          >
+            {readout || "·"}
+          </div>
+        )}
       </div>
     </motion.div>
   );
+}
+
+// --- compact inner detail shown when a node is expanded ----------------------
+
+function ExpandedBody({ meta, rt }: { meta: StationMeta; rt: StationRuntime }) {
+  const t = useT();
+  const i = t.inspector;
+  const rows = innerRows(meta.id, rt.events, t);
+
+  return (
+    <div className="space-y-1.5 overflow-hidden">
+      <p className="line-clamp-2 text-[10px] leading-snug text-[#8694b8]">{meta.generic}</p>
+      {rows.length > 0 ? (
+        <div className="space-y-0.5">
+          {rows.map((r) => (
+            <div key={r.k} className="flex items-baseline justify-between gap-2 text-[10.5px]">
+              <span className="shrink-0 text-[var(--color-muted)]">{r.k}</span>
+              <span className="truncate text-right font-mono" style={{ color: meta.accent }}>
+                {r.v}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] italic text-[#5b688c]">{i.status.idle}</p>
+      )}
+    </div>
+  );
+}
+
+function lastWith(events: TraceEvent[], pred: (e: TraceEvent) => boolean): TraceEvent | undefined {
+  for (let i = events.length - 1; i >= 0; i--) if (pred(events[i])) return events[i];
+  return undefined;
+}
+
+interface Row {
+  k: string;
+  v: string;
+}
+
+function innerRows(id: StationId, events: TraceEvent[], t: ReturnType<typeof useT>): Row[] {
+  const i = t.inspector;
+  switch (id) {
+    case "frontend": {
+      const msg = events.find((e) => typeof e.data.message === "string")?.data.message as string | undefined;
+      return msg ? [{ k: i.requestSent, v: `"${truncate(msg, 18)}"` }] : [];
+    }
+    case "backend": {
+      const ev = lastWith(events, (e) => e.stage === "backend" && e.phase === "end");
+      return [
+        { k: "routes", v: "3" },
+        ...(ev ? [{ k: i.demoModeKey, v: String(ev.data.demo_mode ?? "—") }] : []),
+      ];
+    }
+    case "agent": {
+      const thinks = events.filter((e) => e.stage === "agent.think" && e.phase === "end");
+      const last = thinks[thinks.length - 1];
+      const route = lastWith(events, (e) => e.stage === "agent.route" && e.phase === "end");
+      const rows: Row[] = [];
+      if (thinks.length) rows.push({ k: i.reasoningTurns, v: String(thinks.length) });
+      if (last) rows.push({ k: i.lastDecision, v: String(last.data.decision ?? "—") });
+      if (route && typeof route.data.memory_turns === "number")
+        rows.push({ k: t.node.memory, v: `${route.data.memory_turns}` });
+      return rows;
+    }
+    case "database": {
+      const read = lastWith(events, (e) => e.stage === "db.read" && e.phase === "end");
+      const write = lastWith(events, (e) => e.stage === "db.write" && e.phase === "end");
+      const rows: Row[] = [];
+      if (read) rows.push({ k: i.totalRows, v: String(read.data.total_rows ?? 0) });
+      if (write) rows.push({ k: i.operation, v: String(write.data.operation ?? "INSERT") });
+      return rows;
+    }
+    case "rag": {
+      const ret = lastWith(events, (e) => e.stage === "rag.retrieve" && e.phase === "end");
+      if (!ret) return [];
+      const chunks = (ret.data.chunks as unknown[] | undefined)?.length ?? 0;
+      const top = ret.metrics.top_score;
+      return [
+        { k: i.retrievedChunks(chunks).replace(/\s*\(.*\)/, ""), v: `${chunks}` },
+        ...(typeof top === "number" ? [{ k: t.readout.score, v: top.toFixed(2) }] : []),
+      ];
+    }
+    case "mcp": {
+      const disc = lastWith(events, (e) => e.stage === "mcp.discover" && e.phase === "end");
+      const call = lastWith(events, (e) => e.stage === "mcp.call" && e.phase === "end");
+      const rows: Row[] = [];
+      if (disc) rows.push({ k: i.tools, v: String((disc.data.tools as unknown[] | undefined)?.length ?? 0) });
+      if (call) rows.push({ k: String(call.data.tool), v: truncate(String(call.data.result), 12) });
+      return rows;
+    }
+    case "llm": {
+      const gen = lastWith(events, (e) => e.stage === "llm.generate" && e.phase === "end");
+      const tokens = events.filter((e) => e.stage === "llm.generate" && e.phase === "progress").length;
+      const rows: Row[] = [];
+      if (gen) rows.push({ k: i.model, v: String(gen.data.model ?? "—") });
+      if (tokens) rows.push({ k: "tokens", v: String(tokens) });
+      return rows;
+    }
+  }
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }

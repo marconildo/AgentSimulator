@@ -144,7 +144,7 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
     case "database": {
       const read = pick(events, "db.read", "end");
       const write = pick(events, "db.write", "end");
-      const recent = (read?.data.recent as string[] | undefined) ?? [];
+      const recent = (read?.data.recent as Array<{ message: string; answer: string }> | undefined) ?? [];
       return (
         <>
           {read && (
@@ -154,7 +154,7 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                 <Labeled label={i.recentMessages}>
                   <div className="space-y-1">
                     {recent.map((m, idx) => (
-                      <Mono key={idx}>{m}</Mono>
+                      <Mono key={idx}>{m.message}</Mono>
                     ))}
                   </div>
                 </Labeled>

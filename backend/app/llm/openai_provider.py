@@ -39,8 +39,9 @@ class OpenAIProvider(LLMProvider):
         context: str,
         tools: list[ToolSpec],
         used_tools: set[str],
+        history: list[dict[str, str]] | None = None,
     ) -> Decision:
-        lc_messages = _build_messages(system, context, messages)
+        lc_messages = _build_messages(system, context, messages, history=history)
         client = self._client(streaming=False)
 
         if tools:
@@ -57,7 +58,7 @@ class OpenAIProvider(LLMProvider):
         ]
         return Decision(
             tool_calls=tool_calls,
-            prompt_preview=_preview(system, context, messages, tools),
+            prompt_preview=_preview(system, context, messages, tools, history or []),
         )
 
     async def stream_answer(
@@ -67,8 +68,9 @@ class OpenAIProvider(LLMProvider):
         messages: list[dict[str, str]],
         context: str,
         tool_results: list[dict[str, Any]],
+        history: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[str]:
-        lc_messages = _build_messages(system, context, messages, tool_results)
+        lc_messages = _build_messages(system, context, messages, tool_results, history)
         client = self._client(streaming=True)
         async for chunk in client.astream(lc_messages):
             text = chunk.content
@@ -81,8 +83,14 @@ def _build_messages(
     context: str,
     messages: list[dict[str, str]],
     tool_results: list[dict[str, Any]] | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> list[Any]:
     system_block = system
+    if history:
+        rendered = "\n".join(
+            f"- user: {h['message']}\n  assistant: {h['answer']}" for h in history
+        )
+        system_block += f"\n\n# Recent conversation history (long-term memory)\n{rendered}"
     if context.strip():
         system_block += f"\n\n# Retrieved context\n{context}"
     if tool_results:
@@ -110,11 +118,16 @@ def _to_openai_tool(tool: ToolSpec) -> dict[str, Any]:
 
 
 def _preview(
-    system: str, context: str, messages: list[dict[str, str]], tools: list[ToolSpec]
+    system: str,
+    context: str,
+    messages: list[dict[str, str]],
+    tools: list[ToolSpec],
+    history: list[dict[str, str]],
 ) -> dict[str, Any]:
     return {
         "system": system,
         "context": context,
         "messages": messages,
         "tools": [t.name for t in tools],
+        "history": history,
     }

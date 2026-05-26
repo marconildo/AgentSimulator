@@ -10,6 +10,8 @@ class AgentState(TypedDict):
     top_k: int
     context: str
     chunks: list[dict[str, Any]]
+    # Long-term memory: prior {message, answer} turns from the application DB.
+    history: list[dict[str, str]]
     pending_tool_calls: list[dict[str, Any]]
     tool_results: list[dict[str, Any]]
     used_tools: list[str]

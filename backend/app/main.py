@@ -21,18 +21,24 @@ from .config import get_settings
 from .db.store import get_store
 from .llm.provider import get_provider
 from .rag.ingest import build_index
-from .rag.store import is_indexed
+from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
 from .schemas import ChatRequest, Phase, Stage
 from .trace import TraceEmitter, trace_store
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Build the vector index on first boot if it's missing.
+    # Build the vector index on first boot if it's missing, or rebuild it if the
+    # persisted index was built with a different embedding model (e.g. it was
+    # created in demo mode at 512 dims and we're now running OpenAI at 1536).
     try:
         if not is_indexed():
             count = build_index()
             print(f"[startup] Built vector index ({count} chunks).")
+        elif not index_matches_model():
+            reset_vectorstore_cache()  # drop any stale collection handle first
+            count = build_index()
+            print(f"[startup] Embedding model changed — rebuilt index ({count} chunks).")
     except Exception as exc:  # noqa: BLE001 - app should still start
         print(f"[startup] Could not build index: {exc!r}")
     yield
@@ -79,12 +85,14 @@ async def chat(req: ChatRequest):
             ) as rec:
                 store = get_store()
                 # Read recent history from the application database (system of record).
+                # This is the agent's long-term memory, folded into the prompt context.
                 async with emitter.stage(
                     Stage.DB_READ, "Loading recent history", {"table": "conversations"}
                 ) as db_rec:
-                    db_rec.data = await store.read_history()
+                    history = await store.read_history()
+                    db_rec.data = history
 
-                await run_agent(req.message, top_k, emitter)
+                await run_agent(req.message, top_k, emitter, history=history["recent"])
 
                 # Persist the finished conversation — separate from the RAG vector store.
                 async with emitter.stage(

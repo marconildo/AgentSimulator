@@ -352,6 +352,32 @@ const SECTIONS_SRC: SectionSrc[] = [
         where: "backend/app/mcp/",
       },
       {
+        id: "agent-memory",
+        title: { en: "Agent memory (working vs long-term)", pt: "Memória do agente (trabalho vs longo prazo)" },
+        what: {
+          en: "Working memory is the current request's state (messages + the tool scratchpad of act→observe steps); long-term memory survives across requests — here the conversation history in the app database, plus the RAG vector store as semantic memory.",
+          pt: "A memória de trabalho é o estado da requisição atual (mensagens + o rascunho de ferramentas dos passos agir→observar); a memória de longo prazo sobrevive entre requisições — aqui o histórico de conversas no banco da aplicação, mais o vector store do RAG como memória semântica.",
+        },
+        why: {
+          en: "Telling the two apart is core to agent design: working memory is cheap and ephemeral, long-term memory must be stored and retrieved. The history is folded into the real prompt — open the Agent's full view to see both.",
+          pt: "Distinguir as duas é central no design de agentes: a de trabalho é barata e efêmera, a de longo prazo precisa ser armazenada e recuperada. O histórico entra no prompt de verdade — abra a visão completa do Agente para ver as duas.",
+        },
+        where: "backend/app/db/store.py · run_agent(history=…) · AgentDetail.tsx",
+      },
+      {
+        id: "context-window",
+        title: { en: "Context window assembly", pt: "Montagem da janela de contexto" },
+        what: {
+          en: "The single input the model actually receives: system prompt + retrieved context (RAG) + tool results + conversation history, each costing tokens within a finite budget.",
+          pt: "A única entrada que o modelo de fato recebe: prompt de sistema + contexto recuperado (RAG) + resultados de ferramentas + histórico de conversa, cada parte custando tokens dentro de um orçamento finito.",
+        },
+        why: {
+          en: "The context window is finite, so what you include (and leave out) is a real engineering decision; the Agent's full view shows the breakdown and an approximate token share per part.",
+          pt: "A janela de contexto é finita, então o que você inclui (e deixa de fora) é uma decisão real de engenharia; a visão completa do Agente mostra a composição e a fração aproximada de tokens de cada parte.",
+        },
+        where: "AgentDetail.tsx (context window) · llm prompt_preview",
+      },
+      {
         id: "prompt",
         title: { en: "Prompt / context engineering", pt: "Engenharia de prompt / contexto" },
         what: {

@@ -13,6 +13,7 @@ import { useLang, useT } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView, StationRuntime } from "../lib/derive";
+import { computeLayout } from "../lib/layout";
 import {
   boundaryFor,
   hopsFor,
@@ -21,6 +22,7 @@ import {
   tiersFor,
   type StationId,
 } from "../lib/stations";
+import { useSimulator } from "../store/useSimulator";
 import { FlowEdge } from "./edges/FlowEdge";
 import { BoundaryNode } from "./nodes/BoundaryNode";
 import { StationNode } from "./nodes/StationNode";
@@ -38,6 +40,7 @@ interface FlowCanvasProps {
 export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const lang = useLang((s) => s.lang);
   const cloud = useCloud((s) => s.cloud);
+  const expanded = useSimulator((s) => s.expanded);
   const t = useT();
   const stations = stationsFor(lang);
   const tiers = tiersFor(lang);
@@ -46,46 +49,55 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const stationById = stationByIdFor(lang);
   const ro = t.readout;
 
+  const expandedSet = useMemo(() => new Set(expanded), [expanded]);
+  const layout = useMemo(() => computeLayout(expandedSet), [expandedSet]);
+
   const nodes: Node[] = useMemo(() => {
     // The private-network boundary sits behind everything (inserted first).
+    const b = layout.boundary;
     const boundaryNode: Node = {
       id: `boundary-${boundary.id}`,
       type: "boundary",
-      position: { x: boundary.box.x, y: boundary.box.y },
+      position: { x: b.x, y: b.y },
       data: { meta: boundary, service: cloudValue(boundary, cloud) },
-      style: { width: boundary.box.w, height: boundary.box.h, pointerEvents: "none" },
+      style: { width: b.w, height: b.h, pointerEvents: "none" },
       selectable: false,
       draggable: false,
       zIndex: 0,
     };
 
-    const tierNodes: Node[] = tiers.map((meta) => ({
-      id: `tier-${meta.id}`,
-      type: "tier",
-      position: { x: meta.box.x, y: meta.box.y },
-      data: { meta, service: cloudValue(meta, cloud) },
-      style: { width: meta.box.w, height: meta.box.h, pointerEvents: "none" },
-      selectable: false,
-      draggable: false,
-      zIndex: 0,
-    }));
+    const tierNodes: Node[] = tiers.map((meta) => {
+      const box = layout.tierBoxes[meta.id];
+      return {
+        id: `tier-${meta.id}`,
+        type: "tier",
+        position: { x: box.x, y: box.y },
+        data: { meta, service: cloudValue(meta, cloud) },
+        style: { width: box.w, height: box.h, pointerEvents: "none" },
+        selectable: false,
+        draggable: false,
+        zIndex: 0,
+      };
+    });
 
     const stationNodes: Node[] = stations.map((meta) => ({
       id: meta.id,
       type: "station",
-      position: meta.position,
+      position: layout.positions[meta.id],
       data: {
         meta,
         runtime: view.stations[meta.id],
         readout: readoutFor(meta.id, view.stations[meta.id], ro),
         isSelected: selected === meta.id,
+        expanded: expandedSet.has(meta.id),
+        height: layout.heights[meta.id],
       },
       draggable: false,
       zIndex: 1,
     }));
 
     return [boundaryNode, ...tierNodes, ...stationNodes];
-  }, [view, selected, stations, tiers, boundary, cloud, ro]);
+  }, [view, selected, stations, tiers, boundary, cloud, ro, layout, expandedSet]);
 
   const edges: Edge[] = useMemo(
     () =>
@@ -96,12 +108,17 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
           id,
           source: hop.source,
           target: hop.target,
+          sourceHandle: hop.sourceHandle,
+          targetHandle: hop.targetHandle,
           type: "flow",
           data: {
             accent: stationById[hop.target].accent,
             label: hop.label,
             secure: hop.secure,
             zone: hop.zone,
+            protocol: hop.protocol,
+            detail: hop.detail,
+            controls: hop.controls,
             active,
             reverse: active && view.hopReverse,
             stream: id === "frontend-backend" && view.streaming,

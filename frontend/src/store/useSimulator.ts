@@ -14,10 +14,15 @@ interface SimulatorState {
   following: boolean; // cursor tracks the live tail
   playing: boolean; // replay animation running
   selected: StationId | null;
+  expanded: StationId[]; // stations expanded inline on the canvas
+  detail: StationId | null; // station opened in the focused drill-in overlay
   error: string | null;
 
   setInput: (value: string) => void;
   select: (id: StationId | null) => void;
+  toggleExpand: (id: StationId) => void;
+  openDetail: (id: StationId) => void;
+  closeDetail: () => void;
   send: () => Promise<void>;
   reset: () => void;
   setCursor: (index: number) => void;
@@ -43,10 +48,20 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   following: true,
   playing: false,
   selected: null,
+  expanded: [],
+  detail: null,
   error: null,
 
   setInput: (value) => set({ input: value }),
   select: (id) => set({ selected: id }),
+  toggleExpand: (id) =>
+    set((state) => ({
+      expanded: state.expanded.includes(id)
+        ? state.expanded.filter((x) => x !== id)
+        : [...state.expanded, id],
+    })),
+  openDetail: (id) => set({ detail: id, selected: id }),
+  closeDetail: () => set({ detail: null }),
 
   send: async () => {
     const message = get().input.trim();
@@ -94,6 +109,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       playing: false,
       error: null,
       selected: null,
+      detail: null,
     });
   },
 

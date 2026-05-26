@@ -55,8 +55,13 @@ class LLMProvider(ABC):
         context: str,
         tools: list[ToolSpec],
         used_tools: set[str],
+        history: list[dict[str, str]] | None = None,
     ) -> Decision:
-        """Decide whether to call tools given the query + retrieved context."""
+        """Decide whether to call tools given the query + retrieved context.
+
+        ``history`` is the long-term memory: prior {message, answer} turns
+        loaded from the application database.
+        """
 
     @abstractmethod
     def stream_answer(
@@ -66,6 +71,7 @@ class LLMProvider(ABC):
         messages: list[dict[str, str]],
         context: str,
         tool_results: list[dict[str, Any]],
+        history: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[str]:
         """Stream the final user-facing answer, token by token."""
 

@@ -33,6 +33,7 @@ class MockProvider(LLMProvider):
         context: str,
         tools: list[ToolSpec],
         used_tools: set[str],
+        history: list[dict[str, str]] | None = None,
     ) -> Decision:
         query = messages[-1]["content"] if messages else ""
         available = {t.name for t in tools}
@@ -50,7 +51,7 @@ class MockProvider(LLMProvider):
             if _TIME_RE.search(query):
                 tool_calls.append(ToolCall(id=_id(), name="current_time", args={}))
 
-        prompt_preview = _preview(system, context, messages, tools)
+        prompt_preview = _preview(system, context, messages, tools, history or [])
         return Decision(tool_calls=tool_calls, prompt_preview=prompt_preview)
 
     async def stream_answer(
@@ -60,8 +61,9 @@ class MockProvider(LLMProvider):
         messages: list[dict[str, str]],
         context: str,
         tool_results: list[dict[str, Any]],
+        history: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[str]:
-        answer = _compose_answer(messages, context, tool_results)
+        answer = _compose_answer(messages, context, tool_results, history or [])
         for token in _tokenize(answer):
             await asyncio.sleep(0.012)  # pace it so streaming is visible
             yield token
@@ -71,9 +73,15 @@ def _compose_answer(
     messages: list[dict[str, str]],
     context: str,
     tool_results: list[dict[str, Any]],
+    history: list[dict[str, str]],
 ) -> str:
     query = messages[-1]["content"] if messages else ""
     parts: list[str] = [f'You asked: "{query.strip()}".']
+
+    if history:
+        parts.append(
+            f"(Recalling {len(history)} earlier turn(s) from long-term memory.)"
+        )
 
     if tool_results:
         for tr in tool_results:
@@ -112,13 +120,18 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _preview(
-    system: str, context: str, messages: list[dict[str, str]], tools: list[ToolSpec]
+    system: str,
+    context: str,
+    messages: list[dict[str, str]],
+    tools: list[ToolSpec],
+    history: list[dict[str, str]],
 ) -> dict[str, Any]:
     return {
         "system": system,
         "context": context,
         "messages": messages,
         "tools": [t.name for t in tools],
+        "history": history,
     }
 
 

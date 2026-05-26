@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
 import { FlowCanvas } from "./components/FlowCanvas";
@@ -24,6 +25,8 @@ export default function App() {
   const cursor = useSimulator((s) => s.cursor);
   const selected = useSimulator((s) => s.selected);
   const select = useSimulator((s) => s.select);
+  const detail = useSimulator((s) => s.detail);
+  const closeDetail = useSimulator((s) => s.closeDetail);
 
   const view = useMemo(() => deriveView(events, cursor), [events, cursor]);
   const t = useT();
@@ -90,6 +93,7 @@ export default function App() {
 
             <main className="relative min-w-0 flex-1">
               <FlowCanvas view={view} selected={selected} onSelect={select} />
+              {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
             </main>
 
             <aside className="w-[372px] shrink-0 border-l border-[var(--color-line)] bg-[var(--color-panel)]">

@@ -55,14 +55,16 @@ class ConversationStore:
         with self._connect() as conn:
             total = conn.execute("SELECT COUNT(*) AS n FROM conversations").fetchone()["n"]
             rows = conn.execute(
-                "SELECT message FROM conversations ORDER BY created_at DESC LIMIT ?",
+                "SELECT message, answer FROM conversations ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+        # Oldest-first so it reads naturally as a conversation transcript.
+        recent = [{"message": r["message"], "answer": r["answer"]} for r in reversed(rows)]
         return {
             "table": "conversations",
             "engine": "sqlite",
             "total_rows": int(total),
-            "recent": [r["message"] for r in rows],
+            "recent": recent,
         }
 
     def _write_sync(self, trace_id: str, message: str, answer: str) -> dict[str, Any]:

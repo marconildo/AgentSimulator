@@ -6,7 +6,7 @@ from app.agent import run_agent
 from app.trace import TraceEmitter
 
 
-async def _run(message: str, top_k: int = 3):
+async def _run(message: str, top_k: int = 3, history=None):
     emitter = TraceEmitter("test", message)
 
     async def drain():
@@ -19,7 +19,7 @@ async def _run(message: str, top_k: int = 3):
         return events
 
     drainer = asyncio.create_task(drain())
-    answer = await run_agent(message, top_k, emitter)
+    answer = await run_agent(message, top_k, emitter, history=history)
     await emitter.close()
     events = await drainer
     return answer, events
@@ -64,3 +64,12 @@ async def test_llm_generate_streams_tokens():
     progress = [e for e in events if e.stage == "llm.generate" and e.phase == "progress"]
     assert len(progress) > 1
     assert all("token" in e.data for e in progress)
+
+
+async def test_history_is_carried_into_the_prompt():
+    history = [{"message": "What is RAG?", "answer": "RAG grounds an LLM in retrieved docs."}]
+    _answer, events = await _run("And what about embeddings?", history=history)
+    prompt = next(e for e in events if e.stage == "llm.prompt" and e.phase == "end")
+    assert prompt.data["history"] == history
+    route = next(e for e in events if e.stage == "agent.route" and e.phase == "end")
+    assert route.data["memory_turns"] == 1

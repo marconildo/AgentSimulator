@@ -16,7 +16,8 @@ async def test_write_then_read_roundtrip(tmp_path):
 
     history = await store.read_history()
     assert history["total_rows"] == 1
-    assert "What is RAG?" in history["recent"]
+    assert history["recent"][-1]["message"] == "What is RAG?"
+    assert history["recent"][-1]["answer"].startswith("RAG grounds")
 
 
 async def test_write_is_idempotent_per_trace(tmp_path):

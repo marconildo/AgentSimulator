@@ -94,6 +94,44 @@ export interface Strings {
     dbHistory: (n: number) => string;
     dbPersisted: string;
   };
+  node: {
+    expand: string;
+    collapse: string;
+    openFull: string;
+    memory: string;
+    tip: string;
+  };
+  agentDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    waiting: string;
+    reactLoop: string;
+    reason: string;
+    act: string;
+    observe: string;
+    answer: string;
+    iterations: string;
+    lastDecision: string;
+    workingMemory: string;
+    workingMemoryHint: string;
+    userMessage: string;
+    scratchpad: string;
+    noToolCalls: string;
+    longTermMemory: string;
+    longTermMemoryHint: string;
+    conversationHistory: string;
+    vectorMemory: string;
+    noHistory: string;
+    contextWindow: string;
+    contextWindowHint: string;
+    systemPrompt: string;
+    retrievedContext: string;
+    toolResults: string;
+    history: string;
+    tools: string;
+    approxTokens: (n: number) => string;
+  };
   learn: {
     rootTitle: string;
     rootHint: string;
@@ -203,6 +241,44 @@ const en: Strings = {
     dbQuerying: "querying…",
     dbHistory: (n) => `history: ${n} rows`,
     dbPersisted: "persisted ✓",
+  },
+  node: {
+    expand: "Expand",
+    collapse: "Collapse",
+    openFull: "Open full view",
+    memory: "memory",
+    tip: "Click a station to inspect · ⊕ to expand",
+  },
+  agentDetail: {
+    title: "Agent — inside the loop",
+    subtitle: "How an AI agent reasons, remembers and acts",
+    back: "Back to canvas",
+    waiting: "Send a message to watch the agent reason, remember and act.",
+    reactLoop: "ReAct loop",
+    reason: "reason",
+    act: "act · tool",
+    observe: "observe",
+    answer: "answer",
+    iterations: "iterations",
+    lastDecision: "last decision",
+    workingMemory: "Working memory",
+    workingMemoryHint: "this request's state — lost when it ends",
+    userMessage: "user message",
+    scratchpad: "tool scratchpad (act → observe)",
+    noToolCalls: "no tools called this run",
+    longTermMemory: "Long-term memory",
+    longTermMemoryHint: "survives across requests",
+    conversationHistory: "conversation history · app DB",
+    vectorMemory: "vector memory · RAG knowledge base",
+    noHistory: "no earlier conversations",
+    contextWindow: "Context window",
+    contextWindowHint: "what is actually assembled and sent to the LLM",
+    systemPrompt: "system prompt",
+    retrievedContext: "retrieved context · RAG",
+    toolResults: "tool results",
+    history: "history",
+    tools: "available tools",
+    approxTokens: (n) => `~${n} tokens`,
   },
   learn: {
     rootTitle: "How this app works",
@@ -314,6 +390,44 @@ const pt: Strings = {
     dbQuerying: "consultando…",
     dbHistory: (n) => `histórico: ${n} linhas`,
     dbPersisted: "persistido ✓",
+  },
+  node: {
+    expand: "Expandir",
+    collapse: "Recolher",
+    openFull: "Abrir visão completa",
+    memory: "memória",
+    tip: "Clique numa estação para inspecionar · ⊕ para expandir",
+  },
+  agentDetail: {
+    title: "Agente — dentro do loop",
+    subtitle: "Como um agente de IA raciocina, lembra e age",
+    back: "Voltar ao canvas",
+    waiting: "Envie uma mensagem para ver o agente raciocinar, lembrar e agir.",
+    reactLoop: "Loop ReAct",
+    reason: "raciocinar",
+    act: "agir · ferramenta",
+    observe: "observar",
+    answer: "responder",
+    iterations: "iterações",
+    lastDecision: "última decisão",
+    workingMemory: "Memória de trabalho",
+    workingMemoryHint: "o estado desta requisição — perdido ao terminar",
+    userMessage: "mensagem do usuário",
+    scratchpad: "rascunho de ferramentas (agir → observar)",
+    noToolCalls: "nenhuma ferramenta chamada nesta execução",
+    longTermMemory: "Memória de longo prazo",
+    longTermMemoryHint: "sobrevive entre requisições",
+    conversationHistory: "histórico de conversas · banco da app",
+    vectorMemory: "memória vetorial · base de conhecimento RAG",
+    noHistory: "sem conversas anteriores",
+    contextWindow: "Janela de contexto",
+    contextWindowHint: "o que de fato é montado e enviado ao LLM",
+    systemPrompt: "prompt de sistema",
+    retrievedContext: "contexto recuperado · RAG",
+    toolResults: "resultados de ferramentas",
+    history: "histórico",
+    tools: "ferramentas disponíveis",
+    approxTokens: (n) => `~${n} tokens`,
   },
   learn: {
     rootTitle: "Como este app funciona",

@@ -21,15 +21,18 @@ export function TierNode(props: NodeProps) {
         background: `linear-gradient(180deg, ${meta.accent}0d 0%, transparent 60%)`,
       }}
     >
-      <div className="flex items-baseline gap-2 px-3 pt-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: meta.accent }}>
+      <div className="flex items-baseline gap-1.5 overflow-hidden px-3 pt-2">
+        <span
+          className="shrink-0 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider"
+          style={{ color: meta.accent }}
+        >
           {meta.title}
         </span>
-        <span className="text-[9px] uppercase tracking-wider text-[var(--color-muted)]">
+        <span className="min-w-0 truncate text-[9px] uppercase tracking-wider text-[var(--color-muted)]">
           {meta.alias}
         </span>
       </div>
-      <div className="px-3 text-[10px] leading-tight text-[var(--color-muted)]">
+      <div className="truncate px-3 text-[10px] leading-tight text-[var(--color-muted)]">
         <span className="font-mono">{service}</span>
       </div>
     </div>
