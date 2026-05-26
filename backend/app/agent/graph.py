@@ -115,6 +115,11 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
     emitter, provider, _registry = _deps(config)
     messages = [{"role": "user", "content": state["message"]}]
 
+    # In stream mode each token is emitted as a PROGRESS event so the UI types
+    # the answer out live; in batch mode we collect them silently and surface
+    # the whole answer at once on the END event (a single, non-incremental
+    # delivery — the synchronous request/response contract).
+    streaming = state["mode"] != "batch"
     async with emitter.stage(Stage.LLM_GENERATE, "Generating the answer") as rec:
         tokens: list[str] = []
         async for token in provider.stream_answer(
@@ -125,9 +130,10 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
             history=state["history"],
         ):
             tokens.append(token)
-            await emitter.emit(Stage.LLM_GENERATE, Phase.PROGRESS, data={"token": token})
+            if streaming:
+                await emitter.emit(Stage.LLM_GENERATE, Phase.PROGRESS, data={"token": token})
         answer = "".join(tokens)
-        rec.data = {"answer": answer, "model": provider.model_name}
+        rec.data = {"answer": answer, "model": provider.model_name, "delivery": state["mode"]}
         rec.metrics["tokens"] = float(len(tokens))
 
     return {"answer": answer}
@@ -172,11 +178,14 @@ async def run_agent(
     top_k: int,
     emitter: TraceEmitter,
     history: list[dict[str, str]] | None = None,
+    mode: str = "stream",
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
     ``history`` is long-term memory (prior turns) loaded from the application
-    database; it is folded into the prompt context.
+    database; it is folded into the prompt context. ``mode`` controls delivery
+    of the answer: ``"stream"`` emits per-token events, ``"batch"`` produces it
+    in one shot.
     """
     provider = get_provider()
     registry = await get_registry()
@@ -185,6 +194,7 @@ async def run_agent(
     initial: AgentState = {
         "message": message,
         "top_k": top_k,
+        "mode": mode,
         "context": "",
         "chunks": [],
         "history": history or [],

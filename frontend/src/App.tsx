@@ -6,6 +6,7 @@ import { CloudToggle } from "./components/CloudToggle";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { Timeline } from "./components/Timeline";
 import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
@@ -52,6 +53,7 @@ export default function App() {
         </div>
         <CloudToggle />
         <LanguageToggle />
+        <SettingsPanel />
         <button
           onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}
           className="rounded-full border px-3 py-1 text-[12px] font-medium transition"

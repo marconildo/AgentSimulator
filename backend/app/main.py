@@ -92,7 +92,9 @@ async def chat(req: ChatRequest):
                     history = await store.read_history()
                     db_rec.data = history
 
-                await run_agent(req.message, top_k, emitter, history=history["recent"])
+                await run_agent(
+                    req.message, top_k, emitter, history=history["recent"], mode=req.mode
+                )
 
                 # Persist the finished conversation — separate from the RAG vector store.
                 async with emitter.stage(
@@ -100,13 +102,25 @@ async def chat(req: ChatRequest):
                 ) as db_rec:
                     db_rec.data = await store.write(trace_id, req.message, emitter.answer)
 
-                rec.data = {"answer": emitter.answer, "demo_mode": settings.is_demo}
+                rec.data = {
+                    "answer": emitter.answer,
+                    "demo_mode": settings.is_demo,
+                    "delivery": req.mode,
+                }
         except Exception as exc:  # noqa: BLE001 - report to the client, don't hang
             await emitter.emit(Stage.BACKEND, Phase.END, "error", {"error": str(exc)})
         finally:
             trace_store.save(emitter)
             await emitter.close()
 
+    # Batch delivery: run the whole pipeline to completion, then return the
+    # finished trace + answer as one JSON response. The client replays it. This
+    # is the synchronous request/response contract — no live streaming.
+    if req.mode == "batch":
+        await producer()
+        return emitter.summary()
+
+    # Streaming delivery: fan trace events out over SSE as they happen.
     async def event_stream():
         task = asyncio.create_task(producer())
         try:

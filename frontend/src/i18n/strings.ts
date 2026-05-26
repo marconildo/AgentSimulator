@@ -71,7 +71,33 @@ export interface Strings {
     generatedAnswer: string;
     status: { active: string; done: string; idle: string };
   };
+  comms: {
+    sync: string; // chip word (technical, same in both languages)
+    async: string;
+    syncDetail: string; // blocking request/response
+    asyncDetail: string; // streamed response
+    deliveryStreamDetail: string; // frontend↔backend, stream mode
+    deliveryBatchDetail: string; // frontend↔backend, batch mode
+    llmStreamDetail: string; // agent→llm, stream mode
+    llmBatchDetail: string; // agent→llm, batch mode
+  };
+  settings: {
+    open: string;
+    title: string;
+    delivery: string;
+    deliveryHint: string;
+    streaming: string;
+    streamingHint: string;
+    batch: string;
+    batchHint: string;
+    soon: string;
+    tools: string;
+    rag: string;
+    moreSoon: string;
+  };
   timeline: {
+    title: string;
+    hint: string;
     stepBack: string;
     pause: string;
     replay: string;
@@ -219,7 +245,37 @@ const en: Strings = {
     generatedAnswer: "Generated answer",
     status: { active: "active", done: "done", idle: "idle" },
   },
+  comms: {
+    sync: "sync",
+    async: "async",
+    syncDetail:
+      "Synchronous request/response — the caller blocks until the result comes back.",
+    asyncDetail:
+      "Asynchronous streaming — the response flows back incrementally over a kept-open connection.",
+    deliveryStreamDetail:
+      "Streaming (SSE): trace events and the answer flow back live, token by token, over one kept-open connection.",
+    deliveryBatchDetail:
+      "Batch (JSON): one response after the backend finishes the whole run; the client then replays the trace.",
+    llmStreamDetail: "stream=true — tokens are streamed back as the model generates them.",
+    llmBatchDetail: "Non-streaming — the full answer returns in a single response.",
+  },
+  settings: {
+    open: "Architecture options",
+    title: "Architecture options",
+    delivery: "Response delivery",
+    deliveryHint: "How the backend returns the result to the browser.",
+    streaming: "Streaming (SSE)",
+    streamingHint: "Watch each stage light up live; the answer types itself out.",
+    batch: "Batch (JSON)",
+    batchHint: "Wait for one JSON response, then replay the trace; the answer appears at once.",
+    soon: "soon",
+    tools: "Tools (MCP)",
+    rag: "RAG retrieval",
+    moreSoon: "More options coming soon.",
+  },
   timeline: {
+    title: "Replay & step",
+    hint: "Drag the slider or step ◀ ▶ through every stage of the request.",
     stepBack: "Step back",
     pause: "Pause",
     replay: "Replay",
@@ -368,7 +424,37 @@ const pt: Strings = {
     generatedAnswer: "Resposta gerada",
     status: { active: "ativo", done: "concluído", idle: "ocioso" },
   },
+  comms: {
+    sync: "sync",
+    async: "async",
+    syncDetail:
+      "Requisição/resposta síncrona — o chamador bloqueia até o resultado voltar.",
+    asyncDetail:
+      "Streaming assíncrono — a resposta volta de forma incremental por uma conexão mantida aberta.",
+    deliveryStreamDetail:
+      "Streaming (SSE): os eventos de trace e a resposta voltam ao vivo, token a token, por uma única conexão mantida aberta.",
+    deliveryBatchDetail:
+      "Batch (JSON): uma resposta após o backend concluir toda a execução; o cliente então repete o trace.",
+    llmStreamDetail: "stream=true — os tokens são transmitidos conforme o modelo os gera.",
+    llmBatchDetail: "Sem streaming — a resposta completa volta em uma única resposta.",
+  },
+  settings: {
+    open: "Opções de arquitetura",
+    title: "Opções de arquitetura",
+    delivery: "Entrega da resposta",
+    deliveryHint: "Como o backend devolve o resultado ao navegador.",
+    streaming: "Streaming (SSE)",
+    streamingHint: "Veja cada etapa acender ao vivo; a resposta vai sendo digitada.",
+    batch: "Batch (JSON)",
+    batchHint: "Aguarde uma resposta JSON única e então repita o trace; a resposta aparece de uma vez.",
+    soon: "em breve",
+    tools: "Ferramentas (MCP)",
+    rag: "Recuperação RAG",
+    moreSoon: "Mais opções em breve.",
+  },
   timeline: {
+    title: "Replay e passo a passo",
+    hint: "Arraste o controle ou avance ◀ ▶ etapa por etapa por toda a requisição.",
     stepBack: "Voltar um passo",
     pause: "Pausar",
     replay: "Repetir",

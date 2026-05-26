@@ -11,6 +11,7 @@ import type { TraceEvent } from "../../types/events";
 export interface StationNodeData {
   meta: StationMeta;
   runtime: StationRuntime;
+  isActive: boolean; // the current station in the flow — the only one highlighted
   readout: string;
   isSelected: boolean;
   expanded: boolean;
@@ -22,22 +23,25 @@ export interface StationNodeData {
 const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
 
 export function StationNode(props: NodeProps) {
-  const { meta, runtime, readout, isSelected, expanded, height } = props.data as StationNodeData;
+  const { meta, runtime, isActive, readout, isSelected, expanded, height } =
+    props.data as StationNodeData;
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
   const openDetail = useSimulator((s) => s.openDetail);
 
-  const active = runtime.status === "active";
-  const done = runtime.status === "done";
+  // Spotlight model: only the station the packet is at right now is lit; every
+  // other station (not yet reached, or already done) stays deactivated. Use the
+  // timeline to step back and re-light an earlier stage.
+  const spotlit = isActive;
   const accent = meta.accent;
-  const borderColor = active || done ? accent : "var(--color-line)";
-  const dotColor = active || done ? accent : "#3a466b";
+  const borderColor = spotlit ? accent : "var(--color-line)";
+  const dotColor = spotlit ? accent : "#3a466b";
 
   return (
     <motion.div
-      animate={{ scale: active ? 1.03 : 1 }}
+      animate={{ scale: spotlit ? 1.03 : 1 }}
       transition={{ type: "spring", stiffness: 280, damping: 18 }}
-      className={active ? "station-pulse" : ""}
+      className={spotlit ? "station-pulse" : ""}
       style={{ color: accent, width: NODE_WIDTH, height }}
     >
       <div
@@ -45,8 +49,12 @@ export function StationNode(props: NodeProps) {
         style={{
           background: "color-mix(in srgb, var(--color-panel) 92%, transparent)",
           border: `1.5px solid ${borderColor}`,
-          boxShadow: isSelected ? `0 0 0 2px ${accent}` : active ? `0 8px 30px -12px ${accent}` : "none",
-          opacity: runtime.status === "idle" ? 0.66 : 1,
+          boxShadow: isSelected
+            ? `0 0 0 2px ${accent}`
+            : spotlit
+              ? `0 8px 30px -12px ${accent}`
+              : "none",
+          opacity: spotlit ? 1 : 0.66,
         }}
       >
         <Handle id="left" type="target" position={Position.Left} style={{ opacity: 0, border: "none" }} />
@@ -62,7 +70,7 @@ export function StationNode(props: NodeProps) {
           </div>
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-full"
-            style={{ background: dotColor, boxShadow: active ? `0 0 8px ${accent}` : "none" }}
+            style={{ background: dotColor, boxShadow: spotlit ? `0 0 8px ${accent}` : "none" }}
           />
           <button
             onClick={(e) => {

@@ -14,12 +14,21 @@ export interface StationRuntime {
   latencyMs?: number;
 }
 
+/** One leg of the route the packet is currently travelling. */
+export interface ActiveHop {
+  id: string; // matches the edge id `${source}-${target}`
+  reverse: boolean; // packet runs target→source relative to the edge direction
+}
+
 export interface DerivedView {
   stations: Record<StationId, StationRuntime>;
   activeStation: StationId | null;
-  // The hop currently animating, and whether the packet travels target→source.
-  activeHopId: string | null;
-  hopReverse: boolean;
+  // The legs currently animating. The architecture is hub-and-spoke, so two
+  // stations that aren't directly wired (e.g. mcp → rag) animate via the path
+  // through their hub (mcp → agent → rag) — every leg is a real network edge.
+  // Only the current leg(s) light up; edges go quiet once the packet passes
+  // (a moving spotlight) — step through the timeline to revisit a stage.
+  activeHops: ActiveHop[];
   // The SSE response streaming back to the client (frontend↔backend edge).
   streaming: boolean;
   answer: string;
@@ -30,6 +39,62 @@ function hopId(source: StationId, target: StationId): string {
   return `${source}-${target}`;
 }
 
+// Undirected adjacency over the real network edges. The 6 hops form a tree
+// (backend and agent are the hubs), so there is exactly one path between any
+// two stations — found with a plain BFS.
+const ADJACENCY: Record<StationId, StationId[]> = (() => {
+  const adj = {} as Record<StationId, StationId[]>;
+  for (const id of STATION_IDS) adj[id] = [];
+  for (const { source, target } of HOP_PAIRS) {
+    adj[source].push(target);
+    adj[target].push(source);
+  }
+  return adj;
+})();
+
+/** Shortest station path from→to (inclusive), or [] if from===to / unreachable. */
+function findPath(from: StationId, to: StationId): StationId[] {
+  if (from === to) return [];
+  const prev = new Map<StationId, StationId>();
+  const queue: StationId[] = [from];
+  const seen = new Set<StationId>([from]);
+  while (queue.length) {
+    const node = queue.shift()!;
+    if (node === to) break;
+    for (const next of ADJACENCY[node]) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      prev.set(next, node);
+      queue.push(next);
+    }
+  }
+  if (!seen.has(to)) return [];
+  const path: StationId[] = [to];
+  let cur = to;
+  while (cur !== from) {
+    cur = prev.get(cur)!;
+    path.unshift(cur);
+  }
+  return path;
+}
+
+/** Turn a station path into the edge legs (with direction) the packet rides. */
+function legsFor(path: StationId[]): ActiveHop[] {
+  const legs: ActiveHop[] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const hop = HOP_PAIRS.find(
+      (h) => (h.source === a && h.target === b) || (h.source === b && h.target === a),
+    );
+    if (!hop) continue;
+    // Packet travels a → b. The edge is drawn source → target; when its source
+    // is b, the visual must run in reverse.
+    legs.push({ id: hopId(hop.source, hop.target), reverse: hop.source === b });
+  }
+  return legs;
+}
+
 export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   const stations = {} as Record<StationId, StationRuntime>;
   for (const id of STATION_IDS) stations[id] = { status: "idle", events: [] };
@@ -38,6 +103,7 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   const distinct: StationId[] = [];
   const tokens: string[] = [];
   let respondAnswer = "";
+  let generateAnswer = ""; // batch mode: the whole answer arrives on the END event
   let iterations = 0;
 
   for (const ev of visible) {
@@ -57,6 +123,9 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
     if (ev.stage === "llm.generate" && ev.phase === "progress" && typeof ev.data.token === "string") {
       tokens.push(ev.data.token);
     }
+    if (ev.stage === "llm.generate" && ev.phase === "end" && typeof ev.data.answer === "string") {
+      generateAnswer = ev.data.answer;
+    }
     if (ev.stage === "respond" && ev.phase === "end" && typeof ev.data.answer === "string") {
       respondAnswer = ev.data.answer;
     }
@@ -70,34 +139,26 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   if (finished) activeStation = null;
 
   // The response streams back over the SSE connection while the model is
-  // generating tokens or the answer is being returned.
+  // generating tokens or the answer is being returned (stream mode only — the
+  // canvas gates this on the delivery mode).
   const streaming = Boolean(last && (last.stage === "llm.generate" || last.stage === "respond")) && !finished;
 
-  // Active hop: the edge connecting the previous and current station. The
-  // packet always visually travels prev → active; `hopReverse` is true when
-  // that means going against the edge's declared source→target direction (this
-  // is what makes the agent loop animate back and forth on the same edge).
-  let activeHopId: string | null = null;
-  let hopReverse = false;
-  if (activeStation && prevStation && activeStation !== prevStation) {
-    const hop = HOP_PAIRS.find(
-      (h) =>
-        (h.source === prevStation && h.target === activeStation) ||
-        (h.source === activeStation && h.target === prevStation),
-    );
-    if (hop) {
-      activeHopId = hopId(hop.source, hop.target);
-      hopReverse = hop.source === activeStation; // edge points active→prev ⇒ packet runs reverse
-    }
-  }
+  // The packet travels prev → active along the unique tree path between them,
+  // so cross-hub jumps (mcp → rag, llm → frontend, db → agent …) animate as the
+  // real multi-leg route instead of teleporting.
+  const activeHops: ActiveHop[] =
+    activeStation && prevStation && activeStation !== prevStation
+      ? legsFor(findPath(prevStation, activeStation))
+      : [];
 
   return {
     stations,
     activeStation,
-    activeHopId,
-    hopReverse,
+    activeHops,
     streaming,
-    answer: tokens.length ? tokens.join("") : respondAnswer,
+    // Streaming: reassemble from tokens. Batch: the answer lands whole on the
+    // generate END (then respond) — so it appears at once, not typed out.
+    answer: tokens.length ? tokens.join("") : respondAnswer || generateAnswer,
     iterations,
   };
 }

@@ -18,7 +18,7 @@ export async function streamChat(
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, mode: "stream" }),
     signal,
   });
   if (!resp.ok || !resp.body) {
@@ -58,6 +58,20 @@ function dispatch(rawMessage: string, handlers: ChatHandlers): void {
   const payload = JSON.parse(dataLines.join("\n"));
   if (eventType === "trace") handlers.onTrace(payload as TraceEvent);
   else if (eventType === "done") handlers.onDone(payload as DoneEvent);
+}
+
+// Batch delivery: a single POST that blocks until the backend finishes, then
+// returns the whole trace + answer as one JSON payload (synchronous
+// request/response). The caller replays the trace to animate it.
+export async function batchChat(message: string, signal?: AbortSignal): Promise<TraceSummary> {
+  const resp = await fetch(`${API_BASE}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, mode: "batch" }),
+    signal,
+  });
+  if (!resp.ok) throw new Error(`Chat request failed: ${resp.status}`);
+  return (await resp.json()) as TraceSummary;
 }
 
 export async function fetchTrace(traceId: string): Promise<TraceSummary> {

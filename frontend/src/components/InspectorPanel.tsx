@@ -4,6 +4,7 @@ import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView } from "../lib/derive";
+import { useSettings } from "../lib/settings";
 import {
   hopsFor,
   stationByIdFor,
@@ -61,6 +62,8 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
 
 function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I }) {
   const cloud = useCloud((s) => s.cloud);
+  const mode = useSettings((s) => s.mode);
+  const comms = useT().comms;
   const tier = tierByIdFor(lang)[meta.tier];
   const stationById = stationByIdFor(lang);
   const hops = hopsFor(lang).filter((h) => h.source === meta.id || h.target === meta.id);
@@ -85,8 +88,16 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
               const outgoing = h.source === meta.id;
               const other = stationById[outgoing ? h.target : h.source];
               const zoneLabel = h.zone === "public" ? i.zonePublic : i.zonePrivate;
+              const id = `${h.source}-${h.target}`;
+              // The two streaming-capable hops flip async → sync under batch.
+              const comm =
+                id === "frontend-backend" || id === "agent-llm"
+                  ? mode === "stream"
+                    ? "async"
+                    : "sync"
+                  : h.comm;
               return (
-                <div key={`${h.source}-${h.target}`} className="text-[11px] text-[#aab6d8]">
+                <div key={id} className="text-[11px] text-[#aab6d8]">
                   <span className="font-mono">
                     {outgoing ? "→" : "←"} {other.title}
                   </span>
@@ -98,6 +109,13 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
                   <div className="pl-3 text-[10.5px] text-[#5b688c]">{h.detail}</div>
                   <div className="pl-3 text-[10px] text-[#5b688c]">
                     {h.zone === "public" ? "🛡️" : "🔒"} {zoneLabel} · {h.controls}
+                  </div>
+                  <div
+                    className="pl-3 text-[10px] font-mono"
+                    style={{ color: comm === "async" ? "#7dd3fc" : "#8aa0c8" }}
+                  >
+                    {comm === "async" ? "⇅ " : "⇄ "}
+                    {comm} · {comm === "async" ? comms.asyncDetail : comms.syncDetail}
                   </div>
                 </div>
               );

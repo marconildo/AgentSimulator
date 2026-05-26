@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-import { streamChat } from "../lib/sse";
+import { useSettings } from "../lib/settings";
+import { batchChat, streamChat } from "../lib/sse";
 import type { StationId } from "../lib/stations";
 import type { TraceEvent } from "../types/events";
 
@@ -67,6 +68,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
     const message = get().input.trim();
     if (!message || get().status === "streaming") return;
 
+    const mode = useSettings.getState().mode;
     abort?.abort();
     abort = new AbortController();
     stopTimer();
@@ -80,6 +82,15 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
     });
 
     try {
+      if (mode === "batch") {
+        // One blocking round-trip: wait for the whole trace, then replay it
+        // from the top so the journey still animates (just not live).
+        const summary = await batchChat(message, abort.signal);
+        set({ events: summary.events, status: "done", cursor: -1, following: false, playing: false });
+        get().togglePlay();
+        return;
+      }
+
       await streamChat(
         message,
         {

@@ -3,22 +3,32 @@
 Follow one message, `"What is 12 * (3 + 1)?"`, through every station. Open the inspector on the
 right of the app and click each station to see the real data described below.
 
-> Two header toggles change what you see without changing the run: **language** (EN/PT) and
-> **cloud provider** (Generic / Azure / AWS / GCP — swaps the example service names on each tier).
-> Note the dashed **private-network boundary** (VNet / VPC) around every tier except the Client:
-> only the public ingress crosses it.
+> Header toggles change what you see without changing the pipeline: **language** (EN/PT),
+> **cloud provider** (Generic / Azure / AWS / GCP — swaps the example service names on each tier),
+> and the ⚙️ **architecture options** panel, where you pick how the backend delivers the result —
+> **Streaming (SSE)** or **Batch (JSON)** (see step 1). Note the dashed **private-network boundary**
+> (VNet / VPC) around every tier except the Client: only the public ingress crosses it. Each edge
+> also shows whether the call is **sync** (blocking request/response) or **async** (a streamed
+> response).
 
 ## 1. Frontend — the message leaves the browser
 
-You type and hit send. The frontend POSTs `{ "message": "..." }` to `/api/chat` and immediately
-starts reading a Server-Sent Events stream. From here on, everything you see is driven by events
-arriving from the backend in real time.
+You type and hit send. The frontend POSTs `{ "message": "...", "mode": "stream" | "batch" }` to
+`/api/chat`. The **mode** (from the ⚙️ panel) decides the delivery contract:
 
-## 2. Backend — FastAPI opens the stream
+- **Streaming** — the frontend immediately reads a **Server-Sent Events** stream; from here on
+  everything you see is driven by events arriving in real time, and the answer types itself out.
+  The client↔API edge is **async**.
+- **Batch** — one blocking request: the frontend waits for a single JSON response carrying the
+  whole trace + answer, then **replays** it on the canvas. The answer appears at once. The
+  client↔API edge is **sync**.
 
-The API creates a `trace_id`, builds a `TraceEmitter`, and returns a streaming response. It runs
-the agent as a background task and forwards each emitted event to the browser. When the run
-finishes it stores the full trace so you can replay it with the timeline.
+## 2. Backend — FastAPI runs the pipeline
+
+The API creates a `trace_id` and builds a `TraceEmitter`. In **streaming** mode it returns an
+`EventSourceResponse`, runs the agent as a background task, and forwards each emitted event to the
+browser. In **batch** mode it runs the whole pipeline to completion and returns the finished trace
+as one JSON payload. Either way it stores the full trace so you can replay it with the timeline.
 
 ## 2b. App database — reading recent history (`db.read`)
 
@@ -59,17 +69,20 @@ description and the transport in use. For a math question the model chooses `cal
 (`48`). Tool execution is real in both demo and OpenAI mode — only the model's *choice* is mocked
 in demo mode.
 
-## 6. LLM — prompt assembly and token streaming
+## 6. LLM — prompt assembly and generation
 
 Before generating, the system prompt, retrieved context, and any tool results are assembled into a
-single prompt — visible in full in the **assembled prompt** section. Then the model streams the
-answer one token at a time; each token is a `progress` event, which is why the answer types itself
-out in the chat panel and the LLM station shows a live token count.
+single prompt — visible in full in the **assembled prompt** section. How the answer comes back
+depends on the delivery mode: in **streaming** mode the model streams the answer one token at a
+time (each token a `progress` event), which is why the answer types itself out in the chat panel
+and the LLM station shows a live token count; in **batch** mode it's a single non-streaming
+completion, so the whole answer arrives at once (the agent→LLM edge reads **sync**).
 
 ## 7. Response — back to the user
 
 The final answer is emitted and rendered in the chat, closing the loop that started with your
-message.
+message. On the canvas it travels the real return path through the hubs — `llm → agent → backend →
+frontend` — rather than jumping straight to the browser.
 
 ## 8. App database — persisting the conversation (`db.write`)
 

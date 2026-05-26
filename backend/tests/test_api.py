@@ -60,6 +60,25 @@ def test_chat_emits_database_stages():
         assert "db.write" in stages
 
 
+def test_batch_returns_full_trace_in_one_json_response():
+    with TestClient(app) as client:
+        resp = client.post("/api/chat", json={"message": "What is RAG?", "mode": "batch"})
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("application/json")
+        body = resp.json()
+        assert body["answer"].strip()
+        stages = {e["stage"] for e in body["events"]}
+        # The whole pipeline still ran...
+        assert {"agent.route", "rag.retrieve", "llm.generate", "respond"} <= stages
+        # ...but the answer is delivered in one shot — no per-token streaming.
+        progress = [
+            e for e in body["events"] if e["stage"] == "llm.generate" and e["phase"] == "progress"
+        ]
+        assert progress == []
+        # The batch trace is still replayable by id.
+        assert client.get(f"/api/trace/{body['trace_id']}").status_code == 200
+
+
 def test_unknown_trace_returns_404():
     with TestClient(app) as client:
         assert client.get("/api/trace/nope").status_code == 404

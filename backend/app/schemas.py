@@ -10,9 +10,16 @@ from __future__ import annotations
 
 from enum import StrEnum
 from time import time
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+# How the backend delivers the result to the client:
+#  - "stream": Server-Sent Events — trace + answer flow back live, token by token.
+#  - "batch":  a single JSON response after the whole run finishes; the client
+#              then replays the trace. The two model the same pipeline, different
+#              delivery contracts (async streaming vs synchronous request/response).
+DeliveryMode = Literal["stream", "batch"]
 
 
 class Stage(StrEnum):
@@ -57,6 +64,8 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     # Optional: lets the UI override top_k for experimentation.
     top_k: int | None = None
+    # How to deliver the result; see ``DeliveryMode``. Defaults to streaming.
+    mode: DeliveryMode = "stream"
 
 
 class TraceSummary(BaseModel):

@@ -58,12 +58,18 @@ export interface TierMeta {
   box: { x: number; y: number; w: number; h: number };
 }
 
+// How a hop communicates: a blocking request/response, or an asynchronous
+// streamed response. The two streaming-capable hops (frontend↔backend and
+// agent→llm) flip to "sync" under batch delivery — the canvas overrides them.
+export type HopComm = "sync" | "async";
+
 export interface HopMeta {
   source: StationId;
   target: StationId;
   label: string; // short label on the edge
   protocol: string; // full protocol description (inspector)
   detail: string;
+  comm: HopComm; // sync (blocking) vs async (streamed) — default for stream mode
   secure: boolean; // draw a lock
   zone: NetworkZone; // public internet vs inside the private network
   controls: string; // network/security controls on this hop (WAF, mTLS, …)
@@ -380,9 +386,10 @@ const HOPS_SRC: HopSrc[] = [
     label: "HTTPS · TLS",
     protocol: "HTTPS / TLS 1.3",
     detail: {
-      en: "POST /api/chat → text/event-stream (SSE over one kept-alive connection)",
-      pt: "POST /api/chat → text/event-stream (SSE sobre uma única conexão mantida aberta)",
+      en: "POST /api/chat — the public request that kicks off the whole pipeline",
+      pt: "POST /api/chat — a requisição pública que dá início a todo o pipeline",
     },
+    comm: "async", // SSE response (flips to sync in batch mode)
     secure: true,
     zone: "public",
     controls: { en: "WAF · DDoS · TLS 1.3", pt: "WAF · DDoS · TLS 1.3" },
@@ -398,6 +405,7 @@ const HOPS_SRC: HopSrc[] = [
       en: "In-cluster service-to-service call, not exposed to the internet",
       pt: "Chamada serviço-a-serviço dentro do cluster, não exposta à internet",
     },
+    comm: "sync", // backend awaits the agent run
     secure: true,
     zone: "private",
     controls: { en: "mTLS · NSG / Security Group", pt: "mTLS · NSG / Security Group" },
@@ -413,6 +421,7 @@ const HOPS_SRC: HopSrc[] = [
       en: "Reads recent history and persists each conversation over a private connection",
       pt: "Lê o histórico recente e persiste cada conversa por uma conexão privada",
     },
+    comm: "sync", // blocking read / write
     secure: true,
     zone: "private",
     controls: { en: "Private Endpoint · NSG", pt: "Private Endpoint · NSG" },
@@ -428,6 +437,7 @@ const HOPS_SRC: HopSrc[] = [
       en: "Vector similarity query against the embedding index",
       pt: "Consulta de similaridade vetorial contra o índice de embeddings",
     },
+    comm: "sync", // blocking similarity query
     secure: false,
     zone: "private",
     controls: { en: "Private Endpoint", pt: "Private Endpoint" },
@@ -443,6 +453,7 @@ const HOPS_SRC: HopSrc[] = [
       en: "Tool discovery and invocation over the Model Context Protocol",
       pt: "Descoberta e invocação de ferramentas pelo Model Context Protocol",
     },
+    comm: "sync", // request/response JSON-RPC tool call
     secure: false,
     zone: "private",
     controls: { en: "local IPC (stdio)", pt: "IPC local (stdio)" },
@@ -458,6 +469,7 @@ const HOPS_SRC: HopSrc[] = [
       en: "Chat Completions request to the managed model endpoint",
       pt: "Requisição Chat Completions ao endpoint do modelo gerenciado",
     },
+    comm: "async", // streams tokens back (flips to sync in batch mode)
     secure: true,
     zone: "private",
     controls: { en: "Private Endpoint · TLS (egress)", pt: "Private Endpoint · TLS (egress)" },

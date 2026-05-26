@@ -14,6 +14,7 @@ import type { Strings } from "../i18n/strings";
 import { cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView, StationRuntime } from "../lib/derive";
 import { computeLayout } from "../lib/layout";
+import { useSettings } from "../lib/settings";
 import {
   boundaryFor,
   hopsFor,
@@ -40,6 +41,7 @@ interface FlowCanvasProps {
 export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const lang = useLang((s) => s.lang);
   const cloud = useCloud((s) => s.cloud);
+  const mode = useSettings((s) => s.mode);
   const expanded = useSimulator((s) => s.expanded);
   const t = useT();
   const stations = stationsFor(lang);
@@ -48,6 +50,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const boundary = boundaryFor(lang);
   const stationById = stationByIdFor(lang);
   const ro = t.readout;
+  const comms = t.comms;
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
   const layout = useMemo(() => computeLayout(expandedSet), [expandedSet]);
@@ -87,6 +90,8 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
       data: {
         meta,
         runtime: view.stations[meta.id],
+        // Spotlight: only the current station is highlighted; others deactivate.
+        isActive: view.activeStation === meta.id,
         readout: readoutFor(meta.id, view.stations[meta.id], ro),
         isSelected: selected === meta.id,
         expanded: expandedSet.has(meta.id),
@@ -103,7 +108,21 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
     () =>
       hops.map((hop) => {
         const id = `${hop.source}-${hop.target}`;
-        const active = view.activeHopId === id;
+        const activeHop = view.activeHops.find((h) => h.id === id);
+        const active = Boolean(activeHop);
+        const targetAccent = stationById[hop.target].accent;
+
+        // The two streaming-capable hops flip async → sync under batch delivery.
+        let comm = hop.comm;
+        let commDetail = comm === "async" ? comms.asyncDetail : comms.syncDetail;
+        if (id === "frontend-backend") {
+          comm = mode === "stream" ? "async" : "sync";
+          commDetail = mode === "stream" ? comms.deliveryStreamDetail : comms.deliveryBatchDetail;
+        } else if (id === "agent-llm") {
+          comm = mode === "stream" ? "async" : "sync";
+          commDetail = mode === "stream" ? comms.llmStreamDetail : comms.llmBatchDetail;
+        }
+
         return {
           id,
           source: hop.source,
@@ -112,21 +131,27 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
           targetHandle: hop.targetHandle,
           type: "flow",
           data: {
-            accent: stationById[hop.target].accent,
+            accent: targetAccent,
             label: hop.label,
             secure: hop.secure,
             zone: hop.zone,
             protocol: hop.protocol,
             detail: hop.detail,
             controls: hop.controls,
+            comm,
+            commDetail,
             active,
-            reverse: active && view.hopReverse,
-            stream: id === "frontend-backend" && view.streaming,
+            reverse: activeHop?.reverse ?? false,
+            // The SSE return packet only applies to live streaming delivery.
+            stream: id === "frontend-backend" && view.streaming && mode === "stream",
           },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#2a3658" },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: active ? targetAccent : "#2a3658",
+          },
         };
       }),
-    [view, hops, stationById],
+    [view, hops, stationById, mode, comms],
   );
 
   return (
