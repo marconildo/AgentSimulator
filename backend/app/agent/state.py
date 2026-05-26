@@ -13,6 +13,11 @@ class AgentState(TypedDict):
     top_k: int
     # Delivery mode ("stream" | "batch"); batch generates the answer in one shot.
     mode: str
+    # Experiment overrides (006-interactive-experiments), request-only inputs:
+    #   system_prompt: full replacement for the default prompt (None/blank = default)
+    #   enabled_tools: tool names to expose (None = all, [] = none)
+    system_prompt: str | None
+    enabled_tools: list[str] | None
     context: str
     chunks: list[dict[str, Any]]
     # Long-term memory: prior {message, answer} turns from the application DB.

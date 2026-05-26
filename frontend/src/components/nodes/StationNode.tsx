@@ -88,7 +88,8 @@ export function StationNode(props: NodeProps) {
 
         <div className="mt-1.5 flex items-center gap-1.5">
           <span
-            className="inline-flex rounded border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide"
+            title={t.glossary[meta.tag]}
+            className="inline-flex cursor-help rounded border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide"
             style={{ borderColor: `color-mix(in srgb, ${accent} 33%, transparent)`, color: accent }}
           >
             {meta.tag}
@@ -113,6 +114,7 @@ export function StationNode(props: NodeProps) {
           </div>
         ) : (
           <div
+            title={readout || undefined}
             className="mt-2 h-[18px] truncate font-mono text-[10.5px]"
             style={{ color: readout ? accent : "transparent" }}
           >

@@ -25,6 +25,16 @@ async def test_retrieve_returns_scored_chunks():
     assert chunks[0]["source"] == "rag.md"
 
 
+async def test_retrieve_honors_top_k():
+    # AC4 (006) — a top_k override is honored: at most k chunks, and the
+    # rag.retrieve event reflects the requested k.
+    emitter = TraceEmitter("t", "q")
+    _, chunks = await retrieve("What is RAG?", k=2, emitter=emitter)
+    assert len(chunks) <= 2
+    retrieve_ev = next(e for e in emitter.events if e.stage == "rag.retrieve" and e.phase == "end")
+    assert retrieve_ev.data["k"] == 2
+
+
 async def test_retrieve_emits_rag_stages():
     emitter = TraceEmitter("t", "q")
     await retrieve("embeddings and cosine similarity", k=2, emitter=emitter)

@@ -132,7 +132,11 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   }
 
   const last = visible[visible.length - 1];
-  const finished = Boolean(last && last.stage === "respond" && last.phase === "end");
+  // The run is over once the outermost BACKEND stage closes — that END is the
+  // *final* trace event (respond fires earlier, then db.write, then backend
+  // closes). Keying this off `respond/end` left the Backend station stuck
+  // pulsing "active" after every run, because respond is no longer last.
+  const finished = Boolean(last && last.stage === "backend" && last.phase === "end");
 
   let activeStation: StationId | null = distinct[distinct.length - 1] ?? null;
   const prevStation: StationId | null = distinct[distinct.length - 2] ?? null;

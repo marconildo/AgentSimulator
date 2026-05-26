@@ -194,7 +194,9 @@ function readoutFor(id: StationId, rt: StationRuntime, ro: Strings["readout"]): 
       const respond = lastWith(rt.events, (e) => e.stage === "respond" && e.phase === "end");
       if (respond) return ro.answerReceived;
       const msg = rt.events.find((e) => typeof e.data.message === "string")?.data.message as string | undefined;
-      return msg ? `"${truncate(msg, 22)}"` : "";
+      // Return the full question; the node clips it with CSS and reveals the
+      // whole thing on hover (title tooltip) instead of hard-truncating here.
+      return msg ? `"${msg}"` : "";
     }
     case "backend":
       return rt.status === "idle" ? "" : ro.fastapiSse;

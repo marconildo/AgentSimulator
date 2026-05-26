@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../i18n";
+import { getConfig, type AppConfig } from "../lib/chatApi";
+import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { type DeliveryMode, useSettings } from "../lib/settings";
+import { useChat } from "../store/useChat";
 
-// Gear button in the header that opens a small panel of architecture options.
-// Today it drives the response-delivery mode (streaming SSE vs batch JSON);
-// it's built to grow — future toggles (tools, RAG) are previewed as disabled.
+// Gear button in the header that opens a small panel of architecture options:
+// the response-delivery mode (streaming SSE vs batch JSON) and the live
+// "Experiment" controls (006) — edit the system prompt, toggle MCP tools, and
+// set RAG top-k, scoped to the active conversation. These replaced the old
+// "SOON" Tools/RAG placeholders (those features are real).
 export function SettingsPanel() {
   const mode = useSettings((s) => s.mode);
   const setMode = useSettings((s) => s.setMode);
@@ -13,6 +18,18 @@ export function SettingsPanel() {
   const s = t.settings;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // The conversation these experiment settings belong to (per-conversation, AC7).
+  const conv = useChat((c) => c.activeSessionId);
+  const exp = useExperiment((e) => e.byConv[conv ?? DRAFT_KEY] ?? DEFAULT_EXPERIMENT);
+
+  // Agent defaults (prompt text, tool list, top-k bounds) — fetched once so the
+  // panel prefills without hardcoding anything client-side.
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  useEffect(() => {
+    if (!open || config) return;
+    getConfig().then(setConfig).catch(() => {});
+  }, [open, config]);
 
   useEffect(() => {
     if (!open) return;
@@ -33,6 +50,15 @@ export function SettingsPanel() {
     { code: "batch", label: s.batch, hint: s.batchHint },
   ];
 
+  const ex = s.experiment;
+  const exp_ = useExperiment.getState(); // stable action handles
+  const allTools = config?.tools.map((tool) => tool.name) ?? [];
+  const enabled = exp.enabledTools ?? allTools; // null ⇒ all on
+  const topK = exp.topK ?? config?.default_top_k ?? 4;
+  const promptValue = exp.systemPrompt ?? config?.default_system_prompt ?? "";
+  const dirty =
+    exp.systemPrompt !== null || exp.enabledTools !== null || exp.topK !== null;
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -40,18 +66,23 @@ export function SettingsPanel() {
         aria-haspopup="true"
         aria-expanded={open}
         title={s.open}
-        className="rounded-full border px-2.5 py-1 text-[13px] transition"
+        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] transition"
         style={{
           borderColor: open ? "var(--color-accent)" : "var(--color-line)",
           color: open ? "var(--color-indigo-soft)" : "var(--color-muted)",
         }}
       >
-        ⚙️
+        <span aria-hidden>⚙️</span>
+        {/* Surface the current delivery mode right on the button, so it's
+            discoverable that this is where SSE ↔ Batch is switched. */}
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wide">
+          {mode === "stream" ? "SSE" : "Batch"}
+        </span>
       </button>
 
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--color-line)] p-3 shadow-2xl"
+          className="absolute right-0 top-full z-50 mt-2 max-h-[min(78vh,40rem)] w-80 overflow-y-auto rounded-xl border border-[var(--color-line)] p-3 shadow-2xl"
           style={{ background: "color-mix(in srgb, var(--color-panel) 98%, transparent)" }}
         >
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-[var(--color-ink)]">
@@ -102,21 +133,83 @@ export function SettingsPanel() {
 
           <div className="my-2.5 border-t border-[var(--color-line)]" />
 
-          {/* Previews of options to come — disabled for now. */}
-          <div className="flex flex-col gap-1.5 opacity-50">
-            {[s.tools, s.rag].map((label) => (
-              <div
-                key={label}
-                className="flex items-center justify-between rounded-lg border border-[var(--color-line)] px-2.5 py-1.5"
+          {/* --- Experiment controls (006) -------------------------------- */}
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--color-ink)]">
+              <span aria-hidden>🧪</span>
+              {ex.title}
+            </div>
+            {dirty && (
+              <button
+                onClick={() => exp_.reset(conv)}
+                className="rounded-full border border-[var(--color-line)] px-1.5 py-px text-[9.5px] text-[var(--color-muted)] transition hover:text-[var(--color-ink)]"
               >
-                <span className="text-[11px] text-[var(--color-ink)]">{label}</span>
-                <span className="rounded-full border border-[var(--color-line)] px-1.5 py-px text-[9px] uppercase tracking-wide text-[var(--color-muted)]">
-                  {s.soon}
-                </span>
-              </div>
-            ))}
+                {ex.reset}
+              </button>
+            )}
           </div>
-          <p className="mt-2 text-[9.5px] text-[var(--color-muted)]">{s.moreSoon}</p>
+
+          {/* System prompt */}
+          <label className="mb-1 block text-[10.5px] font-semibold text-[var(--color-ink)]">
+            {ex.systemPrompt}
+          </label>
+          <p className="mb-1.5 text-[10px] leading-snug text-[var(--color-muted)]">{ex.promptHint}</p>
+          <textarea
+            value={promptValue}
+            onChange={(e) => exp_.setSystemPrompt(conv, e.target.value)}
+            rows={5}
+            maxLength={2000}
+            disabled={!config}
+            spellCheck={false}
+            className="w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2 font-mono text-[10.5px] leading-snug text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
+          />
+
+          {/* Tools */}
+          <div className="mt-3 mb-1 text-[10.5px] font-semibold text-[var(--color-ink)]">
+            {ex.tools}
+          </div>
+          <p className="mb-1.5 text-[10px] leading-snug text-[var(--color-muted)]">{ex.toolsHint}</p>
+          <div className="flex flex-col gap-1">
+            {config?.tools.map((tool) => {
+              const on = enabled.includes(tool.name);
+              return (
+                <label
+                  key={tool.name}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-[11px] text-[var(--color-ink)]"
+                  title={tool.description}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => exp_.toggleTool(conv, tool.name, allTools)}
+                    className="accent-[var(--color-accent)]"
+                  />
+                  <span className={on ? "" : "text-[var(--color-muted)] line-through"}>
+                    {ex.toolLabels[tool.name] ?? tool.name}
+                  </span>
+                  <span className="ml-auto font-mono text-[9px] text-[var(--color-muted)]">
+                    {tool.name}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          {/* top-k */}
+          <div className="mt-3 mb-1 flex items-center justify-between text-[10.5px] font-semibold text-[var(--color-ink)]">
+            <span>{ex.topK}</span>
+            <span className="font-mono text-[var(--color-indigo-soft)]">{topK}</span>
+          </div>
+          <p className="mb-1.5 text-[10px] leading-snug text-[var(--color-muted)]">{ex.topKHint}</p>
+          <input
+            type="range"
+            min={config?.top_k_min ?? 1}
+            max={config?.top_k_max ?? 8}
+            value={topK}
+            disabled={!config}
+            onChange={(e) => exp_.setTopK(conv, Number(e.target.value))}
+            className="w-full accent-[var(--color-accent)]"
+          />
         </div>
       )}
     </div>

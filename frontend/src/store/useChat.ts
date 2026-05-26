@@ -3,7 +3,6 @@ import { create } from "zustand";
 import {
   createSession,
   deleteDocument,
-  deleteSession,
   listDocuments,
   listMessages,
   listSessions,
@@ -12,6 +11,7 @@ import {
   type DocumentMeta,
   type SessionMeta,
 } from "../lib/chatApi";
+import { overridesFor, useExperiment } from "../lib/experiment";
 import { useSettings } from "../lib/settings";
 import { batchChat, streamChat } from "../lib/sse";
 import { useSimulator } from "./useSimulator";
@@ -37,7 +37,9 @@ interface ChatState {
   init: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
   newChat: () => Promise<void>;
-  clearConversation: () => Promise<void>;
+  // Lazily persist the active conversation, creating one if we're in a draft.
+  // Returns the session id, or null if creation failed.
+  ensureSession: () => Promise<string | null>;
   send: () => Promise<void>;
   uploadPdf: (file: File) => Promise<void>;
   removeDocument: (documentId: string) => Promise<void>;
@@ -74,13 +76,12 @@ export const useChat = create<ChatState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const sessions = await listSessions();
+      set({ sessions });
       if (sessions.length > 0) {
-        set({ sessions });
         await get().openSession(sessions[0].id);
       } else {
-        const created = await createSession();
-        set({ sessions: [created] });
-        await get().openSession(created.id);
+        // No history yet — open an empty draft instead of persisting a session.
+        await get().newChat();
       }
     } catch (err) {
       set({ error: (err as Error).message });
@@ -90,6 +91,9 @@ export const useChat = create<ChatState>((set, get) => ({
   },
 
   openSession: async (id) => {
+    // A different conversation — wipe the visualizer so it doesn't keep
+    // animating the previous run's trace under the newly-opened thread.
+    useSimulator.getState().reset();
     set({ activeSessionId: id, view: "thread", loading: true, pending: null });
     try {
       const [messages, documents] = await Promise.all([listMessages(id), listDocuments(id)]);
@@ -102,55 +106,59 @@ export const useChat = create<ChatState>((set, get) => ({
   },
 
   newChat: async () => {
-    try {
-      const created = await createSession();
-      set((s) => ({
-        sessions: [created, ...s.sessions],
-        activeSessionId: created.id,
-        messages: [],
-        documents: [],
-        pending: null,
-        input: "",
-        view: "thread",
-      }));
-    } catch (err) {
-      set({ error: (err as Error).message });
-    }
+    // Draft conversation: show an empty thread but DON'T persist a session yet.
+    // The row is created lazily by ensureSession() on the first real action
+    // (sending a message or uploading a PDF), so a bare "New chat" click never
+    // leaves an empty conversation in the history.
+    //
+    // A new conversation starts from a blank canvas — wipe any prior run's
+    // trace, cursor and selection from the visualizer.
+    useSimulator.getState().reset();
+    set({
+      view: "thread",
+      activeSessionId: null,
+      messages: [],
+      documents: [],
+      pending: null,
+      input: "",
+      error: null,
+    });
   },
 
-  clearConversation: async () => {
-    const id = get().activeSessionId;
-    if (!id) return;
+  ensureSession: async () => {
+    const existing = get().activeSessionId;
+    if (existing) return existing;
     try {
-      await deleteSession(id);
-      set((s) => ({ sessions: s.sessions.filter((x) => x.id !== id) }));
+      const created = await createSession();
+      // Carry any experiment settings the user tuned on the draft over to the
+      // now-persisted conversation (AC7).
+      useExperiment.getState().adopt(null, created.id);
+      set((s) => ({ sessions: [created, ...s.sessions], activeSessionId: created.id }));
+      return created.id;
     } catch (err) {
       set({ error: (err as Error).message });
-      return;
+      return null;
     }
-    // AC4 — after clearing, show a fresh conversation.
-    await get().newChat();
   },
 
   send: async () => {
     const message = get().input.trim();
     if (!message || get().sending) return;
 
-    let sessionId = get().activeSessionId;
-    if (!sessionId) {
-      await get().newChat();
-      sessionId = get().activeSessionId;
-    }
+    // First message of a draft persists the conversation (lazy creation).
+    const sessionId = await get().ensureSession();
     if (!sessionId) return;
 
     const mode = useSettings.getState().mode;
+    // The experiment overrides for this conversation (006); empty when untouched.
+    const overrides = overridesFor(sessionId);
     const sim = useSimulator.getState();
     const signal = sim.beginRun();
     set({ sending: true, pending: message, input: "", error: null });
 
     try {
       if (mode === "batch") {
-        const summary = await batchChat(message, signal, sessionId);
+        const summary = await batchChat(message, signal, sessionId, overrides);
         useSimulator.getState().playBatch(summary.events);
       } else {
         await streamChat(
@@ -161,6 +169,7 @@ export const useChat = create<ChatState>((set, get) => ({
           },
           signal,
           sessionId,
+          overrides,
         );
       }
       // Reload from the system of record so the thread shows the persisted
@@ -177,8 +186,10 @@ export const useChat = create<ChatState>((set, get) => ({
   },
 
   uploadPdf: async (file) => {
-    const sessionId = get().activeSessionId;
-    if (!sessionId || get().uploading) return;
+    if (get().uploading) return;
+    // A PDF needs a conversation to attach to — persist the draft if needed.
+    const sessionId = await get().ensureSession();
+    if (!sessionId) return;
 
     const sim = useSimulator.getState();
     const signal = sim.beginRun();

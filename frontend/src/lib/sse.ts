@@ -2,6 +2,7 @@
 // message (the native EventSource only supports GET). The low-level
 // `consumeEventStream` is reused by both chat and PDF-upload streams.
 
+import type { ChatOverrides } from "./experiment";
 import type { DoneEvent, TraceEvent, TraceSummary } from "../types/events";
 
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -57,11 +58,14 @@ export async function streamChat(
   handlers: ChatHandlers,
   signal?: AbortSignal,
   sessionId?: string | null,
+  overrides?: ChatOverrides,
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "stream" }),
+    // Undefined override fields are dropped by JSON.stringify, so a default
+    // (untouched) experiment sends nothing extra — today's behavior (AC5).
+    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "stream", ...overrides }),
     signal,
   });
   await consumeEventStream(resp, (type, payload) => {
@@ -77,11 +81,12 @@ export async function batchChat(
   message: string,
   signal?: AbortSignal,
   sessionId?: string | null,
+  overrides?: ChatOverrides,
 ): Promise<TraceSummary> {
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "batch" }),
+    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "batch", ...overrides }),
     signal,
   });
   if (!resp.ok) throw new Error(`Chat request failed: ${resp.status}`);

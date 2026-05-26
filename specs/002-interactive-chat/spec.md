@@ -41,9 +41,17 @@ chunking, tokenization and embedding detail. This makes the "long-term memory" a
   scoped per conversation by a `session_id`.
 - Send new messages within a thread; the user message and the agent's answer both
   appear in the thread and are persisted.
-- A **"New chat"** action that starts a fresh, empty conversation (new `session_id`).
-- A **"Clear conversation"** action that deletes the current conversation and shows a
-  new one.
+- A **"New chat"** action that starts a fresh, empty conversation. This is the only
+  thread-level header action besides going back to the list — the open thread offers
+  **"New chat"**, not a destructive "Clear/Delete". **Updated 2026-05-26:** "New chat"
+  opens an empty *draft* thread; the `session_id` is **created lazily on the first real
+  action** (sending a message or uploading a PDF), so clicking "New chat" no longer
+  leaves empty conversations in the history.
+- ~~A **"Clear conversation"** action that deletes the current conversation and shows a
+  new one.~~ **Removed 2026-05-26:** the thread header offered a destructive "Clear
+  conversation" that deleted the active session from history; it is replaced by
+  **"New chat"** (AC4 below superseded by AC6). Deleting a conversation is no longer
+  exposed in the UI.
 - A **"Upload PDF"** action that ingests a PDF into the vector store so the agent can
   retrieve from it, **animating the ingestion pipeline on the canvas** with full detail
   (chunking strategy, per-chunk tokenization, embedding model/dimensions, vector preview).
@@ -117,13 +125,19 @@ chunking/tokenization/embedding detail) when a PDF is uploaded.
    (`corpus = false`).
 3. **AC3** — Given I remove a PDF, when the document is removed, then exactly the chunks for
    that `document_id` are deleted from the vector store (corpus and other documents untouched).
-4. **AC4** — Given I clear the conversation, when "Clear conversation" is clicked, then the
+4. **AC4** — ~~Given I clear the conversation, when "Clear conversation" is clicked, then the
    current conversation (session + messages) is deleted and a new conversation is shown; the
-   conversation's PDF embeddings remain in the store and are not retrieved by the new session.
+   conversation's PDF embeddings remain in the store and are not retrieved by the new
+   session.~~ **Superseded 2026-05-26** — the thread no longer exposes a destructive clear;
+   its primary action is "New chat" (AC6), which never deletes from history. The backend
+   `DELETE /api/sessions/{id}` endpoint and `ConversationStore.delete_session` remain (used
+   for maintenance/cleanup), they are just no longer wired to a UI button.
 5. **AC5** — The conversation list shows sessions most-recent-first, each labeled by its first
    message; selecting one loads that session's message history from the DB.
-6. **AC6** — "New chat" creates a fresh, empty conversation with a new `session_id` and makes
-   it the active thread.
+6. **AC6** — "New chat" opens a fresh, empty **draft** thread and makes it active **without**
+   persisting a session; the new `session_id` is created lazily on the first real action
+   (first message sent or first PDF uploaded). A bare "New chat" click leaves no row in the
+   history. **(Amended 2026-05-26 — was: created the `session_id` eagerly on click.)**
 7. **AC7** — When the active conversation has PDFs, a query returns a unified top-k over the
    base corpus **and** that conversation's PDFs (filtered `corpus == true` OR `session_id ==
    active`), and never includes another conversation's PDFs.

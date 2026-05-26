@@ -36,6 +36,19 @@ def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegist
     return c["emitter"], c["provider"], c["registry"]
 
 
+def _effective_system(state: AgentState) -> str:
+    """The system prompt actually sent to the model.
+
+    006-interactive-experiments: a non-blank ``system_prompt`` override fully
+    replaces the default; a blank/whitespace one (or absent) falls back to the
+    default ``SYSTEM_PROMPT``.
+    """
+    override = state["system_prompt"]
+    if override and override.strip():
+        return override
+    return SYSTEM_PROMPT
+
+
 async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, _provider, registry = _deps(config)
 
@@ -47,9 +60,10 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         }
 
     async with emitter.stage(Stage.MCP_DISCOVER, "Discovering MCP tools") as rec:
+        specs = registry.specs(state["enabled_tools"])
         rec.data = {
             "transport": registry.transport,
-            "tools": [{"name": s.name, "description": s.description} for s in registry.specs()],
+            "tools": [{"name": s.name, "description": s.description} for s in specs],
         }
     return {}
 
@@ -69,10 +83,10 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
 
     async with emitter.stage(Stage.AGENT_THINK, "Agent reasoning") as rec:
         decision = await provider.decide(
-            system=SYSTEM_PROMPT,
+            system=_effective_system(state),
             messages=messages,
             context=state["context"],
-            tools=registry.specs(),
+            tools=registry.specs(state["enabled_tools"]),
             used_tools=used,
             history=state["history"],
         )
@@ -105,7 +119,7 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
             f"Calling tool: {tc['name']}",
             start_data={"tool": tc["name"], "args": tc["args"]},
         ) as rec:
-            output = await registry.call(tc["name"], tc["args"])
+            output = await registry.call(tc["name"], tc["args"], enabled=state["enabled_tools"])
             rec.data = {"tool": tc["name"], "args": tc["args"], "result": output}
         results.append({"tool": tc["name"], "args": tc["args"], "result": output})
         used.append(tc["name"])
@@ -125,7 +139,7 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
     async with emitter.stage(Stage.LLM_GENERATE, "Generating the answer") as rec:
         tokens: list[str] = []
         async for token in provider.stream_answer(
-            system=SYSTEM_PROMPT,
+            system=_effective_system(state),
             messages=messages,
             context=state["context"],
             tool_results=state["tool_results"],
@@ -184,6 +198,8 @@ async def run_agent(
     history: list[dict[str, str]] | None = None,
     mode: str = "stream",
     session_id: str | None = None,
+    system_prompt: str | None = None,
+    enabled_tools: list[str] | None = None,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -192,6 +208,11 @@ async def run_agent(
     of the answer: ``"stream"`` emits per-token events, ``"batch"`` produces it
     in one shot. ``session_id`` scopes RAG retrieval to the base corpus plus this
     conversation's uploaded documents.
+
+    006-interactive-experiments request-only overrides (all optional; omitting
+    them reproduces today's behavior): ``system_prompt`` fully replaces the
+    default prompt (blank ⇒ default); ``enabled_tools`` restricts which MCP tools
+    are discovered and callable (``None`` = all, ``[]`` = none).
     """
     provider = get_provider()
     registry = await get_registry()
@@ -202,6 +223,8 @@ async def run_agent(
         "session_id": session_id,
         "top_k": top_k,
         "mode": mode,
+        "system_prompt": system_prompt,
+        "enabled_tools": enabled_tools,
         "context": "",
         "chunks": [],
         "history": history or [],

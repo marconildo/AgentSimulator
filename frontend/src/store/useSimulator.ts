@@ -1,6 +1,16 @@
 import { create } from "zustand";
 
 import type { StationId } from "../lib/stations";
+import {
+  beginTour,
+  currentStep,
+  IDLE_TOUR,
+  pauseTour as pauseTourReducer,
+  resumeTour as resumeTourReducer,
+  TOUR_PACE_MS,
+  tourStep,
+  type TourState,
+} from "../lib/tour";
 import type { TraceEvent } from "../types/events";
 
 export type Status = "idle" | "streaming" | "done" | "error";
@@ -15,6 +25,10 @@ interface SimulatorState {
   expanded: StationId[]; // stations expanded inline on the canvas
   detail: StationId | null; // station opened in the focused drill-in overlay
   error: string | null;
+  // Guided tour (005-guided-tour) — narrated phase-by-phase playback. The pure
+  // reducer is in lib/tour.ts; the store drives cursor/selected from it and the
+  // current phase carries the caption. Mutually exclusive with raw replay.
+  tour: TourState;
 
   select: (id: StationId | null) => void;
   toggleExpand: (id: StationId) => void;
@@ -33,16 +47,60 @@ interface SimulatorState {
   setCursor: (index: number) => void;
   step: (delta: number) => void;
   togglePlay: () => void;
+
+  startTour: () => void;
+  pauseTour: () => void;
+  resumeTour: () => void;
+  stopTour: () => void;
 }
 
 let abort: AbortController | null = null;
 let playTimer: ReturnType<typeof setInterval> | null = null;
+let tourTimer: ReturnType<typeof setInterval> | null = null;
 
 function stopTimer() {
   if (playTimer) {
     clearInterval(playTimer);
     playTimer = null;
   }
+}
+
+function stopTourTimer() {
+  if (tourTimer) {
+    clearInterval(tourTimer);
+    tourTimer = null;
+  }
+}
+
+// --- Tour driver helpers (resolve `useSimulator` lazily, at call time) --------
+
+// Apply a tour step to the shared UI state: jump the playhead and open the
+// step's station. The current phase (in `tour`) carries the caption.
+function applyTourStep(tour: TourState) {
+  const step = currentStep(tour);
+  if (!step) return;
+  const { setCursor, select } = useSimulator.getState();
+  setCursor(step.cursor);
+  select(step.station);
+}
+
+// (Re)start the tour timer — advances one phase per tick at a fixed pace, and
+// auto-stops on the last phase, settling on the final frame and releasing the
+// forced station selection (AC4).
+function startTourTimer() {
+  stopTourTimer();
+  tourTimer = setInterval(() => {
+    const state = useSimulator.getState();
+    const next = tourStep(state.tour);
+    if (next.status === "done") {
+      stopTourTimer();
+      useSimulator.setState({ tour: next, selected: null });
+      state.setCursor(state.events.length - 1);
+      return;
+    }
+    useSimulator.setState({ tour: next });
+    applyTourStep(next);
+  }, TOUR_PACE_MS);
 }
 
 export const useSimulator = create<SimulatorState>((set, get) => ({
@@ -55,6 +113,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   expanded: [],
   detail: null,
   error: null,
+  tour: IDLE_TOUR,
 
   select: (id) => set({ selected: id }),
   toggleExpand: (id) =>
@@ -70,6 +129,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
     abort?.abort();
     abort = new AbortController();
     stopTimer();
+    stopTourTimer();
     set({
       status: "streaming",
       events: [],
@@ -77,6 +137,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       following: true,
       playing: false,
       error: null,
+      tour: IDLE_TOUR,
     });
     return abort.signal;
   },
@@ -94,13 +155,15 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   playBatch: (events) => {
     // One blocking round-trip already finished; replay it from the top so the
     // journey still animates (just not live).
-    set({ events, status: "done", cursor: -1, following: false, playing: false });
+    stopTourTimer();
+    set({ events, status: "done", cursor: -1, following: false, playing: false, tour: IDLE_TOUR });
     get().togglePlay();
   },
 
   reset: () => {
     abort?.abort();
     stopTimer();
+    stopTourTimer();
     set({
       status: "idle",
       events: [],
@@ -110,6 +173,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       error: null,
       selected: null,
       detail: null,
+      tour: IDLE_TOUR,
     });
   },
 
@@ -122,12 +186,19 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
 
   step: (delta) => {
     stopTimer();
+    stopTourTimer();
     const next = get().cursor + delta;
     get().setCursor(next);
-    set({ playing: false });
+    set({ playing: false, tour: IDLE_TOUR });
   },
 
   togglePlay: () => {
+    // Raw replay and the guided tour are mutually exclusive — toggling replay
+    // ends any tour in progress.
+    if (get().tour.status !== "idle") {
+      stopTourTimer();
+      set({ tour: IDLE_TOUR });
+    }
     if (get().playing) {
       stopTimer();
       set({ playing: false });
@@ -146,5 +217,32 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       }
       set({ cursor: state.cursor + 1 });
     }, 280);
+  },
+
+  startTour: () => {
+    const tour = beginTour(get().events);
+    if (tour.status !== "playing") return; // AC5: no replayable trace → no-op
+    // Take over from any replay.
+    stopTimer();
+    set({ playing: false, following: false, tour });
+    applyTourStep(tour); // first phase applies immediately
+    startTourTimer();
+  },
+
+  pauseTour: () => {
+    stopTourTimer();
+    set((state) => ({ tour: pauseTourReducer(state.tour) }));
+  },
+
+  resumeTour: () => {
+    const tour = resumeTourReducer(get().tour);
+    if (tour.status !== "playing") return;
+    set({ tour });
+    startTourTimer();
+  },
+
+  stopTour: () => {
+    stopTourTimer();
+    set({ tour: IDLE_TOUR, selected: null });
   },
 }));

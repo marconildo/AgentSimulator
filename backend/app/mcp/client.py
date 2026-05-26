@@ -31,13 +31,28 @@ class ToolRegistry:
         self._tools = {t.name: t for t in tools}
         self.transport = transport
 
-    def specs(self) -> list[ToolSpec]:
-        return [ToolSpec(name=t.name, description=t.description, schema=t.schema) for t in self._tools.values()]
+    def specs(self, enabled: list[str] | None = None) -> list[ToolSpec]:
+        """Tools advertised to the agent.
+
+        ``enabled`` is the experiment override (006): ``None`` means no override
+        (all tools); a list keeps only those tools (order-preserving); ``[]``
+        advertises none. The cached registry is never mutated — filtering is a
+        per-request view so ``mcp.discover`` honestly lists only enabled tools.
+        """
+        tools = self._tools.values()
+        if enabled is not None:
+            allowed = set(enabled)
+            tools = [t for t in tools if t.name in allowed]
+        return [ToolSpec(name=t.name, description=t.description, schema=t.schema) for t in tools]
 
     def names(self) -> list[str]:
         return list(self._tools)
 
-    async def call(self, name: str, args: dict[str, Any]) -> str:
+    async def call(self, name: str, args: dict[str, Any], enabled: list[str] | None = None) -> str:
+        # Defense in depth: the agent only ever sees the filtered specs, but a
+        # disabled tool is refused here too so "everything is real" holds (§3).
+        if enabled is not None and name not in set(enabled):
+            return f"error: tool '{name}' is disabled"
         tool = self._tools.get(name)
         if tool is None:
             return f"error: unknown tool '{name}'"
@@ -59,7 +74,9 @@ def _stringify(result: Any) -> str:
     if isinstance(result, str):
         return result
     if isinstance(result, list):
-        parts = [str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in result]
+        parts = [
+            str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in result
+        ]
         return "\n".join(parts)
     return str(result)
 
@@ -117,7 +134,11 @@ def _load_local() -> ToolRegistry:
         RegisteredTool(
             name="calculator",
             description="Evaluate a basic arithmetic expression, e.g. '2 + 2'.",
-            schema={"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]},
+            schema={
+                "type": "object",
+                "properties": {"expression": {"type": "string"}},
+                "required": ["expression"],
+            },
             runner=wrap(local_server._calculator),
         ),
         RegisteredTool(
@@ -129,7 +150,11 @@ def _load_local() -> ToolRegistry:
         RegisteredTool(
             name="kb_lookup",
             description="Look up a one-line glossary definition for an AI engineering topic.",
-            schema={"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]},
+            schema={
+                "type": "object",
+                "properties": {"topic": {"type": "string"}},
+                "required": ["topic"],
+            },
             runner=wrap(local_server._kb_lookup),
         ),
     ]

@@ -95,7 +95,7 @@ function Thread({ liveAnswer }: { liveAnswer: string }) {
   const setInput = useChat((s) => s.setInput);
   const send = useChat((s) => s.send);
   const showList = useChat((s) => s.showList);
-  const clearConversation = useChat((s) => s.clearConversation);
+  const newChat = useChat((s) => s.newChat);
   const status = useSimulator((s) => s.status);
   const streaming = status === "streaming";
 
@@ -117,12 +117,10 @@ function Thread({ liveAnswer }: { liveAnswer: string }) {
         </button>
         <div className="flex-1" />
         <button
-          onClick={() => {
-            if (window.confirm(t.chat.clearConfirm)) void clearConversation();
-          }}
-          className="rounded-lg border border-[var(--color-line)] px-2 py-1 text-[12px] text-[var(--color-muted)] transition hover:border-[var(--color-rose)] hover:text-[var(--color-rose-soft)]"
+          onClick={() => void newChat()}
+          className="rounded-lg bg-[var(--color-sky-strong)] px-2.5 py-1 text-[12px] font-semibold text-[var(--color-on-accent)] transition hover:bg-[var(--color-sky)]"
         >
-          {t.chat.clear}
+          + {t.chat.newChat}
         </button>
       </div>
 
@@ -182,13 +180,24 @@ function Thread({ liveAnswer }: { liveAnswer: string }) {
           disabled={sending}
           className="min-w-0 flex-1 resize-none rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-label)] focus:border-[color-mix(in_srgb,var(--color-sky)_60%,transparent)]"
         />
-        <button
-          type="submit"
-          disabled={sending || !input.trim()}
-          className="shrink-0 rounded-xl bg-[var(--color-sky-strong)] px-3 py-2 text-sm font-semibold text-[var(--color-on-accent)] transition enabled:hover:bg-[var(--color-sky)] disabled:opacity-40"
-        >
-          {sending ? t.chat.running : t.chat.send}
-        </button>
+        {/* Send button with a one-shot "ping" ring while the request is in
+            flight, so the start of the journey (button → Frontend node, which
+            lights up as the first stage) is unmistakable. */}
+        <span className="relative shrink-0">
+          {sending && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 animate-ping rounded-xl bg-[var(--color-sky-strong)] opacity-60"
+            />
+          )}
+          <button
+            type="submit"
+            disabled={sending || !input.trim()}
+            className="relative rounded-xl bg-[var(--color-sky-strong)] px-3 py-2 text-sm font-semibold text-[var(--color-on-accent)] transition enabled:hover:bg-[var(--color-sky)] disabled:opacity-40"
+          >
+            {sending ? t.chat.running : t.chat.send}
+          </button>
+        </span>
       </form>
     </div>
   );

@@ -2,6 +2,7 @@
 // or the architecture data, which live localized in their own files). One
 // object per language; the `Strings` interface keeps both in lockstep.
 
+import type { TimelinePhase } from "../lib/phases";
 import type { Lang } from "./index";
 
 export interface Strings {
@@ -38,8 +39,6 @@ export interface Strings {
     fromDoc: string;
     emptyThread: string;
     messages: (n: number) => string;
-    clear: string;
-    clearConfirm: string;
     uploadPdf: string;
     documents: string;
     removeDoc: string;
@@ -50,6 +49,7 @@ export interface Strings {
   inspector: {
     overviewTitle: string;
     overviewBody: string;
+    overviewBack: string;
     techInfra: string;
     tier: string;
     role: string;
@@ -120,11 +120,24 @@ export interface Strings {
     streamingHint: string;
     batch: string;
     batchHint: string;
-    soon: string;
-    tools: string;
-    rag: string;
-    moreSoon: string;
+    // Real, working controls (006-interactive-experiments) — replaced the old
+    // "SOON" Tools/RAG placeholders.
+    experiment: {
+      title: string;
+      systemPrompt: string;
+      promptHint: string;
+      reset: string;
+      tools: string;
+      toolsHint: string;
+      topK: string;
+      topKHint: string;
+      // Friendly per-tool labels, keyed by MCP tool name.
+      toolLabels: Record<string, string>;
+    };
   };
+  // One-line plain-language hints for the dense tech tags on each station node,
+  // keyed by the tag string (e.g. "ASGI", "cosine", "MCP"). Demystifies jargon.
+  glossary: Record<string, string>;
   timeline: {
     title: string;
     hint: string;
@@ -133,6 +146,16 @@ export interface Strings {
     replay: string;
     stepForward: string;
     idle: string;
+    // Named phase markers on the scrubber (004-timeline-phases).
+    phases: Record<TimelinePhase, string>;
+  };
+  // Guided tour — storytelling playback (005-guided-tour).
+  tour: {
+    start: string;
+    pause: string;
+    resume: string;
+    stop: string;
+    captions: Record<TimelinePhase, string>;
   };
   readout: {
     answerReceived: string;
@@ -244,8 +267,6 @@ const en: Strings = {
     fromDoc: "your PDF",
     emptyThread: "Send a message to start this conversation.",
     messages: (n) => `${n} message${n === 1 ? "" : "s"}`,
-    clear: "Clear conversation",
-    clearConfirm: "Delete this conversation?",
     uploadPdf: "Upload PDF",
     documents: "Documents",
     removeDoc: "Remove",
@@ -257,6 +278,7 @@ const en: Strings = {
     overviewTitle: "Inspector",
     overviewBody:
       "The pipeline is split into deployable tiers (containers) that talk over the network. Send a message, then click any station to inspect the real data — protocols and routes, retrieved chunks and scores, tool calls, the assembled prompt, and latency.",
+    overviewBack: "← Overview",
     techInfra: "Technical & infrastructure",
     tier: "tier",
     role: "role (cloud-agnostic)",
@@ -330,19 +352,67 @@ const en: Strings = {
     streamingHint: "Watch each stage light up live; the answer types itself out.",
     batch: "Batch (JSON)",
     batchHint: "Wait for one JSON response, then replay the trace; the answer appears at once.",
-    soon: "soon",
-    tools: "Tools (MCP)",
-    rag: "RAG retrieval",
-    moreSoon: "More options coming soon.",
+    experiment: {
+      title: "Experiment",
+      systemPrompt: "System prompt",
+      promptHint: "Edit the agent's instructions and watch the assembled prompt change.",
+      reset: "Reset to default",
+      tools: "Tools (MCP)",
+      toolsHint: "Turn tools off and watch the agent re-plan without them.",
+      topK: "Retrieved chunks (top-k)",
+      topKHint: "How many chunks RAG pulls per query.",
+      toolLabels: {
+        calculator: "Calculator",
+        current_time: "Current time",
+        kb_lookup: "Glossary lookup",
+      },
+    },
+  },
+  glossary: {
+    "TLS 1.3": "TLS 1.3 — the encryption that secures HTTPS between the browser and the server.",
+    ASGI: "ASGI — the asynchronous Python web-server interface FastAPI runs on.",
+    ReAct: "ReAct — the reason → act → observe loop the agent repeats until it can answer.",
+    SQL: "SQL — the query language of the relational database that stores the conversation.",
+    cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
+    MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
+    stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
   },
   timeline: {
     title: "Replay & step",
-    hint: "Drag the slider or step ◀ ▶ through every stage of the request.",
+    hint: "Click a phase or step ◀ ▶ through every stage of the request.",
     stepBack: "Step back",
     pause: "Pause",
     replay: "Replay",
     stepForward: "Step forward",
     idle: "idle",
+    phases: {
+      request: "Request",
+      memory: "Memory",
+      route: "Route",
+      retrieve: "Retrieve",
+      reason: "Reason",
+      tools: "Tools",
+      generate: "Generate",
+      respond: "Respond",
+      persist: "Persist",
+    },
+  },
+  tour: {
+    start: "▶ Tour",
+    pause: "Pause tour",
+    resume: "Resume tour",
+    stop: "Stop tour",
+    captions: {
+      request: "The browser sends your message to the API over HTTPS.",
+      memory: "The backend loads recent conversation history — long-term memory.",
+      route: "The agent classifies the request and plans its route.",
+      retrieve: "RAG embeds the query and pulls the most relevant chunks.",
+      reason: "The agent reasons over the context and decides whether to call a tool.",
+      tools: "A tool runs over MCP and returns an observation.",
+      generate: "The model writes the answer, token by token.",
+      respond: "The finished answer is streamed back to the client.",
+      persist: "The conversation is saved to the database for next time.",
+    },
   },
   readout: {
     answerReceived: "answer received ✓",
@@ -454,8 +524,6 @@ const pt: Strings = {
     fromDoc: "seu PDF",
     emptyThread: "Envie uma mensagem para começar esta conversa.",
     messages: (n) => `${n} mensage${n === 1 ? "m" : "ns"}`,
-    clear: "Limpar conversa",
-    clearConfirm: "Apagar esta conversa?",
     uploadPdf: "Enviar PDF",
     documents: "Documentos",
     removeDoc: "Remover",
@@ -467,6 +535,7 @@ const pt: Strings = {
     overviewTitle: "Inspetor",
     overviewBody:
       "O pipeline é dividido em camadas implantáveis (containers) que se comunicam pela rede. Envie uma mensagem e clique em qualquer estação para inspecionar os dados reais — protocolos e rotas, trechos recuperados e seus scores, chamadas de ferramentas, o prompt montado e a latência.",
+    overviewBack: "← Visão geral",
     techInfra: "Técnico e infraestrutura",
     tier: "camada",
     role: "papel (agnóstico de nuvem)",
@@ -540,19 +609,67 @@ const pt: Strings = {
     streamingHint: "Veja cada etapa acender ao vivo; a resposta vai sendo digitada.",
     batch: "Batch (JSON)",
     batchHint: "Aguarde uma resposta JSON única e então repita o trace; a resposta aparece de uma vez.",
-    soon: "em breve",
-    tools: "Ferramentas (MCP)",
-    rag: "Recuperação RAG",
-    moreSoon: "Mais opções em breve.",
+    experiment: {
+      title: "Experimentar",
+      systemPrompt: "Prompt de sistema",
+      promptHint: "Edite as instruções do agente e veja o prompt montado mudar.",
+      reset: "Restaurar padrão",
+      tools: "Ferramentas (MCP)",
+      toolsHint: "Desligue ferramentas e veja o agente replanejar sem elas.",
+      topK: "Trechos recuperados (top-k)",
+      topKHint: "Quantos trechos o RAG busca por consulta.",
+      toolLabels: {
+        calculator: "Calculadora",
+        current_time: "Hora atual",
+        kb_lookup: "Consulta ao glossário",
+      },
+    },
+  },
+  glossary: {
+    "TLS 1.3": "TLS 1.3 — a criptografia que protege o HTTPS entre o navegador e o servidor.",
+    ASGI: "ASGI — a interface assíncrona de servidor web Python sobre a qual o FastAPI roda.",
+    ReAct: "ReAct — o loop raciocinar → agir → observar que o agente repete até poder responder.",
+    SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
+    cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
+    MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
+    stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",
   },
   timeline: {
     title: "Replay e passo a passo",
-    hint: "Arraste o controle ou avance ◀ ▶ etapa por etapa por toda a requisição.",
+    hint: "Clique numa fase ou avance ◀ ▶ etapa por etapa por toda a requisição.",
     stepBack: "Voltar um passo",
     pause: "Pausar",
     replay: "Repetir",
     stepForward: "Avançar um passo",
     idle: "ocioso",
+    phases: {
+      request: "Requisição",
+      memory: "Memória",
+      route: "Roteamento",
+      retrieve: "Recuperação",
+      reason: "Raciocínio",
+      tools: "Ferramentas",
+      generate: "Geração",
+      respond: "Resposta",
+      persist: "Persistência",
+    },
+  },
+  tour: {
+    start: "▶ Tour",
+    pause: "Pausar tour",
+    resume: "Retomar tour",
+    stop: "Encerrar tour",
+    captions: {
+      request: "O navegador envia sua mensagem à API por HTTPS.",
+      memory: "O backend carrega o histórico recente da conversa — memória de longo prazo.",
+      route: "O agente classifica a requisição e planeja a rota.",
+      retrieve: "O RAG vetoriza a pergunta e busca os trechos mais relevantes.",
+      reason: "O agente raciocina sobre o contexto e decide se chama uma ferramenta.",
+      tools: "Uma ferramenta roda via MCP e retorna uma observação.",
+      generate: "O modelo escreve a resposta, token a token.",
+      respond: "A resposta pronta é transmitida de volta ao cliente.",
+      persist: "A conversa é salva no banco para a próxima vez.",
+    },
   },
   readout: {
     answerReceived: "resposta recebida ✓",

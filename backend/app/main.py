@@ -19,8 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from .agent import run_agent
+from .agent.prompts import SYSTEM_PROMPT
 from .config import get_settings
 from .db.store import get_store
+from .mcp.client import get_registry
 from .rag.ingest import build_index
 from .rag.ingestion import delete_document_vectors, ingest_pdf
 from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
@@ -81,6 +83,23 @@ async def health() -> dict:
     }
 
 
+@app.get("/api/config")
+async def config() -> dict:
+    """Defaults the experiment panel (006-interactive-experiments) prefills with,
+    so nothing about the agent is hardcoded client-side. Like ``/api/health`` it
+    is inspectable without an OpenAI key (the registry is independent of the LLM).
+    The top-k bounds mirror ``ChatRequest.top_k`` (1..8)."""
+    settings = get_settings()
+    registry = await get_registry()
+    return {
+        "default_system_prompt": SYSTEM_PROMPT,
+        "default_top_k": settings.rag_top_k,
+        "top_k_min": 1,
+        "top_k_max": 8,
+        "tools": [{"name": s.name, "description": s.description} for s in registry.specs()],
+    }
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     settings = get_settings()
@@ -123,6 +142,8 @@ async def chat(req: ChatRequest):
                     history=history["recent"],
                     mode=req.mode,
                     session_id=session_id,
+                    system_prompt=req.system_prompt,
+                    enabled_tools=req.enabled_tools,
                 )
 
                 # Persist the finished message + the chunks retrieved for it

@@ -44,3 +44,54 @@ def test_chat_request_accepts_session_id():
     assert req.session_id == "sess-123"
     # session_id is optional (lazy-created server-side when absent).
     assert ChatRequest(message="hi").session_id is None
+
+
+def test_chat_request_accepts_experiment_overrides():
+    # 006-interactive-experiments — request-only inputs for the experiment panel.
+    from app.schemas import ChatRequest
+
+    req = ChatRequest(
+        message="hi",
+        system_prompt="You are a pirate.",
+        enabled_tools=["calculator"],
+        top_k=2,
+    )
+    assert req.system_prompt == "You are a pirate."
+    assert req.enabled_tools == ["calculator"]
+    assert req.top_k == 2
+
+
+def test_chat_request_experiment_overrides_are_optional():
+    # AC5 seed — omitting them keeps today's defaults (no overrides sent).
+    from app.schemas import ChatRequest
+
+    req = ChatRequest(message="hi")
+    assert req.system_prompt is None
+    assert req.enabled_tools is None
+    assert req.top_k is None
+
+
+def test_chat_request_top_k_is_bounded():
+    # Q6 — the slider is 1..8; the backend validates the range.
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas import ChatRequest
+
+    assert ChatRequest(message="hi", top_k=8).top_k == 8
+    assert ChatRequest(message="hi", top_k=1).top_k == 1
+    for bad in (0, 9, -1):
+        with pytest.raises(ValidationError):
+            ChatRequest(message="hi", top_k=bad)
+
+
+def test_chat_request_system_prompt_is_length_capped():
+    # Q3 — full replace allowed, but capped at 2000 chars.
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas import ChatRequest
+
+    assert ChatRequest(message="hi", system_prompt="x" * 2000).system_prompt
+    with pytest.raises(ValidationError):
+        ChatRequest(message="hi", system_prompt="x" * 2001)

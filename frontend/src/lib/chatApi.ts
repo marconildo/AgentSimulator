@@ -57,6 +57,23 @@ export const listDocuments = (id: string) => api<DocumentMeta[]>(`/api/sessions/
 export const deleteDocument = (id: string, documentId: string) =>
   api<unknown>(`/api/sessions/${id}/documents/${documentId}`, { method: "DELETE" });
 
+// Agent defaults the experiment panel prefills from (006-interactive-experiments)
+// so nothing about the backend is hardcoded client-side. Fetched once on demand.
+export interface AppConfig {
+  default_system_prompt: string;
+  default_top_k: number;
+  top_k_min: number;
+  top_k_max: number;
+  tools: { name: string; description: string }[];
+}
+
+let _configPromise: Promise<AppConfig> | null = null;
+/** Fetch (and cache) the agent's defaults: prompt, tools, top-k bounds. */
+export const getConfig = (): Promise<AppConfig> => {
+  if (!_configPromise) _configPromise = api<AppConfig>("/api/config");
+  return _configPromise;
+};
+
 export interface UploadHandlers {
   onTrace: (event: TraceEvent) => void;
   onDone: (event: UploadDone) => void;

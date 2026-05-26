@@ -1,7 +1,9 @@
 import { type ReactNode, useMemo } from "react";
 
 import { useT } from "../i18n";
+import { activePhase, PHASE_ORDER, phaseMarkers } from "../lib/phases";
 import { useSimulator } from "../store/useSimulator";
+import { TourControls } from "./TourControls";
 
 export function Timeline() {
   const t = useT();
@@ -19,17 +21,14 @@ export function Timeline() {
   const current = cursor >= 0 ? events[cursor] : undefined;
   const live = status === "streaming" && following;
 
-  // A tick at every stage boundary (where the stage changes), so the ruler
-  // shows each distinct step of the request — passed ticks lit, ahead dim.
-  const ticks = useMemo(() => {
-    const out: number[] = [];
-    for (let i = 0; i < events.length; i++) {
-      if (i === 0 || events[i].stage !== events[i - 1].stage) out.push(i);
-    }
-    return out;
-  }, [events]);
-
-  const frac = (i: number) => (total > 1 ? i / (total - 1) : 0);
+  // The named phases that actually occurred this run, keyed for O(1) lookup.
+  const markers = useMemo(() => phaseMarkers(events), [events]);
+  const markerByPhase = useMemo(
+    () => new Map(markers.map((m) => [m.phase, m])),
+    [markers],
+  );
+  // The phase the cursor is currently inside — the "you are here" chip.
+  const active = activePhase(events, cursor);
 
   return (
     <div
@@ -70,6 +69,7 @@ export function Timeline() {
       </div>
 
       <div className="flex items-center gap-3">
+        <TourControls />
         <div className="flex items-center gap-1.5">
           <TButton onClick={() => step(-1)} disabled={!hasEvents} title={t.timeline.stepBack}>
             ⏮
@@ -88,7 +88,7 @@ export function Timeline() {
           </TButton>
         </div>
 
-        {/* Track + stage ruler. Ticks are inset to align with the thumb travel. */}
+        {/* Scrubber track — fine-grained, event-level scrubbing. */}
         <div className="relative flex-1">
           <input
             type="range"
@@ -99,24 +99,74 @@ export function Timeline() {
             onChange={(e) => setCursor(Number(e.target.value))}
             className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[var(--color-line)] accent-[var(--color-sky)] disabled:opacity-40"
           />
-          {hasEvents && (
-            <div className="pointer-events-none absolute inset-x-0 top-full mt-1 h-2">
-              {ticks.map((i) => (
-                <span
-                  key={i}
-                  className="absolute top-0 h-2 w-px rounded-full"
-                  style={{
-                    left: `calc(${frac(i)} * (100% - 14px) + 7px)`,
-                    background: i <= cursor ? "var(--color-sky-soft)" : "var(--color-line)",
-                    opacity: i <= cursor ? 0.9 : 0.6,
-                  }}
-                />
-              ))}
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Phase rail — the named markers that replace the anonymous ticks. The
+          full canonical pipeline is always shown (a fixed map); phases that
+          didn't fire this run are disabled, and clicking a phase jumps the
+          playhead to its first event. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-1">
+        {PHASE_ORDER.map((phase) => {
+          const marker = markerByPhase.get(phase);
+          return (
+            <PhaseChip
+              key={phase}
+              label={t.timeline.phases[phase]}
+              count={marker?.count ?? 0}
+              occurred={Boolean(marker)}
+              passed={Boolean(marker && marker.index <= cursor)}
+              active={active === phase}
+              onClick={marker ? () => setCursor(marker.index) : undefined}
+            />
+          );
+        })}
+      </div>
     </div>
+  );
+}
+
+function PhaseChip({
+  label,
+  count,
+  occurred,
+  passed,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  occurred: boolean;
+  passed: boolean;
+  active: boolean;
+  onClick?: () => void;
+}) {
+  // Visual states: active ("you are here") > passed (lit) > upcoming (occurred,
+  // dim) > absent (disabled). Only occurred phases are clickable.
+  const cls = active
+    ? "border-[var(--color-sky)] bg-[var(--color-sky-strong)] text-[var(--color-on-accent)] shadow-sm shadow-[color-mix(in_srgb,var(--color-sky-strong)_35%,transparent)]"
+    : passed
+      ? "border-[color-mix(in_srgb,var(--color-sky)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-sky-strong)_12%,transparent)] text-[var(--color-sky-soft)] enabled:hover:border-[var(--color-sky)]"
+      : occurred
+        ? "border-[var(--color-line)] text-[var(--color-muted)] enabled:hover:border-[color-mix(in_srgb,var(--color-sky)_50%,transparent)] enabled:hover:text-[var(--color-sky-soft)]"
+        : "border-dashed border-[var(--color-line)] text-[var(--color-label)] opacity-40";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!occurred}
+      title={label}
+      aria-current={active ? "step" : undefined}
+      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition disabled:cursor-default ${cls}`}
+    >
+      {label}
+      {count > 1 && (
+        <span className="font-mono text-[9px] opacity-70" aria-label={`×${count}`}>
+          ×{count}
+        </span>
+      )}
+    </button>
   );
 }
 

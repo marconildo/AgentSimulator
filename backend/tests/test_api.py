@@ -20,6 +20,27 @@ def test_health_reports_live_model_and_no_demo():
         assert body["llm_model"]
 
 
+def test_config_endpoint_exposes_experiment_defaults():
+    # AC6 (006) — the experiment panel prefills from here (no hardcoded backend
+    # constants); inspectable without a key, like health.
+    with TestClient(app) as client:
+        resp = client.get("/api/config")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["default_system_prompt"].strip()
+        assert body["default_top_k"] >= 1
+        assert (body["top_k_min"], body["top_k_max"]) == (1, 8)
+        names = {t["name"] for t in body["tools"]}
+        assert {"calculator", "current_time", "kb_lookup"} <= names
+
+
+def test_chat_rejects_out_of_range_top_k():
+    # Q6 — the slider is 1..8; the API validates (422 on out-of-range).
+    with TestClient(app) as client:
+        resp = client.post("/api/chat", json={"message": "hi", "top_k": 99})
+        assert resp.status_code == 422
+
+
 @pytest.mark.openai
 def test_chat_streams_events_then_done_and_replays():
     with TestClient(app) as client:

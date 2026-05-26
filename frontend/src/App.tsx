@@ -9,6 +9,7 @@ import { LanguageToggle } from "./components/LanguageToggle";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Timeline } from "./components/Timeline";
+import { TourCaption } from "./components/TourCaption";
 import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
 import { deriveView } from "./lib/derive";
@@ -93,6 +94,7 @@ export default function App() {
 
             <main className="relative min-w-0 flex-1">
               <FlowCanvas view={view} selected={selected} onSelect={select} />
+              <TourCaption />
               {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
             </main>
 

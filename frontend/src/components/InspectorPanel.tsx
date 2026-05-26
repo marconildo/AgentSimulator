@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
@@ -28,6 +28,15 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
   const t = useT();
   const i = t.inspector;
 
+  // Open every station at the top. Without this the panel keeps the previous
+  // station's scroll offset when you click another node, which reads as a
+  // flicker and can leave the view stuck partway down. (Hook must run before
+  // the early return below — rules of hooks.)
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [selected]);
+
   if (!selected) return <Overview onSelect={onSelect} stations={stationsFor(lang)} i={i} />;
 
   const meta = stationByIdFor(lang)[selected];
@@ -35,7 +44,17 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
   const lastEnd = pick(rt.events, undefined, "end");
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-4" style={{ color: meta.accent }}>
+    <div
+      ref={scrollRef}
+      className="flex h-full flex-col gap-3 overflow-y-auto p-4"
+      style={{ color: meta.accent }}
+    >
+      <button
+        onClick={() => onSelect(null)}
+        className="-mb-1 self-start rounded-md border border-[var(--color-line)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] transition hover:border-[color-mix(in_srgb,var(--color-sky)_55%,transparent)] hover:text-[var(--color-sky-soft)]"
+      >
+        {i.overviewBack}
+      </button>
       <div className="flex items-center gap-2.5">
         <span className="text-2xl">{meta.icon}</span>
         <div className="flex-1">

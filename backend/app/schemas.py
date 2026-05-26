@@ -70,10 +70,23 @@ class ChatRequest(BaseModel):
     # Conversation this message belongs to. Optional: the backend lazy-creates a
     # session when absent and returns the id on the SSE ``done`` event.
     session_id: str | None = None
-    # Optional: lets the UI override top_k for experimentation.
-    top_k: int | None = None
     # How to deliver the result; see ``DeliveryMode``. Defaults to streaming.
     mode: DeliveryMode = "stream"
+
+    # --- Experiment overrides (006-interactive-experiments) ------------------
+    # Request-only inputs that let the UI change *how* the run executes without
+    # adding any pipeline stage. All optional: omitting them reproduces today's
+    # behavior exactly (default prompt, all tools, default top-k).
+    #
+    # Full system-prompt replacement (the textarea *is* the whole prompt); blank
+    # falls back to the default server-side. Capped to bound the blast radius.
+    system_prompt: str | None = Field(default=None, max_length=2000)
+    # Names of the MCP tools to expose this run. ``None`` = all tools (default);
+    # ``[]`` = no tools (LLM-only path); a list = only those tools discovered.
+    enabled_tools: list[str] | None = None
+    # Lets the UI override RAG top-k for experimentation; bounded to the slider's
+    # range (1..8). ``None`` = the configured default (``rag_top_k``).
+    top_k: int | None = Field(default=None, ge=1, le=8)
 
 
 class TraceSummary(BaseModel):
