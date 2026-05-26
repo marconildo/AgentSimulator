@@ -8,7 +8,8 @@ import {
 } from "@xyflow/react";
 import { useMemo } from "react";
 
-import { SECTIONS } from "./content";
+import { useLang } from "../i18n";
+import { sectionsFor, type Section } from "./content";
 import { RootNode, SectionNode, TopicNode } from "./LearnNodes";
 
 const nodeTypes = { lroot: RootNode, lsection: SectionNode, ltopic: TopicNode };
@@ -24,7 +25,9 @@ interface LearnMapProps {
 }
 
 export function LearnMap({ selected, onSelect }: LearnMapProps) {
-  const { nodes, edges } = useMemo(() => buildGraph(selected), [selected]);
+  const lang = useLang((s) => s.lang);
+  const sections = sectionsFor(lang);
+  const { nodes, edges } = useMemo(() => buildGraph(selected, sections), [selected, sections]);
 
   return (
     <ReactFlow
@@ -47,11 +50,11 @@ export function LearnMap({ selected, onSelect }: LearnMapProps) {
   );
 }
 
-function buildGraph(selected: string | null): { nodes: Node[]; edges: Edge[] } {
+function buildGraph(selected: string | null, sections: Section[]): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
-  const totalWidth = (SECTIONS.length - 1) * COL_STEP;
+  const totalWidth = (sections.length - 1) * COL_STEP;
 
   nodes.push({
     id: "root",
@@ -62,7 +65,7 @@ function buildGraph(selected: string | null): { nodes: Node[]; edges: Edge[] } {
     selectable: false,
   });
 
-  SECTIONS.forEach((section, i) => {
+  sections.forEach((section, i) => {
     const x = i * COL_STEP;
     nodes.push({
       id: section.id,

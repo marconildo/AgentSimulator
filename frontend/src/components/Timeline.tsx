@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 
+import { useT } from "../i18n";
 import { useSimulator } from "../store/useSimulator";
 
 export function Timeline() {
+  const t = useT();
   const events = useSimulator((s) => s.events);
   const cursor = useSimulator((s) => s.cursor);
   const playing = useSimulator((s) => s.playing);
@@ -20,13 +22,17 @@ export function Timeline() {
   return (
     <div className="flex items-center gap-3 border-t border-[var(--color-line)] bg-[var(--color-panel)] px-4 py-2.5">
       <div className="flex items-center gap-1">
-        <TButton onClick={() => step(-1)} disabled={!hasEvents} title="Step back">
+        <TButton onClick={() => step(-1)} disabled={!hasEvents} title={t.timeline.stepBack}>
           ⏮
         </TButton>
-        <TButton onClick={togglePlay} disabled={!hasEvents} title={playing ? "Pause" : "Replay"}>
+        <TButton
+          onClick={togglePlay}
+          disabled={!hasEvents}
+          title={playing ? t.timeline.pause : t.timeline.replay}
+        >
           {playing ? "⏸" : "▶"}
         </TButton>
-        <TButton onClick={() => step(1)} disabled={!hasEvents} title="Step forward">
+        <TButton onClick={() => step(1)} disabled={!hasEvents} title={t.timeline.stepForward}>
           ⏭
         </TButton>
       </div>
@@ -53,7 +59,7 @@ export function Timeline() {
             {current.label ? ` · ${current.label}` : ""}
           </span>
         ) : (
-          <span>idle</span>
+          <span>{t.timeline.idle}</span>
         )}
         <span className="tabular-nums text-[#5b688c]">
           {hasEvents ? `${cursor + 1}/${total}` : "0/0"}

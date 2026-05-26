@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "./components/ChatPanel";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { InspectorPanel } from "./components/InspectorPanel";
+import { LanguageToggle } from "./components/LanguageToggle";
 import { Timeline } from "./components/Timeline";
+import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
 import { deriveView } from "./lib/derive";
 import { useSimulator } from "./store/useSimulator";
@@ -23,6 +25,7 @@ export default function App() {
   const select = useSimulator((s) => s.select);
 
   const view = useMemo(() => deriveView(events, cursor), [events, cursor]);
+  const t = useT();
 
   const [page, setPage] = useState<"sim" | "learn">("sim");
   const [health, setHealth] = useState<Health | null>(null);
@@ -41,10 +44,9 @@ export default function App() {
           <h1 className="text-[15px] font-semibold tracking-wide text-[var(--color-ink)]">
             AI Agent Simulator
           </h1>
-          <p className="text-[11px] text-[var(--color-muted)]">
-            A chat message&apos;s journey through RAG, MCP tools and an LLM — visualized live.
-          </p>
+          <p className="text-[11px] text-[var(--color-muted)]">{t.app.tagline}</p>
         </div>
+        <LanguageToggle />
         <button
           onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}
           className="rounded-full border px-3 py-1 text-[12px] font-medium transition"
@@ -53,7 +55,7 @@ export default function App() {
             color: page === "learn" ? "#7dd3fc" : "#aab6d8",
           }}
         >
-          {page === "sim" ? "📚 Learn" : "← Simulator"}
+          {page === "sim" ? `📚 ${t.app.learn}` : `← ${t.app.simulator}`}
         </button>
         {health && (
           <span
@@ -62,9 +64,9 @@ export default function App() {
               borderColor: health.demo_mode ? "#a78bfa" : "#34d399",
               color: health.demo_mode ? "#c4b5fd" : "#6ee7b7",
             }}
-            title={health.demo_mode ? "Deterministic mock — no API key" : "Live OpenAI calls"}
+            title={health.demo_mode ? t.app.demoTitle : t.app.liveTitle}
           >
-            {health.demo_mode ? "demo mode" : `openai · ${health.llm_model}`}
+            {health.demo_mode ? t.app.demoMode : `openai · ${health.llm_model}`}
           </span>
         )}
         <a

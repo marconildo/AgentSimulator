@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { ALL_TOPICS, SECTIONS } from "./content";
+import { useLang, useT } from "../i18n";
+import { allTopicsFor, sectionsFor } from "./content";
 
 interface TopicDetailProps {
   selected: string | null;
@@ -8,8 +9,10 @@ interface TopicDetailProps {
 }
 
 export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
-  const topicEntry = selected ? ALL_TOPICS[selected] : undefined;
-  const section = selected ? SECTIONS.find((s) => s.id === selected) : undefined;
+  const lang = useLang((s) => s.lang);
+  const t = useT();
+  const topicEntry = selected ? allTopicsFor(lang)[selected] : undefined;
+  const section = selected ? sectionsFor(lang).find((s) => s.id === selected) : undefined;
 
   if (topicEntry) {
     const { topic, section: sec } = topicEntry;
@@ -24,15 +27,15 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
         </button>
         <h2 className="text-lg font-semibold text-[var(--color-ink)]">{topic.title}</h2>
 
-        <Block label="What it is" accent={sec.accent}>
+        <Block label={t.learn.whatItIs} accent={sec.accent}>
           {topic.what}
         </Block>
-        <Block label="Why it's used here" accent={sec.accent}>
+        <Block label={t.learn.whyUsed} accent={sec.accent}>
           {topic.why}
         </Block>
         {topic.where && (
           <div>
-            <Label accent={sec.accent}>In the project</Label>
+            <Label accent={sec.accent}>{t.learn.inProject}</Label>
             <code className="mt-1 block break-all rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 font-mono text-[11.5px] text-[#aab6d8]">
               {topic.where}
             </code>
@@ -40,7 +43,7 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
         )}
 
         <div className="mt-2">
-          <Label accent={sec.accent}>More in {sec.title}</Label>
+          <Label accent={sec.accent}>{t.learn.moreIn(sec.title)}</Label>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {sec.topics
               .filter((t) => t.id !== topic.id)
@@ -86,14 +89,10 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
-      <h2 className="text-lg font-semibold text-[var(--color-ink)]">Learn the stack</h2>
-      <p className="text-[13px] leading-relaxed text-[#aab6d8]">
-        This map explains how the simulator is built — its architecture and layers, the software
-        and Gen-AI concepts it uses (and why), the security at each layer, the networking and
-        infrastructure, and where data lives. Click any node to read about it.
-      </p>
+      <h2 className="text-lg font-semibold text-[var(--color-ink)]">{t.learn.learnStackTitle}</h2>
+      <p className="text-[13px] leading-relaxed text-[#aab6d8]">{t.learn.learnStackBody}</p>
       <div className="space-y-1.5">
-        {SECTIONS.map((s) => (
+        {sectionsFor(lang).map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
@@ -102,7 +101,7 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
             <span className="text-lg">{s.icon}</span>
             <span className="text-[13px] text-[var(--color-ink)]">{s.title}</span>
             <span className="ml-auto text-[11px] text-[var(--color-muted)]">
-              {s.topics.length} topics
+              {t.learn.topicsCount(s.topics.length)}
             </span>
           </button>
         ))}

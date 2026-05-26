@@ -1,14 +1,16 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 
+import { useT } from "../i18n";
 import type { Section, Topic } from "./content";
 
 const hideHandle = { opacity: 0, border: "none" } as const;
 
 export function RootNode() {
+  const t = useT();
   return (
     <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-5 py-3 text-center">
-      <div className="text-sm font-semibold text-[var(--color-ink)]">How this app works</div>
-      <div className="text-[11px] text-[var(--color-muted)]">A learning map — click any topic</div>
+      <div className="text-sm font-semibold text-[var(--color-ink)]">{t.learn.rootTitle}</div>
+      <div className="text-[11px] text-[var(--color-muted)]">{t.learn.rootHint}</div>
       <Handle type="source" position={Position.Bottom} style={hideHandle} />
     </div>
   );

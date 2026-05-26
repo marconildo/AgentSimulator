@@ -1,19 +1,14 @@
 import { motion } from "framer-motion";
 
+import { useT } from "../i18n";
 import { useSimulator } from "../store/useSimulator";
-
-const EXAMPLES = [
-  "What is RAG and how does retrieval work?",
-  "What is 12 * (3 + 1)?",
-  "How do MCP tools work?",
-  "What time is it right now?",
-];
 
 interface ChatPanelProps {
   answer: string;
 }
 
 export function ChatPanel({ answer }: ChatPanelProps) {
+  const t = useT();
   const input = useSimulator((s) => s.input);
   const status = useSimulator((s) => s.status);
   const error = useSimulator((s) => s.error);
@@ -32,11 +27,9 @@ export function ChatPanel({ answer }: ChatPanelProps) {
     <div className="flex h-full flex-col gap-4 p-4">
       <div>
         <h2 className="text-sm font-semibold tracking-wide text-[var(--color-ink)]">
-          Ask the agent
+          {t.chat.title}
         </h2>
-        <p className="mt-1 text-xs text-[var(--color-muted)]">
-          Send a message and watch it travel through the pipeline on the right.
-        </p>
+        <p className="mt-1 text-xs text-[var(--color-muted)]">{t.chat.subtitle}</p>
       </div>
 
       <form
@@ -56,7 +49,7 @@ export function ChatPanel({ answer }: ChatPanelProps) {
             }
           }}
           rows={3}
-          placeholder="e.g. What is RAG?"
+          placeholder={t.chat.placeholder}
           disabled={streaming}
           className="resize-none rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-sm text-[var(--color-ink)] outline-none placeholder:text-[#5b688c] focus:border-sky-400/60"
         />
@@ -65,12 +58,12 @@ export function ChatPanel({ answer }: ChatPanelProps) {
           disabled={streaming || !input.trim()}
           className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-[#04122a] transition enabled:hover:bg-sky-400 disabled:opacity-40"
         >
-          {streaming ? "Running…" : "Send message"}
+          {streaming ? t.chat.running : t.chat.send}
         </button>
       </form>
 
       <div className="flex flex-wrap gap-1.5">
-        {EXAMPLES.map((ex) => (
+        {t.chat.examples.map((ex) => (
           <button
             key={ex}
             onClick={() => runExample(ex)}
@@ -84,7 +77,7 @@ export function ChatPanel({ answer }: ChatPanelProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] p-3">
         <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-          Answer
+          {t.chat.answer}
         </div>
         {error ? (
           <p className="text-sm text-rose-300">⚠ {error}</p>
@@ -99,7 +92,7 @@ export function ChatPanel({ answer }: ChatPanelProps) {
           </motion.p>
         ) : (
           <p className="text-sm text-[#5b688c]">
-            {streaming ? "Thinking…" : "The agent's answer will stream here."}
+            {streaming ? t.chat.thinking : t.chat.answerHint}
           </p>
         )}
       </div>

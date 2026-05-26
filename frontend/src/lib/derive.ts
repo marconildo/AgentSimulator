@@ -4,7 +4,7 @@
 
 import type { TraceEvent } from "../types/events";
 import type { StationId } from "./stations";
-import { HOPS, STAGE_TO_STATION, STATIONS } from "./stations";
+import { HOP_PAIRS, STAGE_TO_STATION, STATION_IDS } from "./stations";
 
 export type StationStatus = "idle" | "active" | "done";
 
@@ -32,7 +32,7 @@ function hopId(source: StationId, target: StationId): string {
 
 export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   const stations = {} as Record<StationId, StationRuntime>;
-  for (const s of STATIONS) stations[s.id] = { status: "idle", events: [] };
+  for (const id of STATION_IDS) stations[id] = { status: "idle", events: [] };
 
   const visible = upto >= 0 ? events.slice(0, upto + 1) : [];
   const distinct: StationId[] = [];
@@ -80,7 +80,7 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   let activeHopId: string | null = null;
   let hopReverse = false;
   if (activeStation && prevStation && activeStation !== prevStation) {
-    const hop = HOPS.find(
+    const hop = HOP_PAIRS.find(
       (h) =>
         (h.source === prevStation && h.target === activeStation) ||
         (h.source === activeStation && h.target === prevStation),

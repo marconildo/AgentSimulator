@@ -1,15 +1,19 @@
 import type { ReactNode } from "react";
 
+import { useLang, useT, type Lang } from "../i18n";
+import type { Strings } from "../i18n/strings";
 import type { DerivedView } from "../lib/derive";
 import {
-  HOPS,
-  STATIONS,
-  STATION_BY_ID,
-  TIER_BY_ID,
+  hopsFor,
+  stationByIdFor,
+  stationsFor,
+  tierByIdFor,
   type StationId,
   type StationMeta,
 } from "../lib/stations";
 import type { Phase, Stage, TraceEvent } from "../types/events";
+
+type I = Strings["inspector"];
 
 interface InspectorPanelProps {
   selected: StationId | null;
@@ -18,9 +22,13 @@ interface InspectorPanelProps {
 }
 
 export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps) {
-  if (!selected) return <Overview onSelect={onSelect} />;
+  const lang = useLang((s) => s.lang);
+  const t = useT();
+  const i = t.inspector;
 
-  const meta = STATION_BY_ID[selected];
+  if (!selected) return <Overview onSelect={onSelect} stations={stationsFor(lang)} i={i} />;
+
+  const meta = stationByIdFor(lang)[selected];
   const rt = view.stations[selected];
   const lastEnd = pick(rt.events, undefined, "end");
 
@@ -32,7 +40,7 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
           <div className="text-base font-semibold text-[var(--color-ink)]">{meta.title}</div>
           <div className="text-xs text-[var(--color-muted)]">{meta.subtitle}</div>
         </div>
-        <StatusBadge status={rt.status} accent={meta.accent} />
+        <StatusBadge status={rt.status} accent={meta.accent} i={i} />
       </div>
 
       <p className="text-[13px] leading-relaxed text-[#aab6d8]">{meta.blurb}</p>
@@ -41,36 +49,35 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
         {lastEnd?.metrics.latency_ms !== undefined && (
           <Chip>{lastEnd.metrics.latency_ms.toFixed(0)} ms</Chip>
         )}
-        <Chip>
-          {rt.events.length} event{rt.events.length === 1 ? "" : "s"}
-        </Chip>
+        <Chip>{i.events(rt.events.length)}</Chip>
       </div>
 
-      <TechSection meta={meta} />
-      {renderDetail(selected, rt.events)}
+      <TechSection meta={meta} lang={lang} i={i} />
+      {renderDetail(selected, rt.events, i)}
     </div>
   );
 }
 
-function TechSection({ meta }: { meta: StationMeta }) {
-  const tier = TIER_BY_ID[meta.tier];
-  const hops = HOPS.filter((h) => h.source === meta.id || h.target === meta.id);
+function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I }) {
+  const tier = tierByIdFor(lang)[meta.tier];
+  const stationById = stationByIdFor(lang);
+  const hops = hopsFor(lang).filter((h) => h.source === meta.id || h.target === meta.id);
 
   return (
-    <Section title="Technical & infrastructure">
+    <Section title={i.techInfra}>
       {meta.tech.map((row) => (
         <KeyVal key={row.k} k={row.k} v={row.v} />
       ))}
       <div className="my-2 h-px bg-[var(--color-line)]" />
-      <KeyVal k="tier" v={tier.title} />
-      <KeyVal k="hosting (e.g.)" v={meta.azure} />
+      <KeyVal k={i.tier} v={tier.title} />
+      <KeyVal k={i.hosting} v={meta.azure} />
 
       {hops.length > 0 && (
-        <Labeled label="network hops">
+        <Labeled label={i.networkHops}>
           <div className="space-y-1">
             {hops.map((h) => {
               const outgoing = h.source === meta.id;
-              const other = STATION_BY_ID[outgoing ? h.target : h.source];
+              const other = stationById[outgoing ? h.target : h.source];
               return (
                 <div key={`${h.source}-${h.target}`} className="text-[11px] text-[#aab6d8]">
                   <span className="font-mono">
@@ -92,7 +99,7 @@ function TechSection({ meta }: { meta: StationMeta }) {
   );
 }
 
-function renderDetail(id: StationId, events: TraceEvent[]) {
+function renderDetail(id: StationId, events: TraceEvent[], i: I) {
   switch (id) {
     case "frontend": {
       const msg = events.find((e) => typeof e.data.message === "string")?.data.message as string | undefined;
@@ -100,12 +107,12 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
       return (
         <>
           {msg && (
-            <Section title="Request sent">
+            <Section title={i.requestSent}>
               <Mono>{msg}</Mono>
             </Section>
           )}
           {respond?.data.answer !== undefined && (
-            <Section title="Answer received">
+            <Section title={i.answerReceived}>
               <Mono>{String(respond.data.answer)}</Mono>
             </Section>
           )}
@@ -116,11 +123,11 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
       const ev = pick(events, "backend", "end");
       const routes = ["POST /api/chat", "GET /api/trace/{id}", "GET /api/health"];
       return (
-        <Section title="Routes">
+        <Section title={i.routes}>
           {routes.map((r) => (
             <Mono key={r}>{r}</Mono>
           ))}
-          {ev && <KeyVal k="demo mode" v={String(ev.data.demo_mode ?? "—")} />}
+          {ev && <KeyVal k={i.demoModeKey} v={String(ev.data.demo_mode ?? "—")} />}
         </Section>
       );
     }
@@ -132,14 +139,14 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
       return (
         <>
           {route?.data.query !== undefined && (
-            <Section title="Query">
+            <Section title={i.query}>
               <Mono>{String(route.data.query)}</Mono>
             </Section>
           )}
           {thinks.length > 0 && (
-            <Section title="Agent loop">
-              <KeyVal k="reasoning turns" v={String(thinks.length)} />
-              <KeyVal k="last decision" v={String(lastThink?.data.decision ?? "—")} />
+            <Section title={i.agentLoop}>
+              <KeyVal k={i.reasoningTurns} v={String(thinks.length)} />
+              <KeyVal k={i.lastDecision} v={String(lastThink?.data.decision ?? "—")} />
               {calls.length > 0 && (
                 <div className="mt-1 space-y-1">
                   {calls.map((c, i) => (
@@ -161,16 +168,16 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
       return (
         <>
           {embed && (
-            <Section title="Query embedding">
-              <KeyVal k="model" v={String(embed.data.model ?? "—")} />
-              <KeyVal k="dimensions" v={String(embed.data.dim ?? "—")} />
+            <Section title={i.queryEmbedding}>
+              <KeyVal k={i.model} v={String(embed.data.model ?? "—")} />
+              <KeyVal k={i.dimensions} v={String(embed.data.dim ?? "—")} />
               {Array.isArray(embed.data.preview) && (
                 <Mono>[{(embed.data.preview as number[]).map((n) => n.toFixed(3)).join(", ")}, …]</Mono>
               )}
             </Section>
           )}
           {chunks.length > 0 && (
-            <Section title={`Retrieved chunks (top-${chunks.length})`}>
+            <Section title={i.retrievedChunks(chunks.length)}>
               <div className="space-y-2">
                 {chunks.map((c, i) => (
                   <div key={i} className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
@@ -195,8 +202,8 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
       return (
         <>
           {discover && (
-            <Section title="Discovered tools">
-              <KeyVal k="transport" v={String(discover.data.transport ?? "—")} />
+            <Section title={i.discoveredTools}>
+              <KeyVal k={i.transport} v={String(discover.data.transport ?? "—")} />
               <div className="mt-1 space-y-1">
                 {tools.map((t) => (
                   <div key={t.name}>
@@ -207,11 +214,11 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
               </div>
             </Section>
           )}
-          {calls.map((call, i) => (
-            <Section key={i} title="Tool call">
-              <KeyVal k="tool" v={String(call.data.tool)} />
-              <KeyVal k="args" v={JSON.stringify(call.data.args)} />
-              <KeyVal k="result" v={String(call.data.result)} />
+          {calls.map((call, idx) => (
+            <Section key={idx} title={i.toolCall}>
+              <KeyVal k={i.tool} v={String(call.data.tool)} />
+              <KeyVal k={i.args} v={JSON.stringify(call.data.args)} />
+              <KeyVal k={i.result} v={String(call.data.result)} />
             </Section>
           ))}
         </>
@@ -224,22 +231,22 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
       return (
         <>
           {prompt && (
-            <Section title="Assembled prompt">
+            <Section title={i.assembledPrompt}>
               {preview.system && (
-                <Labeled label="system">
+                <Labeled label={i.system}>
                   <Scroll>{preview.system}</Scroll>
                 </Labeled>
               )}
               {preview.context && (
-                <Labeled label="retrieved context">
+                <Labeled label={i.retrievedContext}>
                   <Scroll>{preview.context}</Scroll>
                 </Labeled>
               )}
               {Array.isArray(preview.tools) && preview.tools.length > 0 && (
-                <Labeled label="tools">
+                <Labeled label={i.tools}>
                   <div className="flex flex-wrap gap-1">
-                    {preview.tools.map((t) => (
-                      <Chip key={t}>{t}</Chip>
+                    {preview.tools.map((tool) => (
+                      <Chip key={tool}>{tool}</Chip>
                     ))}
                   </div>
                 </Labeled>
@@ -247,8 +254,8 @@ function renderDetail(id: StationId, events: TraceEvent[]) {
             </Section>
           )}
           {gen?.data.answer !== undefined && (
-            <Section title="Generated answer">
-              <KeyVal k="model" v={String(gen.data.model ?? "—")} />
+            <Section title={i.generatedAnswer}>
+              <KeyVal k={i.model} v={String(gen.data.model ?? "—")} />
               <Mono>{String(gen.data.answer)}</Mono>
             </Section>
           )}
@@ -346,8 +353,8 @@ function ScoreBar({ value }: { value: number }) {
   );
 }
 
-function StatusBadge({ status, accent }: { status: string; accent: string }) {
-  const label = status === "active" ? "active" : status === "done" ? "done" : "idle";
+function StatusBadge({ status, accent, i }: { status: string; accent: string; i: I }) {
+  const label = status === "active" ? i.status.active : status === "done" ? i.status.done : i.status.idle;
   return (
     <span
       className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
@@ -361,17 +368,21 @@ function StatusBadge({ status, accent }: { status: string; accent: string }) {
   );
 }
 
-function Overview({ onSelect }: { onSelect: (id: StationId) => void }) {
+function Overview({
+  onSelect,
+  stations,
+  i,
+}: {
+  onSelect: (id: StationId) => void;
+  stations: StationMeta[];
+  i: I;
+}) {
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
-      <h2 className="text-sm font-semibold text-[var(--color-ink)]">Inspector</h2>
-      <p className="text-[13px] leading-relaxed text-[#aab6d8]">
-        The pipeline is split into deployable <strong>tiers</strong> (containers) that talk over
-        the network. Send a message, then click any station to inspect the real data — protocols
-        and routes, retrieved chunks and scores, tool calls, the assembled prompt, and latency.
-      </p>
+      <h2 className="text-sm font-semibold text-[var(--color-ink)]">{i.overviewTitle}</h2>
+      <p className="text-[13px] leading-relaxed text-[#aab6d8]">{i.overviewBody}</p>
       <div className="space-y-1.5">
-        {STATIONS.map((s) => (
+        {stations.map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
