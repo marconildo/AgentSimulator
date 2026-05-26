@@ -48,7 +48,7 @@ const SECTIONS_SRC: SectionSrc[] = [
     id: "architecture",
     title: { en: "Architecture & Layers", pt: "Arquitetura e Camadas" },
     icon: "🏛️",
-    accent: "#38bdf8",
+    accent: "var(--color-sky)",
     intro: {
       en: "The app is split into independent layers (tiers). Each is a separate container that can be built, deployed, scaled and secured on its own.",
       pt: "O app é dividido em camadas independentes (tiers). Cada uma é um container separado que pode ser construído, implantado, escalado e protegido por conta própria.",
@@ -138,7 +138,7 @@ const SECTIONS_SRC: SectionSrc[] = [
     id: "software",
     title: { en: "Software Engineering", pt: "Engenharia de Software" },
     icon: "🧩",
-    accent: "#a78bfa",
+    accent: "var(--color-violet)",
     intro: {
       en: "The patterns that keep the system clean: an event contract, swappable providers, an explicit state machine, type safety, tests and containers.",
       pt: "Os padrões que mantêm o sistema limpo: um contrato de eventos, provedores intercambiáveis, uma máquina de estados explícita, segurança de tipos, testes e containers.",
@@ -254,7 +254,7 @@ const SECTIONS_SRC: SectionSrc[] = [
     id: "genai",
     title: { en: "Gen AI Concepts", pt: "Conceitos de Gen AI" },
     icon: "🤖",
-    accent: "#f472b6",
+    accent: "var(--color-pink)",
     intro: {
       en: "The AI building blocks: tokens, embeddings, retrieval, agents, tools and streaming — and why each one is used here.",
       pt: "Os blocos de construção da IA: tokens, embeddings, recuperação, agentes, ferramentas e streaming — e por que cada um é usado aqui.",
@@ -409,7 +409,7 @@ const SECTIONS_SRC: SectionSrc[] = [
     id: "security",
     title: { en: "Security per Layer", pt: "Segurança por Camada" },
     icon: "🛡️",
-    accent: "#34d399",
+    accent: "var(--color-ok)",
     intro: {
       en: "Security is layered: encryption in transit, private boundaries, validated input, managed secrets and safe tool execution.",
       pt: "A segurança é em camadas: criptografia em trânsito, fronteiras privadas, entrada validada, segredos gerenciados e execução segura de ferramentas.",
@@ -499,7 +499,7 @@ const SECTIONS_SRC: SectionSrc[] = [
     id: "infra",
     title: { en: "Networking & Infrastructure", pt: "Rede e Infraestrutura" },
     icon: "🌐",
-    accent: "#fbbf24",
+    accent: "var(--color-warn)",
     intro: {
       en: "How the pieces talk and run: containers, network hops, the private-network boundary, firewalls and private endpoints, long-lived connections, stateless scaling, and how the agnostic model maps onto Azure, AWS or GCP.",
       pt: "Como as peças conversam e rodam: containers, saltos de rede, a fronteira de rede privada, firewalls e private endpoints, conexões de longa duração, escalabilidade sem estado, e como o modelo agnóstico mapeia para Azure, AWS ou GCP.",
@@ -628,7 +628,7 @@ const SECTIONS_SRC: SectionSrc[] = [
     id: "data",
     title: { en: "Data & Databases", pt: "Dados e Bancos de Dados" },
     icon: "🗄️",
-    accent: "#2dd4bf",
+    accent: "var(--color-teal)",
     intro: {
       en: "Where data lives: the vector database for retrieval, persistence, and the application database the backend would connect to.",
       pt: "Onde os dados ficam: o banco vetorial para recuperação, a persistência e o banco de aplicação ao qual o backend se conectaria.",

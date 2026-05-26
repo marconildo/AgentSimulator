@@ -33,7 +33,7 @@ export function Timeline() {
 
   return (
     <div
-      className="border-t-2 border-sky-500/25 px-4 py-3"
+      className="border-t-2 border-[color-mix(in_srgb,var(--color-sky)_25%,transparent)] px-4 py-3"
       style={{
         background:
           "linear-gradient(to bottom, color-mix(in srgb, var(--color-panel-2) 70%, transparent), var(--color-panel))",
@@ -48,13 +48,13 @@ export function Timeline() {
         </span>
         <div className="flex-1" />
         {live && (
-          <span className="flex items-center gap-1 font-mono text-[11px] text-rose-300">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" /> LIVE
+          <span className="flex items-center gap-1 font-mono text-[11px] text-[var(--color-rose-soft)]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-rose)]" /> LIVE
           </span>
         )}
         {current ? (
           <span className="max-w-[280px] truncate font-mono text-[11px]">
-            <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-semibold text-sky-300">
+            <span className="rounded bg-[color-mix(in_srgb,var(--color-sky-strong)_15%,transparent)] px-1.5 py-0.5 font-semibold text-[var(--color-sky-soft)]">
               {current.stage}
             </span>
             {current.label ? (
@@ -64,7 +64,7 @@ export function Timeline() {
         ) : (
           <span className="font-mono text-[11px] text-[var(--color-muted)]">{t.timeline.idle}</span>
         )}
-        <span className="tabular-nums font-mono text-[11px] text-[#5b688c]">
+        <span className="tabular-nums font-mono text-[11px] text-[var(--color-label)]">
           {hasEvents ? `${cursor + 1}/${total}` : "0/0"}
         </span>
       </div>
@@ -79,7 +79,7 @@ export function Timeline() {
             disabled={!hasEvents}
             title={playing ? t.timeline.pause : t.timeline.replay}
             aria-label={playing ? t.timeline.pause : t.timeline.replay}
-            className="grid h-9 w-9 place-items-center rounded-full bg-sky-500 text-[14px] text-[#04122a] shadow-lg shadow-sky-500/30 transition enabled:hover:bg-sky-400 disabled:opacity-30"
+            className="grid h-9 w-9 place-items-center rounded-full bg-[var(--color-sky-strong)] text-[14px] text-[var(--color-on-accent)] shadow-lg shadow-[color-mix(in_srgb,var(--color-sky-strong)_30%,transparent)] transition enabled:hover:bg-[var(--color-sky)] disabled:opacity-30"
           >
             {playing ? "⏸" : "▶"}
           </button>
@@ -97,7 +97,7 @@ export function Timeline() {
             value={cursor < 0 ? 0 : cursor}
             disabled={!hasEvents}
             onChange={(e) => setCursor(Number(e.target.value))}
-            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[var(--color-line)] accent-sky-400 disabled:opacity-40"
+            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[var(--color-line)] accent-[var(--color-sky)] disabled:opacity-40"
           />
           {hasEvents && (
             <div className="pointer-events-none absolute inset-x-0 top-full mt-1 h-2">
@@ -107,7 +107,7 @@ export function Timeline() {
                   className="absolute top-0 h-2 w-px rounded-full"
                   style={{
                     left: `calc(${frac(i)} * (100% - 14px) + 7px)`,
-                    background: i <= cursor ? "#7dd3fc" : "var(--color-line)",
+                    background: i <= cursor ? "var(--color-sky-soft)" : "var(--color-line)",
                     opacity: i <= cursor ? 0.9 : 0.6,
                   }}
                 />
@@ -136,7 +136,7 @@ function TButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="flex h-8 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-xs text-[var(--color-ink)] transition enabled:hover:border-sky-400/60 enabled:hover:text-sky-300 disabled:opacity-30"
+      className="flex h-8 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-xs text-[var(--color-ink)] transition enabled:hover:border-[color-mix(in_srgb,var(--color-sky)_60%,transparent)] enabled:hover:text-[var(--color-sky-soft)] disabled:opacity-30"
     >
       {children}
     </button>

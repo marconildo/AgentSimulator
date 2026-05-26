@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -15,5 +15,11 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  // Vitest: jsdom gives the theme store a real localStorage + document; tests
+  // run fully offline (the no-hardcoded-colors guard just reads source files).
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.ts"],
   },
 });

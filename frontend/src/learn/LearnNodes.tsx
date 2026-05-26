@@ -23,7 +23,7 @@ export function SectionNode(props: NodeProps) {
       className="w-[230px] rounded-xl px-3 py-2"
       style={{
         border: `1.5px solid ${section.accent}`,
-        background: `linear-gradient(180deg, ${section.accent}22, ${section.accent}08)`,
+        background: `linear-gradient(180deg, color-mix(in srgb, ${section.accent} 13%, transparent), color-mix(in srgb, ${section.accent} 3%, transparent))`,
       }}
     >
       <div className="flex items-center gap-2">

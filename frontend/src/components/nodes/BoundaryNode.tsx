@@ -17,8 +17,8 @@ export function BoundaryNode(props: NodeProps) {
     <div
       className="pointer-events-none h-full w-full rounded-3xl"
       style={{
-        border: `1.5px dashed ${meta.accent}66`,
-        background: `radial-gradient(120% 80% at 50% 0%, ${meta.accent}0f 0%, transparent 55%)`,
+        border: `1.5px dashed color-mix(in srgb, ${meta.accent} 40%, transparent)`,
+        background: `radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, ${meta.accent} 6%, transparent) 0%, transparent 55%)`,
       }}
     >
       <div className="flex items-center gap-1.5 px-4 pt-1.5">

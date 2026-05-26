@@ -36,7 +36,7 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
         {topic.where && (
           <div>
             <Label accent={sec.accent}>{t.learn.inProject}</Label>
-            <code className="mt-1 block break-all rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 font-mono text-[11.5px] text-[#aab6d8]">
+            <code className="mt-1 block break-all rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 font-mono text-[11.5px] text-[var(--color-text-soft)]">
               {topic.where}
             </code>
           </div>
@@ -70,7 +70,7 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
           <span className="text-2xl">{section.icon}</span>
           {section.title}
         </div>
-        <p className="text-[13px] leading-relaxed text-[#aab6d8]">{section.intro}</p>
+        <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{section.intro}</p>
         <div className="space-y-1.5">
           {section.topics.map((t) => (
             <button
@@ -90,13 +90,13 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
       <h2 className="text-lg font-semibold text-[var(--color-ink)]">{t.learn.learnStackTitle}</h2>
-      <p className="text-[13px] leading-relaxed text-[#aab6d8]">{t.learn.learnStackBody}</p>
+      <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{t.learn.learnStackBody}</p>
       <div className="space-y-1.5">
         {sectionsFor(lang).map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
-            className="flex w-full items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-left transition hover:border-sky-400/50"
+            className="flex w-full items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-left transition hover:border-[color-mix(in_srgb,var(--color-sky)_50%,transparent)]"
           >
             <span className="text-lg">{s.icon}</span>
             <span className="text-[13px] text-[var(--color-ink)]">{s.title}</span>
@@ -114,7 +114,7 @@ function Block({ label, accent, children }: { label: string; accent: string; chi
   return (
     <div>
       <Label accent={accent}>{label}</Label>
-      <p className="mt-1 text-[13px] leading-relaxed text-[#cdd6f0]">{children}</p>
+      <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-prose)]">{children}</p>
     </div>
   );
 }

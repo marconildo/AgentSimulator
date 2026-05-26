@@ -42,8 +42,8 @@ export function SettingsPanel() {
         title={s.open}
         className="rounded-full border px-2.5 py-1 text-[13px] transition"
         style={{
-          borderColor: open ? "#5b7cfa" : "var(--color-line)",
-          color: open ? "#a5b4fc" : "var(--color-muted)",
+          borderColor: open ? "var(--color-accent)" : "var(--color-line)",
+          color: open ? "var(--color-indigo-soft)" : "var(--color-muted)",
         }}
       >
         ⚙️
@@ -74,20 +74,20 @@ export function SettingsPanel() {
                   aria-pressed={active}
                   className="rounded-lg border px-2.5 py-2 text-left transition"
                   style={{
-                    borderColor: active ? "#5b7cfa" : "var(--color-line)",
+                    borderColor: active ? "var(--color-accent)" : "var(--color-line)",
                     background: active ? "var(--color-panel-2)" : "transparent",
                   }}
                 >
                   <div className="flex items-center gap-2">
                     <span
                       className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border"
-                      style={{ borderColor: active ? "#7dd3fc" : "var(--color-muted)" }}
+                      style={{ borderColor: active ? "var(--color-sky-soft)" : "var(--color-muted)" }}
                     >
-                      {active && <span className="h-1.5 w-1.5 rounded-full bg-[#7dd3fc]" />}
+                      {active && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-sky-soft)]" />}
                     </span>
                     <span
                       className="font-mono text-[11px] font-semibold"
-                      style={{ color: active ? "#a5b4fc" : "var(--color-ink)" }}
+                      style={{ color: active ? "var(--color-indigo-soft)" : "var(--color-ink)" }}
                     >
                       {o.label}
                     </span>

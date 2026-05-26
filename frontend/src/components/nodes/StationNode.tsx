@@ -35,7 +35,7 @@ export function StationNode(props: NodeProps) {
   const spotlit = isActive;
   const accent = meta.accent;
   const borderColor = spotlit ? accent : "var(--color-line)";
-  const dotColor = spotlit ? accent : "#3a466b";
+  const dotColor = spotlit ? accent : "var(--color-faint)";
 
   return (
     <motion.div
@@ -80,7 +80,7 @@ export function StationNode(props: NodeProps) {
             title={expanded ? t.node.collapse : t.node.expand}
             aria-label={expanded ? t.node.collapse : t.node.expand}
             className="grid h-5 w-5 shrink-0 place-items-center rounded-md border text-[12px] leading-none transition hover:bg-[var(--color-panel-2)]"
-            style={{ borderColor: `${accent}66`, color: accent }}
+            style={{ borderColor: `color-mix(in srgb, ${accent} 40%, transparent)`, color: accent }}
           >
             {expanded ? "⊖" : "⊕"}
           </button>
@@ -89,7 +89,7 @@ export function StationNode(props: NodeProps) {
         <div className="mt-1.5 flex items-center gap-1.5">
           <span
             className="inline-flex rounded border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide"
-            style={{ borderColor: `${accent}55`, color: accent }}
+            style={{ borderColor: `color-mix(in srgb, ${accent} 33%, transparent)`, color: accent }}
           >
             {meta.tag}
           </span>
@@ -133,7 +133,7 @@ function ExpandedBody({ meta, rt }: { meta: StationMeta; rt: StationRuntime }) {
 
   return (
     <div className="space-y-1.5 overflow-hidden">
-      <p className="line-clamp-2 text-[10px] leading-snug text-[#8694b8]">{meta.generic}</p>
+      <p className="line-clamp-2 text-[10px] leading-snug text-[var(--color-muted)]">{meta.generic}</p>
       {rows.length > 0 ? (
         <div className="space-y-0.5">
           {rows.map((r) => (
@@ -146,7 +146,7 @@ function ExpandedBody({ meta, rt }: { meta: StationMeta; rt: StationRuntime }) {
           ))}
         </div>
       ) : (
-        <p className="text-[10px] italic text-[#5b688c]">{i.status.idle}</p>
+        <p className="text-[10px] italic text-[var(--color-label)]">{i.status.idle}</p>
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { Timeline } from "./components/Timeline";
 import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
@@ -53,13 +54,14 @@ export default function App() {
         </div>
         <CloudToggle />
         <LanguageToggle />
+        <ThemeToggle />
         <SettingsPanel />
         <button
           onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}
           className="rounded-full border px-3 py-1 text-[12px] font-medium transition"
           style={{
-            borderColor: page === "learn" ? "#38bdf8" : "var(--color-line)",
-            color: page === "learn" ? "#7dd3fc" : "#aab6d8",
+            borderColor: page === "learn" ? "var(--color-sky)" : "var(--color-line)",
+            color: page === "learn" ? "var(--color-sky-soft)" : "var(--color-text-soft)",
           }}
         >
           {page === "sim" ? `📚 ${t.app.learn}` : `← ${t.app.simulator}`}
@@ -68,8 +70,8 @@ export default function App() {
           <span
             className="rounded-full border px-2.5 py-1 font-mono text-[11px]"
             style={{
-              borderColor: health.demo_mode ? "#a78bfa" : "#34d399",
-              color: health.demo_mode ? "#c4b5fd" : "#6ee7b7",
+              borderColor: health.demo_mode ? "var(--color-violet)" : "var(--color-ok)",
+              color: health.demo_mode ? "var(--color-violet-soft)" : "var(--color-ok-soft)",
             }}
             title={health.demo_mode ? t.app.demoTitle : t.app.liveTitle}
           >
@@ -80,7 +82,7 @@ export default function App() {
           href="https://github.com/reginaldosilva27/AgentSimulator"
           target="_blank"
           rel="noreferrer"
-          className="rounded-full border border-[var(--color-line)] px-3 py-1 text-[12px] text-[var(--color-muted)] transition hover:border-sky-400/60 hover:text-sky-300"
+          className="rounded-full border border-[var(--color-line)] px-3 py-1 text-[12px] text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
         >
           GitHub ↗
         </a>

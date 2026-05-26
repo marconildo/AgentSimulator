@@ -19,8 +19,8 @@ interface FlowEdgeData {
   [key: string]: unknown;
 }
 
-const STREAM_COLOR = "#7dd3fc";
-const SYNC_COLOR = "#8aa0c8";
+const STREAM_COLOR = "var(--color-sky-soft)";
+const SYNC_COLOR = "var(--color-sync)";
 
 export function FlowEdge(props: EdgeProps) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd } = props;
@@ -29,7 +29,7 @@ export function FlowEdge(props: EdgeProps) {
   const i = t.inspector;
   const [hovered, setHovered] = useState(false);
 
-  const accent = data.accent ?? "#38bdf8";
+  const accent = data.accent ?? "var(--color-sky)";
   const active = Boolean(data.active);
   const stream = Boolean(data.stream);
   const lit = active || stream; // currently animating; quiet once the packet passes
@@ -123,7 +123,7 @@ export function FlowEdge(props: EdgeProps) {
                 </div>
               )}
               {data.detail && (
-                <p className="mt-1 text-[10.5px] leading-snug text-[#aab6d8]">{data.detail}</p>
+                <p className="mt-1 text-[10.5px] leading-snug text-[var(--color-text-soft)]">{data.detail}</p>
               )}
               {comm && (
                 <div className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-snug">
@@ -134,7 +134,7 @@ export function FlowEdge(props: EdgeProps) {
                     {comm === "async" ? "⇅ " : "⇄ "}
                     {comm}
                   </span>
-                  {data.commDetail && <span className="text-[#aab6d8]">{data.commDetail}</span>}
+                  {data.commDetail && <span className="text-[var(--color-text-soft)]">{data.commDetail}</span>}
                 </div>
               )}
               <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[9.5px] text-[var(--color-muted)]">

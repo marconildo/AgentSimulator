@@ -51,12 +51,12 @@ export function ChatPanel({ answer }: ChatPanelProps) {
           rows={3}
           placeholder={t.chat.placeholder}
           disabled={streaming}
-          className="resize-none rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-sm text-[var(--color-ink)] outline-none placeholder:text-[#5b688c] focus:border-sky-400/60"
+          className="resize-none rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-label)] focus:border-[color-mix(in_srgb,var(--color-sky)_60%,transparent)]"
         />
         <button
           type="submit"
           disabled={streaming || !input.trim()}
-          className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-[#04122a] transition enabled:hover:bg-sky-400 disabled:opacity-40"
+          className="rounded-xl bg-[var(--color-sky-strong)] px-4 py-2 text-sm font-semibold text-[var(--color-on-accent)] transition enabled:hover:bg-[var(--color-sky)] disabled:opacity-40"
         >
           {streaming ? t.chat.running : t.chat.send}
         </button>
@@ -68,7 +68,7 @@ export function ChatPanel({ answer }: ChatPanelProps) {
             key={ex}
             onClick={() => runExample(ex)}
             disabled={streaming}
-            className="rounded-full border border-[var(--color-line)] px-2.5 py-1 text-[11px] text-[var(--color-muted)] transition enabled:hover:border-sky-400/60 enabled:hover:text-sky-300 disabled:opacity-40"
+            className="rounded-full border border-[var(--color-line)] px-2.5 py-1 text-[11px] text-[var(--color-muted)] transition enabled:hover:border-[color-mix(in_srgb,var(--color-sky)_60%,transparent)] enabled:hover:text-[var(--color-sky-soft)] disabled:opacity-40"
           >
             {ex}
           </button>
@@ -80,7 +80,7 @@ export function ChatPanel({ answer }: ChatPanelProps) {
           {t.chat.answer}
         </div>
         {error ? (
-          <p className="text-sm text-rose-300">⚠ {error}</p>
+          <p className="text-sm text-[var(--color-rose-soft)]">⚠ {error}</p>
         ) : answer ? (
           <motion.p
             initial={{ opacity: 0 }}
@@ -91,7 +91,7 @@ export function ChatPanel({ answer }: ChatPanelProps) {
             {streaming && <span className="caret">▍</span>}
           </motion.p>
         ) : (
-          <p className="text-sm text-[#5b688c]">
+          <p className="text-sm text-[var(--color-label)]">
             {streaming ? t.chat.thinking : t.chat.answerHint}
           </p>
         )}

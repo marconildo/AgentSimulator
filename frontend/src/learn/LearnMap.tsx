@@ -44,7 +44,7 @@ export function LearnMap({ selected, onSelect }: LearnMapProps) {
         if (node.type === "ltopic" || node.type === "lsection") onSelect(node.id);
       }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="#1b2540" />
+      <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="var(--color-dots)" />
       <Controls showInteractive={false} />
     </ReactFlow>
   );
@@ -78,7 +78,10 @@ function buildGraph(selected: string | null, sections: Section[]): { nodes: Node
       id: `root-${section.id}`,
       source: "root",
       target: section.id,
-      style: { stroke: `${section.accent}88`, strokeDasharray: "4 4" },
+      style: {
+        stroke: `color-mix(in srgb, ${section.accent} 53%, transparent)`,
+        strokeDasharray: "4 4",
+      },
     });
 
     section.topics.forEach((topic, j) => {
@@ -93,7 +96,10 @@ function buildGraph(selected: string | null, sections: Section[]): { nodes: Node
         id: `${j === 0 ? section.id : section.topics[j - 1].id}-${topic.id}`,
         source: j === 0 ? section.id : section.topics[j - 1].id,
         target: topic.id,
-        style: { stroke: `${section.accent}66`, strokeDasharray: "4 4" },
+        style: {
+          stroke: `color-mix(in srgb, ${section.accent} 40%, transparent)`,
+          strokeDasharray: "4 4",
+        },
       });
     });
   });

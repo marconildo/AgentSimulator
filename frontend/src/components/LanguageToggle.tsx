@@ -28,9 +28,9 @@ export function LanguageToggle() {
             className="rounded-full px-2 py-0.5 text-[11px] font-semibold transition"
             style={{
               background: active ? "var(--color-panel-2)" : "transparent",
-              borderColor: active ? "#38bdf8" : "transparent",
-              border: `1px solid ${active ? "#38bdf8" : "transparent"}`,
-              color: active ? "#7dd3fc" : "var(--color-muted)",
+              borderColor: active ? "var(--color-sky)" : "transparent",
+              border: `1px solid ${active ? "var(--color-sky)" : "transparent"}`,
+              color: active ? "var(--color-sky-soft)" : "var(--color-muted)",
             }}
           >
             <span className="mr-1" aria-hidden>

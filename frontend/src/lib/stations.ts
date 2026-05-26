@@ -126,7 +126,7 @@ const TIERS_SRC: TierSrc[] = [
       aws: "S3 + CloudFront + WAF",
       gcp: "Cloud Storage + Cloud CDN + Cloud Armor",
     },
-    accent: "#38bdf8",
+    accent: "var(--color-sky)",
     box: { x: 8, y: 64, w: 272, h: 196 },
   },
   {
@@ -139,7 +139,7 @@ const TIERS_SRC: TierSrc[] = [
       aws: "App Runner / ECS Fargate + ALB",
       gcp: "Cloud Run (HTTPS LB)",
     },
-    accent: "#a78bfa",
+    accent: "var(--color-violet)",
     box: { x: 312, y: 64, w: 272, h: 196 },
   },
   {
@@ -152,7 +152,7 @@ const TIERS_SRC: TierSrc[] = [
       aws: "ECS Fargate (private subnet)",
       gcp: "Cloud Run (internal ingress)",
     },
-    accent: "#f472b6",
+    accent: "var(--color-pink)",
     box: { x: 312, y: 320, w: 272, h: 320 },
   },
   {
@@ -165,7 +165,7 @@ const TIERS_SRC: TierSrc[] = [
       aws: "Bedrock · OpenSearch · RDS",
       gcp: "Vertex AI · Vector Search · Cloud SQL",
     },
-    accent: "#34d399",
+    accent: "var(--color-ok)",
     box: { x: 956, y: 64, w: 300, h: 586 },
   },
 ];
@@ -181,7 +181,7 @@ const BOUNDARY_SRC: BoundarySrc = {
     aws: "AWS VPC",
     gcp: "Google Cloud VPC",
   },
-  accent: "#5b7cfa",
+  accent: "var(--color-accent)",
   box: { x: 298, y: 6, w: 972, h: 656 },
 };
 
@@ -192,7 +192,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: "Frontend",
     subtitle: { en: "React UI · browser", pt: "UI React · navegador" },
     icon: "🖥️",
-    accent: "#38bdf8",
+    accent: "var(--color-sky)",
     tag: "TLS 1.3",
     blurb: {
       en: "Runs in the user's browser. It POSTs the message over HTTPS and holds open a Server-Sent Events connection, rendering each stage — and the streamed answer — as events arrive.",
@@ -220,7 +220,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: "Backend",
     subtitle: "FastAPI · ASGI",
     icon: "⚙️",
-    accent: "#a78bfa",
+    accent: "var(--color-violet)",
     tag: "ASGI",
     blurb: {
       en: "A FastAPI web service terminates TLS at the ingress, validates the request, reads recent history from the database, opens an SSE response, and invokes the agent — relaying every trace event back to the browser.",
@@ -247,7 +247,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: "Agent",
     subtitle: { en: "LangGraph runtime", pt: "runtime LangGraph" },
     icon: "🧠",
-    accent: "#f472b6",
+    accent: "var(--color-pink)",
     tag: "ReAct",
     blurb: {
       en: "A LangGraph state machine on a private network. It retrieves context, then loops: reason → maybe call a tool → observe → reason again, until it can answer. This is the agent loop.",
@@ -274,7 +274,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: { en: "App Database", pt: "Banco da Aplicação" },
     subtitle: { en: "Relational · app state", pt: "Relacional · estado da app" },
     icon: "🗄️",
-    accent: "#60a5fa",
+    accent: "var(--color-blue)",
     tag: "SQL",
     blurb: {
       en: "The application's system of record — conversations and history. A real SQLite store here (separate from the RAG vector DB); in production a managed relational service. The backend reads recent history and persists each conversation.",
@@ -301,7 +301,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: "RAG · Vector DB",
     subtitle: "Chroma",
     icon: "📚",
-    accent: "#34d399",
+    accent: "var(--color-ok)",
     tag: "cosine",
     blurb: {
       en: "Embeds the query and runs an approximate nearest-neighbor search over the knowledge base using cosine similarity, returning the most relevant top-k chunks as grounding context.",
@@ -328,7 +328,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: "MCP Tools",
     subtitle: "Model Context Protocol",
     icon: "🔧",
-    accent: "#fbbf24",
+    accent: "var(--color-warn)",
     tag: "MCP",
     blurb: {
       en: "An MCP server exposes tools to the agent. The agent discovers them, and when the model chooses one, the call and its result travel over the MCP transport (here, stdio / JSON-RPC).",
@@ -354,7 +354,7 @@ const STATIONS_SRC: StationSrc[] = [
     title: "LLM",
     subtitle: { en: "Chat completions", pt: "Chat completions" },
     icon: "✨",
-    accent: "#fb923c",
+    accent: "var(--color-orange)",
     tag: "stream",
     blurb: {
       en: "Receives the assembled prompt (system + context + tool results) over HTTPS and streams the answer back token by token — which is why the response types itself out in the chat.",

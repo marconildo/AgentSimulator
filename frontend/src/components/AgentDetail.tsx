@@ -9,7 +9,7 @@ import type { TraceEvent } from "../types/events";
 // Everything is composed from the captured trace (no extra requests), so it
 // stays in sync with the timeline cursor.
 
-const ACCENT = "#f472b6";
+const ACCENT = "var(--color-pink)";
 
 interface AgentDetailProps {
   view: DerivedView;
@@ -61,10 +61,10 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
 
   // Context-window parts with rough token estimates for a proportional bar.
   const parts = [
-    { label: a.systemPrompt, tokens: tok(system), color: "#a78bfa" },
-    { label: a.retrievedContext, tokens: tok(context), color: "#34d399" },
-    { label: a.toolResults, tokens: tok(toolResultsText), color: "#fbbf24" },
-    { label: a.history, tokens: tok(historyText), color: "#60a5fa" },
+    { label: a.systemPrompt, tokens: tok(system), color: "var(--color-violet)" },
+    { label: a.retrievedContext, tokens: tok(context), color: "var(--color-ok)" },
+    { label: a.toolResults, tokens: tok(toolResultsText), color: "var(--color-warn)" },
+    { label: a.history, tokens: tok(historyText), color: "var(--color-blue)" },
   ].filter((p) => p.tokens > 0);
   const totalTokens = parts.reduce((s, p) => s + p.tokens, 0) || 1;
 
@@ -94,11 +94,11 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
           {/* ReAct loop */}
           <Panel title={a.reactLoop} accent={ACCENT}>
             <div className="mb-3 flex items-center gap-1.5 text-[11px]">
-              <Step label={a.reason} color="#f472b6" />
+              <Step label={a.reason} color="var(--color-pink)" />
               <Arrow />
-              <Step label={a.act} color="#fbbf24" />
+              <Step label={a.act} color="var(--color-warn)" />
               <Arrow />
-              <Step label={a.observe} color="#34d399" />
+              <Step label={a.observe} color="var(--color-ok)" />
               <span className="ml-1 text-[var(--color-muted)]">↺</span>
             </div>
             <KV k={a.iterations} v={String(thinks.length)} />
@@ -111,7 +111,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                     <span className="font-mono text-[var(--color-muted)]">#{idx + 1}</span>{" "}
                     <span style={{ color: ACCENT }}>{String(th.data.decision)}</span>
                     {calls.length > 0 && (
-                      <span className="text-[#8694b8]"> → {calls.map((c) => c.name).join(", ")}</span>
+                      <span className="text-[var(--color-muted)]"> → {calls.map((c) => c.name).join(", ")}</span>
                     )}
                   </div>
                 );
@@ -120,7 +120,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
           </Panel>
 
           {/* Working memory */}
-          <Panel title={a.workingMemory} accent="#fbbf24" hint={a.workingMemoryHint}>
+          <Panel title={a.workingMemory} accent="var(--color-warn)" hint={a.workingMemoryHint}>
             {query && (
               <Labeled label={a.userMessage}>
                 <Mono>{query}</Mono>
@@ -128,7 +128,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
             )}
             <Labeled label={a.scratchpad}>
               {toolCalls.length === 0 ? (
-                <p className="text-[11px] italic text-[#5b688c]">{a.noToolCalls}</p>
+                <p className="text-[11px] italic text-[var(--color-label)]">{a.noToolCalls}</p>
               ) : (
                 <div className="space-y-1">
                   {toolCalls.map((c, idx) => (
@@ -136,7 +136,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                       <div className="font-mono text-[11px] text-[var(--color-ink)]">
                         {c.tool}({JSON.stringify(c.args)})
                       </div>
-                      <div className="font-mono text-[11px] text-emerald-300">→ {c.result}</div>
+                      <div className="font-mono text-[11px] text-[var(--color-ok-soft)]">→ {c.result}</div>
                     </div>
                   ))}
                 </div>
@@ -145,16 +145,16 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
           </Panel>
 
           {/* Long-term memory */}
-          <Panel title={a.longTermMemory} accent="#60a5fa" hint={a.longTermMemoryHint}>
+          <Panel title={a.longTermMemory} accent="var(--color-blue)" hint={a.longTermMemoryHint}>
             <Labeled label={a.conversationHistory}>
               {historyPairs.length === 0 ? (
-                <p className="text-[11px] italic text-[#5b688c]">{a.noHistory}</p>
+                <p className="text-[11px] italic text-[var(--color-label)]">{a.noHistory}</p>
               ) : (
                 <div className="space-y-1">
                   {historyPairs.map((h, idx) => (
                     <div key={idx} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]">
-                      <div className="text-[#aab6d8]">🧑 {h.message}</div>
-                      <div className="text-[#8694b8]">🤖 {truncate(h.answer, 80)}</div>
+                      <div className="text-[var(--color-text-soft)]">🧑 {h.message}</div>
+                      <div className="text-[var(--color-muted)]">🤖 {truncate(h.answer, 80)}</div>
                     </div>
                   ))}
                 </div>
@@ -163,7 +163,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
             <Labeled label={a.vectorMemory}>
               <div className="flex flex-wrap gap-1">
                 {chunks.map((c, idx) => (
-                  <span key={idx} className="rounded-full border border-[var(--color-line)] px-2 py-0.5 font-mono text-[10px] text-[#aab6d8]">
+                  <span key={idx} className="rounded-full border border-[var(--color-line)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text-soft)]">
                     {c.source} · {c.score.toFixed(2)}
                   </span>
                 ))}
@@ -172,7 +172,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
           </Panel>
 
           {/* Context window */}
-          <Panel title={a.contextWindow} accent="#34d399" hint={a.contextWindowHint}>
+          <Panel title={a.contextWindow} accent="var(--color-ok)" hint={a.contextWindowHint}>
             <div className="mb-2 flex h-3 w-full overflow-hidden rounded-full border border-[var(--color-line)]">
               {parts.map((p) => (
                 <div
@@ -187,7 +187,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                 <div key={p.label} className="flex items-center justify-between text-[11px]">
                   <span className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
-                    <span className="text-[#aab6d8]">{p.label}</span>
+                    <span className="text-[var(--color-text-soft)]">{p.label}</span>
                   </span>
                   <span className="font-mono text-[var(--color-muted)]">{a.approxTokens(p.tokens)}</span>
                 </div>
@@ -197,7 +197,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
               <Labeled label={a.tools}>
                 <div className="flex flex-wrap gap-1">
                   {tools.map((tl) => (
-                    <span key={tl} className="rounded-full border border-[var(--color-line)] px-2 py-0.5 font-mono text-[10px] text-[#aab6d8]">
+                    <span key={tl} className="rounded-full border border-[var(--color-line)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text-soft)]">
                       {tl}
                     </span>
                   ))}
@@ -264,7 +264,7 @@ function KV({ k, v }: { k: string; v: string }) {
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-2 first:mt-0">
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-[#5b688c]">{label}</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--color-label)]">{label}</div>
       {children}
     </div>
   );

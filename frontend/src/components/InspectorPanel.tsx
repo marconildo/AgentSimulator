@@ -45,7 +45,7 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
         <StatusBadge status={rt.status} accent={meta.accent} i={i} />
       </div>
 
-      <p className="text-[13px] leading-relaxed text-[#aab6d8]">{meta.blurb}</p>
+      <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{meta.blurb}</p>
 
       <div className="flex flex-wrap gap-1.5">
         {lastEnd?.metrics.latency_ms !== undefined && (
@@ -97,7 +97,7 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
                     : "sync"
                   : h.comm;
               return (
-                <div key={id} className="text-[11px] text-[#aab6d8]">
+                <div key={id} className="text-[11px] text-[var(--color-text-soft)]">
                   <span className="font-mono">
                     {outgoing ? "→" : "←"} {other.title}
                   </span>
@@ -106,13 +106,13 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
                     · {h.secure ? "🔒 " : ""}
                     {h.protocol}
                   </span>
-                  <div className="pl-3 text-[10.5px] text-[#5b688c]">{h.detail}</div>
-                  <div className="pl-3 text-[10px] text-[#5b688c]">
+                  <div className="pl-3 text-[10.5px] text-[var(--color-label)]">{h.detail}</div>
+                  <div className="pl-3 text-[10px] text-[var(--color-label)]">
                     {h.zone === "public" ? "🛡️" : "🔒"} {zoneLabel} · {h.controls}
                   </div>
                   <div
                     className="pl-3 text-[10px] font-mono"
-                    style={{ color: comm === "async" ? "#7dd3fc" : "#8aa0c8" }}
+                    style={{ color: comm === "async" ? "var(--color-sky-soft)" : "var(--color-sync)" }}
                   >
                     {comm === "async" ? "⇅ " : "⇄ "}
                     {comm} · {comm === "async" ? comms.asyncDetail : comms.syncDetail}
@@ -177,7 +177,7 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                   </div>
                 </Labeled>
               ) : (
-                <p className="text-[11px] text-[#5b688c]">{i.noHistory}</p>
+                <p className="text-[11px] text-[var(--color-label)]">{i.noHistory}</p>
               )}
             </Section>
           )}
@@ -241,11 +241,11 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                 {chunks.map((c, i) => (
                   <div key={i} className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-[#aab6d8]">{c.source}</span>
-                      <span className="font-mono text-emerald-300">{c.score.toFixed(3)}</span>
+                      <span className="font-mono text-[var(--color-text-soft)]">{c.source}</span>
+                      <span className="font-mono text-[var(--color-ok-soft)]">{c.score.toFixed(3)}</span>
                     </div>
                     <ScoreBar value={c.score} />
-                    <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-[#8694b8]">{c.text}</p>
+                    <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-[var(--color-muted)]">{c.text}</p>
                   </div>
                 ))}
               </div>
@@ -267,7 +267,7 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
                 {tools.map((t) => (
                   <div key={t.name}>
                     <div className="font-mono text-[12px] text-[var(--color-ink)]">{t.name}</div>
-                    <div className="text-[11px] text-[#8694b8]">{t.description}</div>
+                    <div className="text-[11px] text-[var(--color-muted)]">{t.description}</div>
                   </div>
                 ))}
               </div>
@@ -371,7 +371,7 @@ function KeyVal({ k, v }: { k: string; v: string }) {
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-2 first:mt-0">
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-[#5b688c]">{label}</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--color-label)]">{label}</div>
       {children}
     </div>
   );
@@ -387,7 +387,7 @@ function Mono({ children }: { children: ReactNode }) {
 
 function Scroll({ children }: { children: ReactNode }) {
   return (
-    <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-panel-2)] p-2 font-mono text-[11px] leading-snug text-[#aab6d8]">
+    <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-panel-2)] p-2 font-mono text-[11px] leading-snug text-[var(--color-text-soft)]">
       {children}
     </pre>
   );
@@ -395,7 +395,7 @@ function Scroll({ children }: { children: ReactNode }) {
 
 function Chip({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full border border-[var(--color-line)] px-2 py-0.5 font-mono text-[10.5px] text-[#aab6d8]">
+    <span className="rounded-full border border-[var(--color-line)] px-2 py-0.5 font-mono text-[10.5px] text-[var(--color-text-soft)]">
       {children}
     </span>
   );
@@ -405,7 +405,7 @@ function ScoreBar({ value }: { value: number }) {
   return (
     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-line)]">
       <div
-        className="h-full rounded-full bg-emerald-400"
+        className="h-full rounded-full bg-[var(--color-ok)]"
         style={{ width: `${Math.max(2, Math.min(100, value * 100))}%` }}
       />
     </div>
@@ -418,7 +418,7 @@ function StatusBadge({ status, accent, i }: { status: string; accent: string; i:
     <span
       className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
       style={{
-        color: status === "idle" ? "#5b688c" : accent,
+        color: status === "idle" ? "var(--color-label)" : accent,
         border: `1px solid ${status === "idle" ? "var(--color-line)" : accent}`,
       }}
     >
@@ -440,13 +440,13 @@ function Overview({
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
       <h2 className="text-sm font-semibold text-[var(--color-ink)]">{i.overviewTitle}</h2>
-      <p className="text-[13px] leading-relaxed text-[#aab6d8]">{i.overviewBody}</p>
+      <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{i.overviewBody}</p>
       <div className="space-y-1.5">
         {stations.map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
-            className="flex w-full items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2.5 py-2 text-left transition hover:border-sky-400/50"
+            className="flex w-full items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2.5 py-2 text-left transition hover:border-[color-mix(in_srgb,var(--color-sky)_50%,transparent)]"
           >
             <span className="text-lg">{s.icon}</span>
             <span className="text-[13px] text-[var(--color-ink)]">{s.title}</span>

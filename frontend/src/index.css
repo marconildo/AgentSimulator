@@ -1,13 +1,97 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Theme tokens. The values in @theme are the DARK theme (the default look), so
+   with nothing stored the app stays dark. Switching to light sets
+   <html data-theme="light">, and the :root[data-theme="light"] block below
+   overrides the same tokens. Every themed surface reads var(--color-*), so the
+   whole UI recolors with no manual re-render.
+
+   Two groups:
+   - surface + text tokens (base/panel/line/ink/muted/…): flip per theme.
+   - accent + semantic tokens (sky/violet/ok/warn/…): hue stays constant; the
+     light values are deepened so they keep contrast on a white background.
+   --------------------------------------------------------------------------- */
 @theme {
+  /* surfaces */
   --color-base: #070b16;
   --color-panel: #0e1424;
   --color-panel-2: #131b2e;
   --color-line: #1f2a44;
+  --color-glow: #14203b; /* radial highlight in the body background */
+  --color-edge-soft: #2a3658; /* scrollbars, dim edge markers */
+  --color-dots: #1b2540; /* react-flow background dots */
+
+  /* text */
   --color-ink: #e6ecff;
+  --color-prose: #cdd6f0; /* learn body copy (brighter than text-soft) */
+  --color-text-soft: #aab6d8;
   --color-muted: #8694b8;
+  --color-label: #5b688c; /* faint labels / placeholders / counters */
+  --color-faint: #3a466b; /* idle dots, attribution */
+  --color-on-accent: #04122a; /* text sitting on a strong accent button */
+
+  /* accents + semantic */
+  --color-accent: #5b7cfa;
+  --color-sky: #38bdf8;
+  --color-sky-strong: #0ea5e9; /* primary action button fill */
+  --color-sky-soft: #7dd3fc; /* also the SSE stream edge color */
+  --color-sync: #8aa0c8; /* sync (blocking) comm marker */
+  --color-violet: #a78bfa;
+  --color-violet-soft: #c4b5fd;
+  --color-indigo-soft: #a5b4fc;
+  --color-pink: #f472b6;
+  --color-rose: #fb7185; /* live dot */
+  --color-rose-soft: #fda4af; /* errors, LIVE label */
+  --color-blue: #60a5fa;
+  --color-ok: #34d399;
+  --color-ok-soft: #6ee7b7;
+  --color-warn: #fbbf24;
+  --color-orange: #fb923c;
+  --color-teal: #2dd4bf;
+
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
+}
+
+/* Light theme. :root[data-theme="light"] (0,2,0) beats the @theme :root (0,1,0)
+   regardless of layer/order, so these overrides always win. */
+:root[data-theme="light"] {
+  /* surfaces */
+  --color-base: #f4f6fb;
+  --color-panel: #ffffff;
+  --color-panel-2: #eef2fb;
+  --color-line: #d6deed;
+  --color-glow: #dbe6fb;
+  --color-edge-soft: #c4cee3;
+  --color-dots: #d8e0ef;
+
+  /* text */
+  --color-ink: #0f1830;
+  --color-prose: #2a3550;
+  --color-text-soft: #46527a;
+  --color-muted: #54618a;
+  --color-label: #5f6b8f;
+  --color-faint: #9aa6c4;
+  --color-on-accent: #ffffff;
+
+  /* accents + semantic — deepened for contrast on white */
+  --color-accent: #4f6ef0;
+  --color-sky: #0284c7;
+  --color-sky-strong: #0284c7;
+  --color-sky-soft: #0369a1;
+  --color-sync: #5b6b8f;
+  --color-violet: #7c3aed;
+  --color-violet-soft: #7c3aed;
+  --color-indigo-soft: #4f46e5;
+  --color-pink: #db2777;
+  --color-rose: #e11d48;
+  --color-rose-soft: #be123c;
+  --color-blue: #2563eb;
+  --color-ok: #059669;
+  --color-ok-soft: #047857;
+  --color-warn: #d97706;
+  --color-orange: #ea580c;
+  --color-teal: #0d9488;
 }
 
 html,
@@ -18,7 +102,7 @@ body,
 }
 
 body {
-  background: radial-gradient(1200px 800px at 70% -10%, #14203b 0%, var(--color-base) 55%);
+  background: radial-gradient(1200px 800px at 70% -10%, var(--color-glow) 0%, var(--color-base) 55%);
   color: var(--color-ink);
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -28,14 +112,14 @@ body {
 /* Scrollbars (subtle, on-theme) */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a3658 transparent;
+  scrollbar-color: var(--color-edge-soft) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2a3658;
+  background: var(--color-edge-soft);
   border-radius: 999px;
 }
 
@@ -45,13 +129,13 @@ body {
 }
 .react-flow__attribution {
   background: transparent !important;
-  color: #3a466b !important;
+  color: var(--color-faint) !important;
 }
 .react-flow__edge-path {
   stroke: var(--color-line);
 }
 
-/* Zoom controls themed to match the dark UI */
+/* Zoom controls themed to match the UI */
 .react-flow__controls {
   box-shadow: none;
   border: 1px solid var(--color-line);

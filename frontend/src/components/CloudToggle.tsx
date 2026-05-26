@@ -27,8 +27,8 @@ export function CloudToggle() {
             className="rounded-full px-2 py-0.5 text-[11px] font-semibold transition"
             style={{
               background: active ? "var(--color-panel-2)" : "transparent",
-              border: `1px solid ${active ? "#5b7cfa" : "transparent"}`,
-              color: active ? "#a5b4fc" : "var(--color-muted)",
+              border: `1px solid ${active ? "var(--color-accent)" : "transparent"}`,
+              color: active ? "var(--color-indigo-soft)" : "var(--color-muted)",
             }}
           >
             <span className="mr-1" aria-hidden>

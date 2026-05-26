@@ -147,7 +147,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: active ? targetAccent : "#2a3658",
+            color: active ? targetAccent : "var(--color-edge-soft)",
           },
         };
       }),
@@ -173,7 +173,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
       }}
       onPaneClick={() => onSelect(null)}
     >
-      <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="#1b2540" />
+      <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="var(--color-dots)" />
       <Controls showInteractive={false} />
     </ReactFlow>
   );

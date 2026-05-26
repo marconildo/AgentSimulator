@@ -17,8 +17,8 @@ export function TierNode(props: NodeProps) {
     <div
       className="pointer-events-none h-full w-full rounded-2xl"
       style={{
-        border: `1px dashed ${meta.accent}55`,
-        background: `linear-gradient(180deg, ${meta.accent}0d 0%, transparent 60%)`,
+        border: `1px dashed color-mix(in srgb, ${meta.accent} 33%, transparent)`,
+        background: `linear-gradient(180deg, color-mix(in srgb, ${meta.accent} 5%, transparent) 0%, transparent 60%)`,
       }}
     >
       <div className="flex items-baseline gap-1.5 overflow-hidden px-3 pt-2">

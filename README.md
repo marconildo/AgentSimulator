@@ -211,12 +211,24 @@ AgentSimulator/
 │   ├── nginx.conf
 │   ├── package.json
 │   └── vite.config.ts
-├── docs/                         # architecture.md, how-it-works.md, images/
+├── docs/                         # architecture.md · how-it-works.md · development-workflow.md · images/
+├── specs/                        # spec-driven development — one folder per feature (NNN-…)
+├── .specify/constitution.md      # project principles (the SDD/TDD constitution)
 ├── docker-compose.yml            # one-command full stack
 ├── .github/workflows/ci.yml      # lint (ruff) + tests (pytest) + frontend build
 └── LICENSE                       # MIT
 ```
 
+## 🧪 How it's built — SDD + TDD
+
+This repo is developed **spec-first and test-first.** A new feature starts as a spec under
+[`specs/`](specs/) (WHAT/WHY → plan → TDD task list), and behavior is driven by failing tests
+(`red → green → refactor`). The non-negotiable principles live in
+[`.specify/constitution.md`](.specify/constitution.md); the workflow is in
+[`specs/README.md`](specs/README.md) and [`docs/development-workflow.md`](docs/development-workflow.md).
+Bug fixes and small tweaks skip the spec but still ship with a test.
+
 ## 🤝 Contributing & license
 
-PRs and issues welcome — this is a learning resource. Licensed under [MIT](LICENSE).
+PRs and issues welcome — this is a learning resource. Please follow the
+[SDD + TDD workflow](docs/development-workflow.md) above. Licensed under [MIT](LICENSE).

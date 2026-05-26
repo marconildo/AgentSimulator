@@ -14,6 +14,9 @@ export interface Strings {
     liveTitle: string;
     language: string;
     cloud: string;
+    theme: string;
+    themeDark: string;
+    themeLight: string;
   };
   chat: {
     title: string;
@@ -182,6 +185,9 @@ const en: Strings = {
     liveTitle: "Live OpenAI calls",
     language: "Language",
     cloud: "Cloud provider",
+    theme: "Theme",
+    themeDark: "Dark",
+    themeLight: "Light",
   },
   chat: {
     title: "Ask the agent",
@@ -361,6 +367,9 @@ const pt: Strings = {
     liveTitle: "Chamadas reais à OpenAI",
     language: "Idioma",
     cloud: "Provedor de nuvem",
+    theme: "Tema",
+    themeDark: "Escuro",
+    themeLight: "Claro",
   },
   chat: {
     title: "Pergunte ao agente",
