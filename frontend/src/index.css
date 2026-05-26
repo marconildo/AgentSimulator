@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  --color-base: #070b16;
+  --color-panel: #0e1424;
+  --color-panel-2: #131b2e;
+  --color-line: #1f2a44;
+  --color-ink: #e6ecff;
+  --color-muted: #8694b8;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(1200px 800px at 70% -10%, #14203b 0%, var(--color-base) 55%);
+  color: var(--color-ink);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars (subtle, on-theme) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3658 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a3658;
+  border-radius: 999px;
+}
+
+/* --- React Flow theming --- */
+.react-flow__background {
+  background: transparent;
+}
+.react-flow__attribution {
+  background: transparent !important;
+  color: #3a466b !important;
+}
+.react-flow__edge-path {
+  stroke: var(--color-line);
+}
+
+/* Zoom controls themed to match the dark UI */
+.react-flow__controls {
+  box-shadow: none;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--color-panel-2);
+  border-bottom: 1px solid var(--color-line);
+}
+.react-flow__controls-button:hover {
+  background: var(--color-line);
+}
+.react-flow__controls-button svg {
+  fill: var(--color-muted);
+}
+
+/* Animated dash flowing along active edges */
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.edge-active path.react-flow__edge-path {
+  stroke-dasharray: 6 6;
+  animation: dash-flow 0.6s linear infinite;
+}
+
+/* Pulsing glow used by active station nodes */
+@keyframes station-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px currentColor);
+  }
+}
+.station-pulse {
+  animation: station-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+.caret {
+  animation: blink 1s step-end infinite;
+}
