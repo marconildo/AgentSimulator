@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 002-interactive-chat |
-| **Status** | clarified |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-26 |
 

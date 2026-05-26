@@ -25,3 +25,22 @@ def test_all_stages_have_dotted_or_simple_ids():
     assert "agent.route" in values
     assert "llm.generate" in values
     assert "respond" in values
+
+
+def test_ingestion_stages_serialize_as_dotted_strings():
+    # 002-interactive-chat — PDF ingestion adds three stages on the rag station.
+    assert Stage.RAG_INGEST_CHUNK == "rag.ingest.chunk"
+    assert Stage.RAG_INGEST_EMBED == "rag.ingest.embed"
+    assert Stage.RAG_INGEST_STORE == "rag.ingest.store"
+    for stage in (Stage.RAG_INGEST_CHUNK, Stage.RAG_INGEST_EMBED, Stage.RAG_INGEST_STORE):
+        payload = TraceEvent(trace_id="t", seq=1, stage=stage).model_dump_json()
+        assert f'"stage":"{stage.value}"' in payload
+
+
+def test_chat_request_accepts_session_id():
+    from app.schemas import ChatRequest
+
+    req = ChatRequest(message="hi", session_id="sess-123")
+    assert req.session_id == "sess-123"
+    # session_id is optional (lazy-created server-side when absent).
+    assert ChatRequest(message="hi").session_id is None

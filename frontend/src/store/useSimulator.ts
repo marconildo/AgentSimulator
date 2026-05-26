@@ -1,14 +1,11 @@
 import { create } from "zustand";
 
-import { useSettings } from "../lib/settings";
-import { batchChat, streamChat } from "../lib/sse";
 import type { StationId } from "../lib/stations";
 import type { TraceEvent } from "../types/events";
 
 export type Status = "idle" | "streaming" | "done" | "error";
 
 interface SimulatorState {
-  input: string;
   status: Status;
   events: TraceEvent[];
   cursor: number; // index of the last visible event (-1 = nothing yet)
@@ -19,12 +16,19 @@ interface SimulatorState {
   detail: StationId | null; // station opened in the focused drill-in overlay
   error: string | null;
 
-  setInput: (value: string) => void;
   select: (id: StationId | null) => void;
   toggleExpand: (id: StationId) => void;
   openDetail: (id: StationId) => void;
   closeDetail: () => void;
-  send: () => Promise<void>;
+
+  // Run lifecycle — chat send + PDF upload both drive these so the canvas
+  // animates either flow from the one shared event log.
+  beginRun: () => AbortSignal; // abort any prior run, reset, start streaming
+  pushTrace: (event: TraceEvent) => void;
+  endRun: () => void;
+  failRun: (message: string) => void;
+  playBatch: (events: TraceEvent[]) => void; // load a finished trace and replay it
+
   reset: () => void;
   setCursor: (index: number) => void;
   step: (delta: number) => void;
@@ -42,7 +46,6 @@ function stopTimer() {
 }
 
 export const useSimulator = create<SimulatorState>((set, get) => ({
-  input: "",
   status: "idle",
   events: [],
   cursor: -1,
@@ -53,7 +56,6 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   detail: null,
   error: null,
 
-  setInput: (value) => set({ input: value }),
   select: (id) => set({ selected: id }),
   toggleExpand: (id) =>
     set((state) => ({
@@ -64,11 +66,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   openDetail: (id) => set({ detail: id, selected: id }),
   closeDetail: () => set({ detail: null }),
 
-  send: async () => {
-    const message = get().input.trim();
-    if (!message || get().status === "streaming") return;
-
-    const mode = useSettings.getState().mode;
+  beginRun: () => {
     abort?.abort();
     abort = new AbortController();
     stopTimer();
@@ -80,33 +78,24 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       playing: false,
       error: null,
     });
+    return abort.signal;
+  },
 
-    try {
-      if (mode === "batch") {
-        // One blocking round-trip: wait for the whole trace, then replay it
-        // from the top so the journey still animates (just not live).
-        const summary = await batchChat(message, abort.signal);
-        set({ events: summary.events, status: "done", cursor: -1, following: false, playing: false });
-        get().togglePlay();
-        return;
-      }
+  pushTrace: (event) =>
+    set((state) => {
+      const events = [...state.events, event];
+      return { events, cursor: state.following ? events.length - 1 : state.cursor };
+    }),
 
-      await streamChat(
-        message,
-        {
-          onTrace: (event) =>
-            set((state) => {
-              const events = [...state.events, event];
-              return { events, cursor: state.following ? events.length - 1 : state.cursor };
-            }),
-          onDone: () => set((state) => ({ status: "done", cursor: state.events.length - 1 })),
-        },
-        abort.signal,
-      );
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      set({ status: "error", error: (err as Error).message });
-    }
+  endRun: () => set((state) => ({ status: "done", cursor: state.events.length - 1 })),
+
+  failRun: (message) => set({ status: "error", error: message }),
+
+  playBatch: (events) => {
+    // One blocking round-trip already finished; replay it from the top so the
+    // journey still animates (just not live).
+    set({ events, status: "done", cursor: -1, following: false, playing: false });
+    get().togglePlay();
   },
 
   reset: () => {

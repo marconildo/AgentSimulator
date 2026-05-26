@@ -9,6 +9,9 @@ export type Stage =
   | "rag.embed"
   | "rag.search"
   | "rag.retrieve"
+  | "rag.ingest.chunk"
+  | "rag.ingest.embed"
+  | "rag.ingest.store"
   | "mcp.discover"
   | "mcp.call"
   | "llm.prompt"
@@ -32,6 +35,7 @@ export interface TraceEvent {
 export interface DoneEvent {
   trace_id: string;
   answer: string;
+  session_id: string;
 }
 
 export interface TraceSummary {

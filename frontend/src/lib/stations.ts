@@ -304,8 +304,8 @@ const STATIONS_SRC: StationSrc[] = [
     accent: "var(--color-ok)",
     tag: "cosine",
     blurb: {
-      en: "Embeds the query and runs an approximate nearest-neighbor search over the knowledge base using cosine similarity, returning the most relevant top-k chunks as grounding context.",
-      pt: "Gera o embedding da consulta e executa uma busca aproximada por vizinhos mais próximos na base de conhecimento usando similaridade de cosseno, retornando os top-k trechos mais relevantes como contexto de fundamentação.",
+      en: "Embeds the query and runs an approximate nearest-neighbor search over the knowledge base using cosine similarity, returning the most relevant top-k chunks as grounding context. It also ingests user-uploaded PDFs — chunk → embed → store — so the agent can ground answers on your own documents.",
+      pt: "Gera o embedding da consulta e executa uma busca aproximada por vizinhos mais próximos na base de conhecimento usando similaridade de cosseno, retornando os top-k trechos mais relevantes como contexto de fundamentação. Também faz a ingestão de PDFs enviados pelo usuário — dividir → incorporar → armazenar — para o agente fundamentar respostas nos seus próprios documentos.",
     },
     generic: { en: "Managed vector database", pt: "Banco de dados vetorial gerenciado" },
     clouds: {
@@ -317,9 +317,17 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "store", pt: "armazenamento" }, v: "Chroma (persistent)" },
       { k: { en: "index", pt: "índice" }, v: "HNSW" },
       { k: { en: "metric", pt: "métrica" }, v: "cosine similarity" },
-      { k: { en: "embeddings", pt: "embeddings" }, v: "text-embedding-3-small / mock" },
+      { k: { en: "embeddings", pt: "embeddings" }, v: "text-embedding-3-small" },
+      { k: { en: "ingestion", pt: "ingestão" }, v: "PDF → chunk → embed → store" },
     ],
-    stages: ["rag.embed", "rag.search", "rag.retrieve"],
+    stages: [
+      "rag.embed",
+      "rag.search",
+      "rag.retrieve",
+      "rag.ingest.chunk",
+      "rag.ingest.embed",
+      "rag.ingest.store",
+    ],
     position: { x: 980, y: 320 },
   },
   {

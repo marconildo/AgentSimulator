@@ -33,6 +33,11 @@ class Stage(StrEnum):
     RAG_EMBED = "rag.embed"
     RAG_SEARCH = "rag.search"
     RAG_RETRIEVE = "rag.retrieve"
+    # PDF ingestion (002-interactive-chat): chunk -> embed -> store. These animate
+    # the same `rag` station as retrieval, but for *writing* user documents.
+    RAG_INGEST_CHUNK = "rag.ingest.chunk"
+    RAG_INGEST_EMBED = "rag.ingest.embed"
+    RAG_INGEST_STORE = "rag.ingest.store"
     MCP_DISCOVER = "mcp.discover"
     MCP_CALL = "mcp.call"
     LLM_PROMPT = "llm.prompt"
@@ -62,6 +67,9 @@ class TraceEvent(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
+    # Conversation this message belongs to. Optional: the backend lazy-creates a
+    # session when absent and returns the id on the SSE ``done`` event.
+    session_id: str | None = None
     # Optional: lets the UI override top_k for experimentation.
     top_k: int | None = None
     # How to deliver the result; see ``DeliveryMode``. Defaults to streaming.

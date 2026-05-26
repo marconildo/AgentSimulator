@@ -32,3 +32,17 @@ async def test_retrieve_emits_rag_stages():
     assert "rag.embed" in stages
     assert "rag.search" in stages
     assert "rag.retrieve" in stages
+
+
+async def test_retrieve_with_session_filter_still_returns_corpus():
+    # D3 — a session with no uploads still retrieves the base corpus through the
+    # `corpus == true OR session_id == active` filter (corpus tagged corpus=True).
+    emitter = TraceEmitter("t", "q")
+    _, chunks = await retrieve(
+        "What is RAG and how does retrieval work?",
+        k=3,
+        emitter=emitter,
+        session_id="session-with-no-docs",
+    )
+    assert chunks, "the corpus must remain retrievable under the session filter"
+    assert chunks[0]["source"] == "rag.md"

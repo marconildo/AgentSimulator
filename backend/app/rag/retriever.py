@@ -20,7 +20,21 @@ from .store import get_vectorstore, reset_vectorstore_cache
 _RECOVERABLE = ("does not exist", "not initialized", "dimension")
 
 
-def _search_with_recovery(query: str, k: int):
+def _scope_filter(session_id: str | None) -> dict[str, Any]:
+    """Restrict the search to the base corpus plus *this* conversation's uploads.
+
+    A query retrieves a single top-k over ``corpus == true`` **OR**
+    ``session_id == <active>`` (D3), so the built-in knowledge base and the
+    documents the user uploaded to this conversation rank together — and other
+    conversations' uploads are excluded. With no active session, only the corpus
+    is in scope.
+    """
+    if session_id:
+        return {"$or": [{"corpus": True}, {"session_id": session_id}]}
+    return {"corpus": True}
+
+
+def _search_with_recovery(query: str, k: int, where: dict[str, Any]):
     """Search, self-healing from a stale/mismatched collection.
 
     The cached Chroma handle pins a collection id; if that collection was reset
@@ -29,7 +43,7 @@ def _search_with_recovery(query: str, k: int):
     live request recovers instead of returning a 500.
     """
     try:
-        return get_vectorstore().similarity_search_with_score(query, k=k)
+        return get_vectorstore().similarity_search_with_score(query, k=k, filter=where)
     except Exception as exc:  # noqa: BLE001 - only recover from known causes
         if not any(sig in str(exc).lower() for sig in _RECOVERABLE):
             raise
@@ -37,11 +51,14 @@ def _search_with_recovery(query: str, k: int):
 
         reset_vectorstore_cache()
         build_index()
-        return get_vectorstore().similarity_search_with_score(query, k=k)
+        return get_vectorstore().similarity_search_with_score(query, k=k, filter=where)
 
 
-async def retrieve(query: str, k: int, emitter: TraceEmitter) -> tuple[str, list[dict[str, Any]]]:
+async def retrieve(
+    query: str, k: int, emitter: TraceEmitter, session_id: str | None = None
+) -> tuple[str, list[dict[str, Any]]]:
     store = get_vectorstore()
+    where = _scope_filter(session_id)
 
     async with emitter.stage(Stage.RAG_EMBED, "Embedding the query") as rec:
         query_vec = store.embeddings.embed_query(query)
@@ -54,8 +71,13 @@ async def retrieve(query: str, k: int, emitter: TraceEmitter) -> tuple[str, list
 
     async with emitter.stage(Stage.RAG_SEARCH, "Searching the vector store") as rec:
         # Re-embeds the query internally; fine for a small-k educational demo.
-        results = _search_with_recovery(query, k=k)
-        rec.data = {"metric": "cosine", "k": k, "candidates": len(results)}
+        results = _search_with_recovery(query, k=k, where=where)
+        rec.data = {
+            "metric": "cosine",
+            "k": k,
+            "candidates": len(results),
+            "scope": "corpus + this conversation's uploads" if session_id else "corpus",
+        }
 
     async with emitter.stage(Stage.RAG_RETRIEVE, "Selecting top-k chunks") as rec:
         chunks: list[dict[str, Any]] = []
@@ -64,9 +86,12 @@ async def retrieve(query: str, k: int, emitter: TraceEmitter) -> tuple[str, list
             chunks.append(
                 {
                     "text": doc.page_content,
-                    "source": doc.metadata.get("source", ""),
+                    "source": doc.metadata.get("source") or doc.metadata.get("filename", ""),
                     "title": doc.metadata.get("title", ""),
                     "score": similarity,
+                    # True for user-uploaded PDFs, False for the built-in corpus —
+                    # lets the UI badge a chunk as coming from the user's document.
+                    "uploaded": not doc.metadata.get("corpus", False),
                 }
             )
         rec.data = {"chunks": chunks, "k": k}

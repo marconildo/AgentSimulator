@@ -88,7 +88,7 @@ export default function App() {
         <>
           <div className="flex min-h-0 flex-1">
             <aside className="w-[340px] shrink-0 border-r border-[var(--color-line)] bg-[var(--color-panel)]">
-              <ChatPanel answer={view.answer} />
+              <ChatPanel liveAnswer={view.answer} />
             </aside>
 
             <main className="relative min-w-0 flex-1">

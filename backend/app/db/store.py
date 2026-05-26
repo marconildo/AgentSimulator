@@ -10,6 +10,11 @@ This is deliberately separate from ``app/rag`` (the *vector* store): one holds
 transactional app state, the other holds embeddings for retrieval — two
 different databases for two different jobs, exactly as in a real deployment.
 
+The schema is session-scoped (002-interactive-chat): a ``sessions`` row per
+conversation, ``messages`` rows (each persisting the RAG chunks retrieved for
+it), and ``documents`` rows tracking uploaded PDFs. Deleting a session cascades
+to its messages and documents.
+
 Queries run in a worker thread so SQLite's blocking calls never stall the
 async event loop.
 """
@@ -17,7 +22,9 @@ async event loop.
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from time import time
@@ -26,70 +33,267 @@ from typing import Any
 from ..config import get_settings
 
 _SCHEMA = """
-CREATE TABLE IF NOT EXISTS conversations (
+CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
+    title      TEXT,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id         TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     message    TEXT NOT NULL,
     answer     TEXT NOT NULL,
+    chunks     TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL
-)
+);
+CREATE TABLE IF NOT EXISTS documents (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    filename    TEXT NOT NULL,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_documents_session ON documents(session_id, created_at);
 """
+
+# The first user message labels the conversation; truncate so the sidebar list
+# stays tidy (D7).
+_TITLE_MAX = 60
 
 
 class ConversationStore:
-    """Persists conversations to SQLite, one row per request."""
+    """Session-scoped conversation store backed by SQLite."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
-            conn.execute(_SCHEMA)
+            conn.executescript(_SCHEMA)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
+        # FK constraints are off by default in SQLite; enable per connection so
+        # deleting a session cascades to its messages and documents.
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
-    # --- sync bodies (run off the event loop) --------------------------------
+    # --- sessions ------------------------------------------------------------
 
-    def _read_history_sync(self, limit: int) -> dict[str, Any]:
+    def _create_session_sync(self, session_id: str | None, title: str | None) -> dict[str, Any]:
+        sid = session_id or uuid.uuid4().hex
+        now = time()
         with self._connect() as conn:
-            total = conn.execute("SELECT COUNT(*) AS n FROM conversations").fetchone()["n"]
+            conn.execute(
+                "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (sid, title, now, now),
+            )
+        return {"id": sid, "title": title, "created_at": now, "updated_at": now}
+
+    def _ensure_session_sync(self, session_id: str) -> dict[str, Any]:
+        existing = self._get_session_sync(session_id)
+        if existing is not None:
+            return existing
+        return self._create_session_sync(session_id, None)
+
+    def _get_session_sync(self, session_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def _list_sessions_sync(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
             rows = conn.execute(
-                "SELECT message, answer FROM conversations ORDER BY created_at DESC LIMIT ?",
-                (limit,),
+                """
+                SELECT s.id, s.title, s.created_at, s.updated_at,
+                       (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+                FROM sessions s
+                ORDER BY s.updated_at DESC, s.created_at DESC
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def _delete_session_sync(self, session_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        # Embeddings are intentionally left in the vector store (D6); only the
+        # relational rows (and, by FK cascade, this session's messages/documents)
+        # are removed here.
+        return {"deleted": cur.rowcount > 0, "session_id": session_id}
+
+    # --- messages ------------------------------------------------------------
+
+    def _write_message_sync(
+        self,
+        session_id: str,
+        message_id: str,
+        message: str,
+        answer: str,
+        chunks: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        now = time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO messages "
+                "(id, session_id, message, answer, chunks, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (message_id, session_id, message, answer, json.dumps(chunks or []), now),
+            )
+            # Bump activity (drives recent-first ordering) and label the session
+            # by its first message if it has no title yet (D7).
+            conn.execute(
+                "UPDATE sessions SET updated_at = ?, title = COALESCE(title, ?) WHERE id = ?",
+                (now, message[:_TITLE_MAX], session_id),
+            )
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", (session_id,)
+            ).fetchone()["n"]
+        return {
+            "table": "messages",
+            "engine": "sqlite",
+            "operation": "INSERT",
+            "row_id": message_id,
+            "session_id": session_id,
+            "total_rows": int(total),
+        }
+
+    def _read_history_sync(self, session_id: str, limit: int) -> dict[str, Any]:
+        with self._connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", (session_id,)
+            ).fetchone()["n"]
+            rows = conn.execute(
+                "SELECT message, answer FROM messages WHERE session_id = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (session_id, limit),
             ).fetchall()
         # Oldest-first so it reads naturally as a conversation transcript.
         recent = [{"message": r["message"], "answer": r["answer"]} for r in reversed(rows)]
         return {
-            "table": "conversations",
+            "table": "messages",
             "engine": "sqlite",
+            "session_id": session_id,
             "total_rows": int(total),
             "recent": recent,
         }
 
-    def _write_sync(self, trace_id: str, message: str, answer: str) -> dict[str, Any]:
+    def _list_messages_sync(self, session_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, message, answer, chunks, created_at FROM messages "
+                "WHERE session_id = ? ORDER BY created_at ASC",
+                (session_id,),
+            ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "message": r["message"],
+                "answer": r["answer"],
+                "chunks": json.loads(r["chunks"] or "[]"),
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+
+    # --- documents -----------------------------------------------------------
+
+    def _add_document_sync(
+        self, session_id: str, document_id: str, filename: str, chunk_count: int
+    ) -> dict[str, Any]:
+        now = time()
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO conversations (id, message, answer, created_at) "
-                "VALUES (?, ?, ?, ?)",
-                (trace_id, message, answer, time()),
+                "INSERT OR REPLACE INTO documents "
+                "(id, session_id, filename, chunk_count, created_at) VALUES (?, ?, ?, ?, ?)",
+                (document_id, session_id, filename, chunk_count, now),
             )
-            total = conn.execute("SELECT COUNT(*) AS n FROM conversations").fetchone()["n"]
         return {
-            "table": "conversations",
-            "engine": "sqlite",
-            "operation": "INSERT",
-            "row_id": trace_id,
-            "total_rows": int(total),
+            "document_id": document_id,
+            "session_id": session_id,
+            "filename": filename,
+            "chunk_count": chunk_count,
+            "created_at": now,
         }
+
+    def _list_documents_sync(self, session_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, filename, chunk_count, created_at FROM documents "
+                "WHERE session_id = ? ORDER BY created_at ASC",
+                (session_id,),
+            ).fetchall()
+        return [
+            {
+                "document_id": r["id"],
+                "filename": r["filename"],
+                "chunk_count": r["chunk_count"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+
+    def _delete_document_sync(self, session_id: str, document_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM documents WHERE id = ? AND session_id = ?",
+                (document_id, session_id),
+            )
+        return {"deleted": cur.rowcount > 0, "document_id": document_id}
 
     # --- async public API ----------------------------------------------------
 
-    async def read_history(self, limit: int = 5) -> dict[str, Any]:
-        return await asyncio.to_thread(self._read_history_sync, limit)
+    async def create_session(
+        self, session_id: str | None = None, title: str | None = None
+    ) -> dict[str, Any]:
+        return await asyncio.to_thread(self._create_session_sync, session_id, title)
 
-    async def write(self, trace_id: str, message: str, answer: str) -> dict[str, Any]:
-        return await asyncio.to_thread(self._write_sync, trace_id, message, answer)
+    async def ensure_session(self, session_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._ensure_session_sync, session_id)
+
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_session_sync, session_id)
+
+    async def list_sessions(self) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_sessions_sync)
+
+    async def delete_session(self, session_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._delete_session_sync, session_id)
+
+    async def write_message(
+        self,
+        session_id: str,
+        message_id: str,
+        message: str,
+        answer: str,
+        chunks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            self._write_message_sync, session_id, message_id, message, answer, chunks
+        )
+
+    async def read_history(self, session_id: str, limit: int = 5) -> dict[str, Any]:
+        return await asyncio.to_thread(self._read_history_sync, session_id, limit)
+
+    async def list_messages(self, session_id: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_messages_sync, session_id)
+
+    async def add_document(
+        self, session_id: str, document_id: str, filename: str, chunk_count: int
+    ) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            self._add_document_sync, session_id, document_id, filename, chunk_count
+        )
+
+    async def list_documents(self, session_id: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_documents_sync, session_id)
+
+    async def delete_document(self, session_id: str, document_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._delete_document_sync, session_id, document_id)
 
 
 @lru_cache

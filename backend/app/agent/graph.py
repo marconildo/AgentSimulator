@@ -56,7 +56,9 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
 
 async def retrieve_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, _provider, _registry = _deps(config)
-    context, chunks = await rag_retrieve(state["message"], state["top_k"], emitter)
+    context, chunks = await rag_retrieve(
+        state["message"], state["top_k"], emitter, session_id=state["session_id"]
+    )
     return {"context": context, "chunks": chunks}
 
 
@@ -166,7 +168,9 @@ def get_compiled_graph():
     builder.add_edge(START, "route")
     builder.add_edge("route", "retrieve")
     builder.add_edge("retrieve", "think")
-    builder.add_conditional_edges("think", _should_continue, {"tools": "tools", "generate": "generate"})
+    builder.add_conditional_edges(
+        "think", _should_continue, {"tools": "tools", "generate": "generate"}
+    )
     builder.add_edge("tools", "think")
     builder.add_edge("generate", "respond")
     builder.add_edge("respond", END)
@@ -179,13 +183,15 @@ async def run_agent(
     emitter: TraceEmitter,
     history: list[dict[str, str]] | None = None,
     mode: str = "stream",
+    session_id: str | None = None,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
     ``history`` is long-term memory (prior turns) loaded from the application
     database; it is folded into the prompt context. ``mode`` controls delivery
     of the answer: ``"stream"`` emits per-token events, ``"batch"`` produces it
-    in one shot.
+    in one shot. ``session_id`` scopes RAG retrieval to the base corpus plus this
+    conversation's uploaded documents.
     """
     provider = get_provider()
     registry = await get_registry()
@@ -193,6 +199,7 @@ async def run_agent(
 
     initial: AgentState = {
         "message": message,
+        "session_id": session_id,
         "top_k": top_k,
         "mode": mode,
         "context": "",

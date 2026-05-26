@@ -214,6 +214,14 @@ function readoutFor(id: StationId, rt: StationRuntime, ro: Strings["readout"]): 
       return rt.status === "idle" ? "" : ro.routing;
     }
     case "rag": {
+      // PDF ingestion (chunk → embed → store) takes precedence when present.
+      const iStore = lastWith(rt.events, (e) => e.stage === "rag.ingest.store" && e.phase === "end");
+      if (iStore) return ro.ingestStored((iStore.data.chunks_stored as number | undefined) ?? 0);
+      const iEmbed = lastWith(rt.events, (e) => e.stage === "rag.ingest.embed" && e.phase === "end");
+      if (iEmbed) return ro.ingestEmbedding((iEmbed.data.num_vectors as number | undefined) ?? 0);
+      const iChunk = lastWith(rt.events, (e) => e.stage === "rag.ingest.chunk");
+      if (iChunk) return ro.ingestChunking((iChunk.data.num_chunks as number | undefined) ?? 0);
+
       const ret = lastWith(rt.events, (e) => e.stage === "rag.retrieve" && e.phase === "end");
       if (ret) {
         const k = (ret.data.k as number | undefined) ?? (ret.data.chunks as unknown[] | undefined)?.length;

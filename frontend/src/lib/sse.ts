@@ -1,30 +1,24 @@
 // Minimal SSE client built on fetch + ReadableStream so we can POST the
-// message (the native EventSource only supports GET).
+// message (the native EventSource only supports GET). The low-level
+// `consumeEventStream` is reused by both chat and PDF-upload streams.
 
 import type { DoneEvent, TraceEvent, TraceSummary } from "../types/events";
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 export interface ChatHandlers {
   onTrace: (event: TraceEvent) => void;
   onDone: (event: DoneEvent) => void;
 }
 
-export async function streamChat(
-  message: string,
-  handlers: ChatHandlers,
-  signal?: AbortSignal,
+/** Consume an SSE response body, invoking `onEvent(type, payload)` per message. */
+export async function consumeEventStream(
+  resp: Response,
+  onEvent: (eventType: string, payload: unknown) => void,
 ): Promise<void> {
-  const resp = await fetch(`${API_BASE}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, mode: "stream" }),
-    signal,
-  });
   if (!resp.ok || !resp.body) {
-    throw new Error(`Chat request failed: ${resp.status}`);
+    throw new Error(`Request failed: ${resp.status}`);
   }
-
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -39,12 +33,12 @@ export async function streamChat(
     while ((boundary = buffer.indexOf("\n\n")) !== -1) {
       const rawMessage = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-      dispatch(rawMessage, handlers);
+      dispatch(rawMessage, onEvent);
     }
   }
 }
 
-function dispatch(rawMessage: string, handlers: ChatHandlers): void {
+function dispatch(rawMessage: string, onEvent: (eventType: string, payload: unknown) => void): void {
   let eventType = "message";
   const dataLines: string[] = [];
 
@@ -55,19 +49,39 @@ function dispatch(rawMessage: string, handlers: ChatHandlers): void {
   }
   if (dataLines.length === 0) return;
 
-  const payload = JSON.parse(dataLines.join("\n"));
-  if (eventType === "trace") handlers.onTrace(payload as TraceEvent);
-  else if (eventType === "done") handlers.onDone(payload as DoneEvent);
+  onEvent(eventType, JSON.parse(dataLines.join("\n")));
+}
+
+export async function streamChat(
+  message: string,
+  handlers: ChatHandlers,
+  signal?: AbortSignal,
+  sessionId?: string | null,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "stream" }),
+    signal,
+  });
+  await consumeEventStream(resp, (type, payload) => {
+    if (type === "trace") handlers.onTrace(payload as TraceEvent);
+    else if (type === "done") handlers.onDone(payload as DoneEvent);
+  });
 }
 
 // Batch delivery: a single POST that blocks until the backend finishes, then
 // returns the whole trace + answer as one JSON payload (synchronous
 // request/response). The caller replays the trace to animate it.
-export async function batchChat(message: string, signal?: AbortSignal): Promise<TraceSummary> {
+export async function batchChat(
+  message: string,
+  signal?: AbortSignal,
+  sessionId?: string | null,
+): Promise<TraceSummary> {
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, mode: "batch" }),
+    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "batch" }),
     signal,
   });
   if (!resp.ok) throw new Error(`Chat request failed: ${resp.status}`);

@@ -89,3 +89,147 @@ def test_batch_returns_full_trace_in_one_json_response():
 def test_unknown_trace_returns_404():
     with TestClient(app) as client:
         assert client.get("/api/trace/nope").status_code == 404
+
+
+# --- 002-interactive-chat: sessions / messages / documents ------------------
+
+
+def _stream_chat(client, body):
+    """POST /api/chat (stream) and return (trace_ids, done_payload)."""
+    done = None
+    trace_id = None
+    with client.stream("POST", "/api/chat", json=body) as resp:
+        assert resp.status_code == 200
+        current = None
+        for line in resp.iter_lines():
+            if line.startswith("event:"):
+                current = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                payload = json.loads(line.split(":", 1)[1].strip())
+                if current == "trace":
+                    trace_id = payload["trace_id"]
+                elif current == "done":
+                    done = payload
+    return trace_id, done
+
+
+def test_session_crud_endpoints():
+    # AC5/AC6/AC4 (DB-free) — create, list recent-first, delete.
+    with TestClient(app) as client:
+        a = client.post("/api/sessions").json()
+        b = client.post("/api/sessions").json()
+        assert a["id"] and b["id"] and a["id"] != b["id"]
+
+        listed = client.get("/api/sessions").json()
+        ids = [s["id"] for s in listed]
+        # Both present, newest first.
+        assert ids.index(b["id"]) < ids.index(a["id"])
+        assert all(
+            {"id", "title", "created_at", "updated_at", "message_count"} <= set(s) for s in listed
+        )
+
+        assert client.delete(f"/api/sessions/{a['id']}").status_code == 200
+        assert a["id"] not in [s["id"] for s in client.get("/api/sessions").json()]
+
+
+def test_messages_and_documents_endpoints_empty_for_new_session():
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        assert client.get(f"/api/sessions/{sid}/messages").json() == []
+        assert client.get(f"/api/sessions/{sid}/documents").json() == []
+
+
+@pytest.mark.openai
+def test_chat_in_session_persists_message_chunks_and_title():
+    # AC1 + AC8 + D7 — a sent message and its retrieved chunks are persisted under
+    # the session, and the first message titles the conversation.
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        _, done = _stream_chat(client, {"message": "What is RAG?", "session_id": sid})
+        assert done is not None
+        assert done["session_id"] == sid  # done echoes the session
+        assert done["answer"].strip()
+
+        msgs = client.get(f"/api/sessions/{sid}/messages").json()
+        assert len(msgs) == 1
+        assert msgs[0]["message"] == "What is RAG?"
+        assert msgs[0]["answer"].strip()
+        # AC8 — the chunks retrieved for the message are persisted with it.
+        assert isinstance(msgs[0]["chunks"], list) and len(msgs[0]["chunks"]) >= 1
+        assert all({"text", "source", "score"} <= set(c) for c in msgs[0]["chunks"])
+
+        # D7 — the session is now titled by its first message; count reflects it.
+        sess = next(s for s in client.get("/api/sessions").json() if s["id"] == sid)
+        assert sess["title"] and sess["title"].startswith("What is RAG")
+        assert sess["message_count"] == 1
+
+
+@pytest.mark.openai
+def test_clear_session_deletes_messages():
+    # AC4 (API side) — deleting the session removes its messages.
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        _stream_chat(client, {"message": "What is RAG?", "session_id": sid})
+        assert len(client.get(f"/api/sessions/{sid}/messages").json()) == 1
+
+        assert client.delete(f"/api/sessions/{sid}").status_code == 200
+        # The session is gone; its messages return empty.
+        assert client.get(f"/api/sessions/{sid}/messages").json() == []
+        assert sid not in [s["id"] for s in client.get("/api/sessions").json()]
+
+
+@pytest.mark.openai
+def test_chat_lazy_creates_session_when_absent():
+    # The endpoint creates a session if the client sends none, echoing its id.
+    with TestClient(app) as client:
+        _, done = _stream_chat(client, {"message": "What is RAG?"})
+        assert done["session_id"]
+        # The lazy-created session is listed and holds the message.
+        assert done["session_id"] in [s["id"] for s in client.get("/api/sessions").json()]
+        assert len(client.get(f"/api/sessions/{done['session_id']}/messages").json()) == 1
+
+
+@pytest.mark.openai
+def test_upload_document_streams_ingestion_stages_and_lists_it():
+    # AC9 + AC2 (over HTTP) — the upload endpoint streams chunk -> embed -> store
+    # and the PDF then appears in the conversation's document list.
+    from tests.test_ingestion import make_pdf
+
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        pdf = make_pdf(["Grounding context improves answers."])
+
+        stages, done = [], None
+        with client.stream(
+            "POST",
+            f"/api/sessions/{sid}/documents",
+            files={"file": ("notes.pdf", pdf, "application/pdf")},
+        ) as resp:
+            assert resp.status_code == 200
+            current = None
+            for line in resp.iter_lines():
+                if line.startswith("event:"):
+                    current = line.split(":", 1)[1].strip()
+                elif line.startswith("data:"):
+                    payload = json.loads(line.split(":", 1)[1].strip())
+                    if current == "trace":
+                        stages.append(payload["stage"])
+                    elif current == "done":
+                        done = payload
+
+        # The three ingest stages fire, in order (each appears as START + END).
+        ingest_ends = [s for s in stages if s.startswith("rag.ingest")]
+        first_seen = list(dict.fromkeys(ingest_ends))
+        assert first_seen == ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"]
+        assert done and done["document_id"]
+
+        docs = client.get(f"/api/sessions/{sid}/documents").json()
+        assert len(docs) == 1
+        assert docs[0]["filename"] == "notes.pdf"
+        assert docs[0]["chunk_count"] >= 1
+
+        # AC3 — removing the document drops its row and its vectors.
+        resp = client.delete(f"/api/sessions/{sid}/documents/{done['document_id']}")
+        assert resp.status_code == 200
+        assert resp.json()["vectors_removed"] >= 1
+        assert client.get(f"/api/sessions/{sid}/documents").json() == []

@@ -219,6 +219,14 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
       );
     }
     case "rag": {
+      // PDF ingestion view (chunk → embed → store) when an upload is in scope.
+      const ingChunk = pick(events, "rag.ingest.chunk", "end");
+      const ingEmbed = pick(events, "rag.ingest.embed", "end");
+      const ingStore = pick(events, "rag.ingest.store", "end");
+      if (ingChunk || ingEmbed || ingStore) {
+        return <IngestionDetail chunk={ingChunk} embed={ingEmbed} store={ingStore} i={i} />;
+      }
+
       const embed = pick(events, "rag.embed", "end");
       const retrieve = pick(events, "rag.retrieve", "end");
       const chunks = (retrieve?.data.chunks as Array<RagChunk>) ?? [];
@@ -236,11 +244,18 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
           {chunks.length > 0 && (
             <Section title={i.retrievedChunks(chunks.length)}>
               <div className="space-y-2">
-                {chunks.map((c, i) => (
-                  <div key={i} className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-[var(--color-text-soft)]">{c.source}</span>
-                      <span className="font-mono text-[var(--color-ok-soft)]">{c.score.toFixed(3)}</span>
+                {chunks.map((c, idx) => (
+                  <div key={idx} className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="truncate font-mono text-[var(--color-text-soft)]">{c.source}</span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {c.uploaded && (
+                          <span className="rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-ok-soft)]">
+                            {i.fromDocument}
+                          </span>
+                        )}
+                        <span className="font-mono text-[var(--color-ok-soft)]">{c.score.toFixed(3)}</span>
+                      </div>
                     </div>
                     <ScoreBar value={c.score} />
                     <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-[var(--color-muted)]">{c.text}</p>
@@ -329,6 +344,91 @@ interface RagChunk {
   source: string;
   title: string;
   score: number;
+  uploaded?: boolean;
+}
+
+// PDF ingestion detail (002-interactive-chat): chunking strategy, per-chunk
+// tokenization, the embedding model/dimensions + a vector preview, and the
+// store result — all composed from the three rag.ingest trace events.
+function IngestionDetail({
+  chunk,
+  embed,
+  store,
+  i,
+}: {
+  chunk?: TraceEvent;
+  embed?: TraceEvent;
+  store?: TraceEvent;
+  i: I;
+}) {
+  const c = (chunk?.data ?? {}) as {
+    strategy?: string;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    num_chunks?: number;
+    total_chars?: number;
+    token_counts?: number[];
+    previews?: string[];
+  };
+  const e = (embed?.data ?? {}) as {
+    model?: string;
+    dim?: number;
+    num_vectors?: number;
+    preview?: number[];
+  };
+  const s = (store?.data ?? {}) as {
+    collection?: string;
+    chunks_stored?: number;
+    total_in_collection?: number;
+  };
+  return (
+    <>
+      {chunk && (
+        <Section title={i.ingestion}>
+          <KeyVal k={i.chunkStrategy} v={String(c.strategy ?? "—")} />
+          <KeyVal k={i.chunkSize} v={`${c.chunk_size ?? "—"} / ${c.chunk_overlap ?? "—"}`} />
+          <KeyVal k={i.retrievedChunks(c.num_chunks ?? 0).replace(/\s*\(.*\)/, "")} v={String(c.num_chunks ?? 0)} />
+          {Array.isArray(c.token_counts) && c.token_counts.length > 0 && (
+            <Labeled label={i.tokensPerChunk}>
+              <div className="flex flex-wrap gap-1">
+                {c.token_counts.map((n, idx) => (
+                  <Chip key={idx}>{n}</Chip>
+                ))}
+              </div>
+            </Labeled>
+          )}
+          {Array.isArray(c.previews) && c.previews.length > 0 && (
+            <Labeled label={i.chunkPreviews}>
+              <div className="space-y-1">
+                {c.previews.map((p, idx) => (
+                  <Mono key={idx}>{p}</Mono>
+                ))}
+              </div>
+            </Labeled>
+          )}
+        </Section>
+      )}
+      {embed && (
+        <Section title={i.queryEmbedding}>
+          <KeyVal k={i.model} v={String(e.model ?? "—")} />
+          <KeyVal k={i.dimensions} v={String(e.dim ?? "—")} />
+          <KeyVal k={i.vectorsStored} v={String(e.num_vectors ?? 0)} />
+          {Array.isArray(e.preview) && e.preview.length > 0 && (
+            <Labeled label={i.vectorPreview}>
+              <Mono>[{e.preview.map((n) => n.toFixed(3)).join(", ")}, …]</Mono>
+            </Labeled>
+          )}
+        </Section>
+      )}
+      {store && (
+        <Section title={i.vectorsStored}>
+          <KeyVal k={i.vectorsStored} v={String(s.chunks_stored ?? 0)} />
+          <KeyVal k={i.totalInCollection} v={String(s.total_in_collection ?? "—")} />
+          <KeyVal k="collection" v={String(s.collection ?? "—")} />
+        </Section>
+      )}
+    </>
+  );
 }
 interface PromptPreview {
   system?: string;

@@ -7,6 +7,9 @@ from typing import Any, TypedDict
 
 class AgentState(TypedDict):
     message: str
+    # Conversation this run belongs to; scopes RAG retrieval to the base corpus
+    # plus this conversation's uploaded documents (None = corpus only).
+    session_id: str | None
     top_k: int
     # Delivery mode ("stream" | "batch"); batch generates the answer in one shot.
     mode: str

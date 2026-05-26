@@ -43,9 +43,16 @@ def pytest_configure(config):
     # [openai] suite is skipped too (see pytest_collection_modifyitems).
     if get_settings().has_openai_key:
         from app.rag.ingest import build_index
-        from app.rag.store import reset_vectorstore_cache
+        from app.rag.store import get_vectorstore, reset_vectorstore_cache
 
         reset_vectorstore_cache()
+        # build_index only clears corpus vectors (it must preserve user uploads in
+        # production); for a hermetic test run, fully reset the throwaway
+        # collection first so uploaded vectors from a prior run don't linger.
+        try:
+            get_vectorstore().reset_collection()
+        except Exception:  # noqa: BLE001 - empty/new collection is fine
+            pass
         build_index()
 
 

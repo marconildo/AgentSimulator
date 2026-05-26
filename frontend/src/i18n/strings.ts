@@ -26,6 +26,26 @@ export interface Strings {
     thinking: string;
     answerHint: string;
     examples: string[];
+    // Conversation list ↔ thread (002-interactive-chat).
+    conversations: string;
+    newChat: string;
+    empty: string;
+    untitled: string;
+    back: string;
+    you: string;
+    agent: string;
+    sources: string;
+    fromDoc: string;
+    emptyThread: string;
+    messages: (n: number) => string;
+    clear: string;
+    clearConfirm: string;
+    uploadPdf: string;
+    documents: string;
+    removeDoc: string;
+    chunksStored: (n: number) => string;
+    uploading: string;
+    uploadFailed: string;
   };
   inspector: {
     overviewTitle: string;
@@ -58,6 +78,16 @@ export interface Strings {
     model: string;
     dimensions: string;
     retrievedChunks: (n: number) => string;
+    // PDF ingestion (002-interactive-chat).
+    ingestion: string;
+    chunkStrategy: string;
+    chunkSize: string;
+    tokensPerChunk: string;
+    chunkPreviews: string;
+    vectorsStored: string;
+    totalInCollection: string;
+    vectorPreview: string;
+    fromDocument: string;
     discoveredTools: string;
     transport: string;
     toolCall: string;
@@ -119,6 +149,10 @@ export interface Strings {
     dbQuerying: string;
     dbHistory: (n: number) => string;
     dbPersisted: string;
+    // PDF ingestion (002-interactive-chat).
+    ingestChunking: (n: number) => string;
+    ingestEmbedding: (n: number) => string;
+    ingestStored: (n: number) => string;
   };
   node: {
     expand: string;
@@ -199,6 +233,25 @@ const en: Strings = {
       "How do MCP tools work?",
       "What time is it right now?",
     ],
+    conversations: "Conversations",
+    newChat: "New chat",
+    empty: "No conversations yet",
+    untitled: "New conversation",
+    back: "Conversations",
+    you: "You",
+    agent: "Agent",
+    sources: "Sources used",
+    fromDoc: "your PDF",
+    emptyThread: "Send a message to start this conversation.",
+    messages: (n) => `${n} message${n === 1 ? "" : "s"}`,
+    clear: "Clear conversation",
+    clearConfirm: "Delete this conversation?",
+    uploadPdf: "Upload PDF",
+    documents: "Documents",
+    removeDoc: "Remove",
+    chunksStored: (n) => `${n} chunk${n === 1 ? "" : "s"}`,
+    uploading: "Ingesting…",
+    uploadFailed: "Upload failed",
   },
   inspector: {
     overviewTitle: "Inspector",
@@ -232,6 +285,15 @@ const en: Strings = {
     model: "model",
     dimensions: "dimensions",
     retrievedChunks: (n) => `Retrieved chunks (top-${n})`,
+    ingestion: "PDF ingestion",
+    chunkStrategy: "chunking strategy",
+    chunkSize: "size / overlap",
+    tokensPerChunk: "tokens per chunk",
+    chunkPreviews: "chunk previews",
+    vectorsStored: "vectors stored",
+    totalInCollection: "total in collection",
+    vectorPreview: "vector preview",
+    fromDocument: "from your PDF",
     discoveredTools: "Discovered tools",
     transport: "transport",
     toolCall: "Tool call",
@@ -297,6 +359,9 @@ const en: Strings = {
     dbQuerying: "querying…",
     dbHistory: (n) => `history: ${n} rows`,
     dbPersisted: "persisted ✓",
+    ingestChunking: (n) => `chunking · ${n}`,
+    ingestEmbedding: (n) => `embedding ${n} vec`,
+    ingestStored: (n) => `stored ${n} ✓`,
   },
   node: {
     expand: "Expand",
@@ -378,6 +443,25 @@ const pt: Strings = {
       "Como funcionam as ferramentas MCP?",
       "Que horas são agora?",
     ],
+    conversations: "Conversas",
+    newChat: "Nova conversa",
+    empty: "Ainda sem conversas",
+    untitled: "Nova conversa",
+    back: "Conversas",
+    you: "Você",
+    agent: "Agente",
+    sources: "Fontes usadas",
+    fromDoc: "seu PDF",
+    emptyThread: "Envie uma mensagem para começar esta conversa.",
+    messages: (n) => `${n} mensage${n === 1 ? "m" : "ns"}`,
+    clear: "Limpar conversa",
+    clearConfirm: "Apagar esta conversa?",
+    uploadPdf: "Enviar PDF",
+    documents: "Documentos",
+    removeDoc: "Remover",
+    chunksStored: (n) => `${n} trecho${n === 1 ? "" : "s"}`,
+    uploading: "Processando…",
+    uploadFailed: "Falha no envio",
   },
   inspector: {
     overviewTitle: "Inspetor",
@@ -411,6 +495,15 @@ const pt: Strings = {
     model: "modelo",
     dimensions: "dimensões",
     retrievedChunks: (n) => `Trechos recuperados (top-${n})`,
+    ingestion: "Ingestão de PDF",
+    chunkStrategy: "estratégia de chunking",
+    chunkSize: "tamanho / sobreposição",
+    tokensPerChunk: "tokens por trecho",
+    chunkPreviews: "prévias dos trechos",
+    vectorsStored: "vetores armazenados",
+    totalInCollection: "total na coleção",
+    vectorPreview: "prévia do vetor",
+    fromDocument: "do seu PDF",
     discoveredTools: "Ferramentas descobertas",
     transport: "transporte",
     toolCall: "Chamada de ferramenta",
@@ -476,6 +569,9 @@ const pt: Strings = {
     dbQuerying: "consultando…",
     dbHistory: (n) => `histórico: ${n} linhas`,
     dbPersisted: "persistido ✓",
+    ingestChunking: (n) => `dividindo · ${n}`,
+    ingestEmbedding: (n) => `incorporando ${n} vec`,
+    ingestStored: (n) => `${n} armazenados ✓`,
   },
   node: {
     expand: "Expandir",

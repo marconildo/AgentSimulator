@@ -55,28 +55,33 @@ def load_corpus() -> list[Document]:
             docs.append(
                 Document(
                     page_content=chunk,
-                    metadata={"source": path.name, "title": title, "chunk": i},
+                    # `corpus=True` distinguishes the built-in knowledge base from
+                    # user-uploaded PDFs (tagged with a session_id). Retrieval and
+                    # the corpus rebuild both key off this flag (D2/D3).
+                    metadata={"corpus": True, "source": path.name, "title": title, "chunk": i},
                 )
             )
     return docs
 
 
 def build_index() -> int:
-    """Reset and rebuild the vector index. Returns the number of chunks.
+    """(Re)build the corpus vectors. Returns the number of corpus chunks.
 
-    We clear the collection through Chroma's API (not by deleting files): the
-    persisted directory is a mounted volume in Docker, and deleting it out from
-    under an open client causes "device busy" / "readonly database" errors.
+    Deletes only ``where={"corpus": True}`` and re-adds the corpus, so rebuilding
+    the built-in knowledge base never wipes user-uploaded documents that share
+    the same collection (D2). We clear through Chroma's API (not by deleting
+    files): the persisted directory is a mounted volume in Docker, and deleting
+    it out from under an open client causes "device busy" errors.
     """
     settings = get_settings()
     store = get_vectorstore()
 
     try:
-        store.reset_collection()
-    except Exception:  # noqa: BLE001 - fall back to deleting existing ids
-        existing = store.get().get("ids", [])
+        existing = store.get(where={"corpus": True}).get("ids", [])
         if existing:
             store.delete(ids=existing)
+    except Exception:  # noqa: BLE001 - empty/new collection has nothing to clear
+        pass
 
     docs = load_corpus()
     if not docs:
