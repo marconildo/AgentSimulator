@@ -13,6 +13,7 @@ export interface Strings {
     demoTitle: string;
     liveTitle: string;
     language: string;
+    cloud: string;
   };
   chat: {
     title: string;
@@ -30,9 +31,21 @@ export interface Strings {
     overviewBody: string;
     techInfra: string;
     tier: string;
+    role: string;
     hosting: string;
+    cloudExample: (cloud: string) => string;
     networkHops: string;
+    networkZone: string;
+    controls: string;
+    zonePublic: string;
+    zonePrivate: string;
     events: (n: number) => string;
+    historyRead: string;
+    recentMessages: string;
+    totalRows: string;
+    noHistory: string;
+    persisted: string;
+    operation: string;
     requestSent: string;
     answerReceived: string;
     routes: string;
@@ -77,6 +90,9 @@ export interface Strings {
     streaming: (n: number) => string;
     tokens: (n: number) => string;
     score: string;
+    dbQuerying: string;
+    dbHistory: (n: number) => string;
+    dbPersisted: string;
   };
   learn: {
     rootTitle: string;
@@ -101,6 +117,7 @@ const en: Strings = {
     demoTitle: "Deterministic mock — no API key",
     liveTitle: "Live OpenAI calls",
     language: "Language",
+    cloud: "Cloud provider",
   },
   chat: {
     title: "Ask the agent",
@@ -124,9 +141,21 @@ const en: Strings = {
       "The pipeline is split into deployable tiers (containers) that talk over the network. Send a message, then click any station to inspect the real data — protocols and routes, retrieved chunks and scores, tool calls, the assembled prompt, and latency.",
     techInfra: "Technical & infrastructure",
     tier: "tier",
+    role: "role (cloud-agnostic)",
     hosting: "hosting (e.g.)",
+    cloudExample: (cloud) => `example · ${cloud}`,
     networkHops: "network hops",
+    networkZone: "network zone",
+    controls: "controls",
+    zonePublic: "public internet",
+    zonePrivate: "private network",
     events: (n) => `${n} event${n === 1 ? "" : "s"}`,
+    historyRead: "Recent history (read)",
+    recentMessages: "recent messages",
+    totalRows: "rows stored",
+    noHistory: "no prior conversations yet",
+    persisted: "Conversation persisted (write)",
+    operation: "operation",
     requestSent: "Request sent",
     answerReceived: "Answer received",
     routes: "Routes",
@@ -171,6 +200,9 @@ const en: Strings = {
     streaming: (n) => `streaming · ${n} tok`,
     tokens: (n) => `${n} tokens`,
     score: "score",
+    dbQuerying: "querying…",
+    dbHistory: (n) => `history: ${n} rows`,
+    dbPersisted: "persisted ✓",
   },
   learn: {
     rootTitle: "How this app works",
@@ -196,6 +228,7 @@ const pt: Strings = {
     demoTitle: "Mock determinístico — sem chave de API",
     liveTitle: "Chamadas reais à OpenAI",
     language: "Idioma",
+    cloud: "Provedor de nuvem",
   },
   chat: {
     title: "Pergunte ao agente",
@@ -219,9 +252,21 @@ const pt: Strings = {
       "O pipeline é dividido em camadas implantáveis (containers) que se comunicam pela rede. Envie uma mensagem e clique em qualquer estação para inspecionar os dados reais — protocolos e rotas, trechos recuperados e seus scores, chamadas de ferramentas, o prompt montado e a latência.",
     techInfra: "Técnico e infraestrutura",
     tier: "camada",
+    role: "papel (agnóstico de nuvem)",
     hosting: "hospedagem (ex.)",
+    cloudExample: (cloud) => `exemplo · ${cloud}`,
     networkHops: "saltos de rede",
+    networkZone: "zona de rede",
+    controls: "controles",
+    zonePublic: "internet pública",
+    zonePrivate: "rede privada",
     events: (n) => `${n} evento${n === 1 ? "" : "s"}`,
+    historyRead: "Histórico recente (leitura)",
+    recentMessages: "mensagens recentes",
+    totalRows: "linhas armazenadas",
+    noHistory: "ainda sem conversas anteriores",
+    persisted: "Conversa persistida (escrita)",
+    operation: "operação",
     requestSent: "Requisição enviada",
     answerReceived: "Resposta recebida",
     routes: "Rotas",
@@ -266,6 +311,9 @@ const pt: Strings = {
     streaming: (n) => `transmitindo · ${n} tok`,
     tokens: (n) => `${n} tokens`,
     score: "score",
+    dbQuerying: "consultando…",
+    dbHistory: (n) => `histórico: ${n} linhas`,
+    dbPersisted: "persistido ✓",
   },
   learn: {
     rootTitle: "Como este app funciona",

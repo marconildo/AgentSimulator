@@ -3,6 +3,7 @@
 export type Stage =
   | "frontend"
   | "backend"
+  | "db.read"
   | "agent.route"
   | "agent.think"
   | "rag.embed"
@@ -12,7 +13,8 @@ export type Stage =
   | "mcp.call"
   | "llm.prompt"
   | "llm.generate"
-  | "respond";
+  | "respond"
+  | "db.write";
 
 export type Phase = "start" | "progress" | "end";
 

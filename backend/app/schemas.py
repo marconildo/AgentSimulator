@@ -20,6 +20,7 @@ class Stage(StrEnum):
 
     FRONTEND = "frontend"
     BACKEND = "backend"
+    DB_READ = "db.read"
     AGENT_ROUTE = "agent.route"
     AGENT_THINK = "agent.think"
     RAG_EMBED = "rag.embed"
@@ -30,6 +31,7 @@ class Stage(StrEnum):
     LLM_PROMPT = "llm.prompt"
     LLM_GENERATE = "llm.generate"
     RESPOND = "respond"
+    DB_WRITE = "db.write"
 
 
 class Phase(StrEnum):

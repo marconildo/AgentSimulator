@@ -11,8 +11,10 @@ import { useMemo } from "react";
 
 import { useLang, useT } from "../i18n";
 import type { Strings } from "../i18n/strings";
+import { cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView, StationRuntime } from "../lib/derive";
 import {
+  boundaryFor,
   hopsFor,
   stationByIdFor,
   stationsFor,
@@ -20,10 +22,11 @@ import {
   type StationId,
 } from "../lib/stations";
 import { FlowEdge } from "./edges/FlowEdge";
+import { BoundaryNode } from "./nodes/BoundaryNode";
 import { StationNode } from "./nodes/StationNode";
 import { TierNode } from "./nodes/TierNode";
 
-const nodeTypes = { station: StationNode, tier: TierNode };
+const nodeTypes = { station: StationNode, tier: TierNode, boundary: BoundaryNode };
 const edgeTypes = { flow: FlowEdge };
 
 interface FlowCanvasProps {
@@ -34,19 +37,33 @@ interface FlowCanvasProps {
 
 export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const lang = useLang((s) => s.lang);
+  const cloud = useCloud((s) => s.cloud);
   const t = useT();
   const stations = stationsFor(lang);
   const tiers = tiersFor(lang);
   const hops = hopsFor(lang);
+  const boundary = boundaryFor(lang);
   const stationById = stationByIdFor(lang);
   const ro = t.readout;
 
   const nodes: Node[] = useMemo(() => {
+    // The private-network boundary sits behind everything (inserted first).
+    const boundaryNode: Node = {
+      id: `boundary-${boundary.id}`,
+      type: "boundary",
+      position: { x: boundary.box.x, y: boundary.box.y },
+      data: { meta: boundary, service: cloudValue(boundary, cloud) },
+      style: { width: boundary.box.w, height: boundary.box.h, pointerEvents: "none" },
+      selectable: false,
+      draggable: false,
+      zIndex: 0,
+    };
+
     const tierNodes: Node[] = tiers.map((meta) => ({
       id: `tier-${meta.id}`,
       type: "tier",
       position: { x: meta.box.x, y: meta.box.y },
-      data: { meta },
+      data: { meta, service: cloudValue(meta, cloud) },
       style: { width: meta.box.w, height: meta.box.h, pointerEvents: "none" },
       selectable: false,
       draggable: false,
@@ -67,8 +84,8 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
       zIndex: 1,
     }));
 
-    return [...tierNodes, ...stationNodes];
-  }, [view, selected, stations, tiers, ro]);
+    return [boundaryNode, ...tierNodes, ...stationNodes];
+  }, [view, selected, stations, tiers, boundary, cloud, ro]);
 
   const edges: Edge[] = useMemo(
     () =>
@@ -84,6 +101,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
             accent: stationById[hop.target].accent,
             label: hop.label,
             secure: hop.secure,
+            zone: hop.zone,
             active,
             reverse: active && view.hopReverse,
             stream: id === "frontend-backend" && view.streaming,
@@ -138,6 +156,13 @@ function readoutFor(id: StationId, rt: StationRuntime, ro: Strings["readout"]): 
     }
     case "backend":
       return rt.status === "idle" ? "" : ro.fastapiSse;
+    case "database": {
+      const write = lastWith(rt.events, (e) => e.stage === "db.write" && e.phase === "end");
+      if (write) return ro.dbPersisted;
+      const read = lastWith(rt.events, (e) => e.stage === "db.read" && e.phase === "end");
+      if (read) return ro.dbHistory((read.data.total_rows as number | undefined) ?? 0);
+      return rt.status === "idle" ? "" : ro.dbQuerying;
+    }
     case "agent": {
       const think = lastWith(rt.events, (e) => e.stage === "agent.think" && e.phase === "end");
       if (think) {

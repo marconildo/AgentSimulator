@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ChatPanel } from "./components/ChatPanel";
+import { CloudToggle } from "./components/CloudToggle";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
@@ -46,6 +47,7 @@ export default function App() {
           </h1>
           <p className="text-[11px] text-[var(--color-muted)]">{t.app.tagline}</p>
         </div>
+        <CloudToggle />
         <LanguageToggle />
         <button
           onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}

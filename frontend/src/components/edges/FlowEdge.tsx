@@ -4,6 +4,7 @@ interface FlowEdgeData {
   accent?: string;
   label?: string;
   secure?: boolean;
+  zone?: "public" | "private"; // public internet vs inside the VNet/VPC
   active?: boolean;
   reverse?: boolean; // packet travels target → source
   stream?: boolean; // SSE response flowing back to the client
@@ -61,7 +62,7 @@ export function FlowEdge(props: EdgeProps) {
               color: lit ? strokeColor : "var(--color-muted)",
             }}
           >
-            {data.secure ? "🔒 " : ""}
+            {data.zone === "public" ? "🛡️ " : data.secure ? "🔒 " : ""}
             {stream ? "SSE stream ↩" : data.label}
           </div>
         </EdgeLabelRenderer>

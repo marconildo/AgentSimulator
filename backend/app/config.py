@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     chroma_dir: str = "app/data/chroma"
     corpus_dir: str = "app/data/corpus"
 
+    # --- Application database (relational system of record) ---
+    app_db_path: str = "app/data/app.sqlite3"
+
     # --- HTTP ---
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
@@ -52,6 +55,10 @@ class Settings(BaseSettings):
     @property
     def chroma_path(self) -> Path:
         return self._abs(self.chroma_dir)
+
+    @property
+    def app_db_path_abs(self) -> Path:
+        return self._abs(self.app_db_path)
 
     @property
     def corpus_path(self) -> Path:

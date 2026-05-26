@@ -3,6 +3,11 @@
 Follow one message, `"What is 12 * (3 + 1)?"`, through every station. Open the inspector on the
 right of the app and click each station to see the real data described below.
 
+> Two header toggles change what you see without changing the run: **language** (EN/PT) and
+> **cloud provider** (Generic / Azure / AWS / GCP — swaps the example service names on each tier).
+> Note the dashed **private-network boundary** (VNet / VPC) around every tier except the Client:
+> only the public ingress crosses it.
+
 ## 1. Frontend — the message leaves the browser
 
 You type and hit send. The frontend POSTs `{ "message": "..." }` to `/api/chat` and immediately
@@ -14,6 +19,13 @@ arriving from the backend in real time.
 The API creates a `trace_id`, builds a `TraceEmitter`, and returns a streaming response. It runs
 the agent as a background task and forwards each emitted event to the browser. When the run
 finishes it stores the full trace so you can replay it with the timeline.
+
+## 2b. App database — reading recent history (`db.read`)
+
+Before invoking the agent, the backend queries its **application database** — a real SQLite store
+(a managed SQL service in production), separate from the RAG vector DB. The App Database station's
+inspector shows how many conversations are stored and the most recent messages. This is the
+transactional system of record: users, chat history, sessions.
 
 ## 3. Agent — routing and reasoning (LangGraph)
 
@@ -58,6 +70,12 @@ out in the chat panel and the LLM station shows a live token count.
 
 The final answer is emitted and rendered in the chat, closing the loop that started with your
 message.
+
+## 8. App database — persisting the conversation (`db.write`)
+
+Finally the backend writes the finished conversation (message + answer) back to the application
+database, so it outlives the request and could be shared across replicas. The App Database station
+lights up a second time, and its inspector shows the `INSERT` and the new row count.
 
 ## Replay it
 

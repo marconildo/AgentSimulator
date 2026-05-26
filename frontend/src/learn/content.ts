@@ -71,14 +71,14 @@ const SECTIONS_SRC: SectionSrc[] = [
         id: "tiers",
         title: { en: "Tiered architecture", pt: "Arquitetura em camadas" },
         what: {
-          en: "Four tiers: Client (browser), API (gateway), Agent (orchestrator), and AI & Data Services (vector DB, tools, LLM).",
-          pt: "Quatro camadas: Cliente (navegador), API (gateway), Agente (orquestrador) e Serviços de IA e Dados (banco vetorial, ferramentas, LLM).",
+          en: "Four tiers, each with its classic n-tier name: Client (Presentation), API (Application), Agent (Compute/worker), and AI & Data Services (Data) — which holds the LLM, the vector DB and the application database.",
+          pt: "Quatro camadas, cada uma com seu nome clássico de n-tier: Cliente (Apresentação), API (Aplicação), Agente (Compute/worker) e Serviços de IA e Dados (Dados) — que abriga o LLM, o vector DB e o banco de dados da aplicação.",
         },
         why: {
-          en: "Separating tiers gives you independent scaling, clear security boundaries (only the API is public), and the freedom to change one layer without touching the others.",
-          pt: "Separar as camadas dá escalabilidade independente, fronteiras de segurança claras (só a API é pública) e a liberdade de alterar uma camada sem mexer nas outras.",
+          en: "Separating tiers gives independent scaling and clear security boundaries: only the Client is on the public internet, everything else sits inside a private network (VNet / VPC). The friendly names stay aligned with the market-standard n-tier model.",
+          pt: "Separar as camadas dá escalabilidade independente e fronteiras de segurança claras: só o Cliente fica na internet pública, todo o resto vive dentro de uma rede privada (VNet / VPC). Os nomes amigáveis ficam alinhados ao modelo n-tier padrão de mercado.",
         },
-        where: "frontend/src/lib/stations.ts (TIERS)",
+        where: "frontend/src/lib/stations.ts (TIERS_SRC · alias)",
       },
       {
         id: "client-tier",
@@ -123,14 +123,14 @@ const SECTIONS_SRC: SectionSrc[] = [
         id: "services-tier",
         title: { en: "AI & data services", pt: "Serviços de IA e dados" },
         what: {
-          en: "Stateful or managed dependencies: the vector database, the MCP tool server, and the LLM endpoint.",
-          pt: "Dependências com estado ou gerenciadas: o banco vetorial, o servidor de ferramentas MCP e o endpoint do LLM.",
+          en: "Stateful or managed dependencies: the application database (relational), the vector database (RAG), the MCP tool server, and the LLM endpoint.",
+          pt: "Dependências com estado ou gerenciadas: o banco de dados da aplicação (relacional), o banco vetorial (RAG), o servidor de ferramentas MCP e o endpoint do LLM.",
         },
         why: {
-          en: "Stateless app tiers stay simple and disposable; state and external capabilities live in dedicated services you can manage and back up independently.",
-          pt: "Camadas de aplicação sem estado ficam simples e descartáveis; o estado e as capacidades externas vivem em serviços dedicados que você gerencia e faz backup de forma independente.",
+          en: "Stateless app tiers stay simple and disposable; state and external capabilities live in dedicated services you manage and back up independently. Note the two databases: a relational one for app state, a vector one for retrieval — different jobs, different stores.",
+          pt: "Camadas de aplicação sem estado ficam simples e descartáveis; o estado e as capacidades externas vivem em serviços dedicados que você gerencia e faz backup de forma independente. Repare nos dois bancos: um relacional para o estado da app, um vetorial para a recuperação — trabalhos diferentes, armazenamentos diferentes.",
         },
-        where: "backend/app/rag/ · backend/app/mcp/ · backend/app/llm/",
+        where: "backend/app/db/ · backend/app/rag/ · backend/app/mcp/ · backend/app/llm/",
       },
     ],
   },
@@ -404,16 +404,16 @@ const SECTIONS_SRC: SectionSrc[] = [
       },
       {
         id: "private-net",
-        title: { en: "Private network & mTLS", pt: "Rede privada e mTLS" },
+        title: { en: "Private network (VNet / VPC) & mTLS", pt: "Rede privada (VNet / VPC) e mTLS" },
         what: {
-          en: "API↔Agent traffic stays on a private, in-cluster network, optionally with mutual TLS.",
-          pt: "O tráfego API↔Agente fica em uma rede privada dentro do cluster, opcionalmente com TLS mútuo.",
+          en: "Every tier except the Client lives inside a private network boundary (Azure VNet / AWS VPC / GCP VPC). Internal traffic (API↔Agent, Agent↔services) stays in-cluster, with mTLS and per-hop network rules (NSG / Security Group).",
+          pt: "Toda camada exceto o Cliente vive dentro de uma fronteira de rede privada (Azure VNet / AWS VPC / GCP VPC). O tráfego interno (API↔Agente, Agente↔serviços) fica no cluster, com mTLS e regras de rede por hop (NSG / Security Group).",
         },
         why: {
-          en: "Internal services should never be internet-exposed; keeping them private shrinks the attack surface to the single API gateway.",
-          pt: "Serviços internos nunca devem ficar expostos à internet; mantê-los privados reduz a superfície de ataque ao único gateway de API.",
+          en: "Internal services should never be internet-exposed; the private boundary shrinks the attack surface to the single public ingress and is drawn explicitly on the canvas.",
+          pt: "Serviços internos nunca devem ficar expostos à internet; a fronteira privada reduz a superfície de ataque ao único ingress público e é desenhada explicitamente no canvas.",
         },
-        where: "API ↔ Agent hop",
+        where: "frontend/src/lib/stations.ts (BOUNDARY_SRC) · private hops",
       },
       {
         id: "cors",
@@ -475,8 +475,8 @@ const SECTIONS_SRC: SectionSrc[] = [
     icon: "🌐",
     accent: "#fbbf24",
     intro: {
-      en: "How the pieces talk and run: containers, network hops, long-lived connections, stateless scaling and an example cloud mapping.",
-      pt: "Como as peças conversam e rodam: containers, saltos de rede, conexões de longa duração, escalabilidade sem estado e um exemplo de mapeamento em nuvem.",
+      en: "How the pieces talk and run: containers, network hops, the private-network boundary, firewalls and private endpoints, long-lived connections, stateless scaling, and how the agnostic model maps onto Azure, AWS or GCP.",
+      pt: "Como as peças conversam e rodam: containers, saltos de rede, a fronteira de rede privada, firewalls e private endpoints, conexões de longa duração, escalabilidade sem estado, e como o modelo agnóstico mapeia para Azure, AWS ou GCP.",
     },
     topics: [
       {
@@ -545,17 +545,56 @@ const SECTIONS_SRC: SectionSrc[] = [
         where: "frontend/nginx.conf · frontend/Dockerfile",
       },
       {
-        id: "azure",
-        title: { en: "Cloud mapping (Azure example)", pt: "Mapeamento em nuvem (exemplo Azure)" },
+        id: "cloud-mapping",
+        title: { en: "Cloud mapping (Azure · AWS · GCP)", pt: "Mapeamento em nuvem (Azure · AWS · GCP)" },
         what: {
-          en: "Client → Static Web Apps + Front Door; API & Agent → Container Apps; vector DB → AI Search / Chroma; LLM → Azure OpenAI.",
-          pt: "Cliente → Static Web Apps + Front Door; API e Agente → Container Apps; banco vetorial → AI Search / Chroma; LLM → Azure OpenAI.",
+          en: "Each agnostic role maps to a managed service per provider — e.g. the API tier → Azure Container Apps / AWS App Runner / Cloud Run; the LLM → Azure OpenAI / Amazon Bedrock / Vertex AI. The header's cloud toggle swaps which names you see.",
+          pt: "Cada papel agnóstico mapeia para um serviço gerenciado por provedor — ex.: a camada de API → Azure Container Apps / AWS App Runner / Cloud Run; o LLM → Azure OpenAI / Amazon Bedrock / Vertex AI. O seletor de nuvem no cabeçalho troca quais nomes você vê.",
         },
         why: {
-          en: "The tier model is cloud-agnostic; this is one concrete mapping showing how each container becomes a managed service.",
-          pt: "O modelo de camadas é agnóstico de nuvem; este é um mapeamento concreto mostrando como cada container vira um serviço gerenciado.",
+          en: "The tier model is cloud-agnostic by design; keeping the providers as a swappable overlay (instead of forking the app per cloud) teaches portability — the same architecture runs anywhere.",
+          pt: "O modelo de camadas é agnóstico por design; manter os provedores como uma camada trocável (em vez de bifurcar o app por nuvem) ensina portabilidade — a mesma arquitetura roda em qualquer lugar.",
         },
-        where: "frontend/src/lib/stations.ts (azure fields)",
+        where: "frontend/src/lib/cloud.ts · clouds{} fields in stations.ts",
+      },
+      {
+        id: "vnet",
+        title: { en: "Private network boundary (VNet / VPC)", pt: "Fronteira de rede privada (VNet / VPC)" },
+        what: {
+          en: "A virtual network that wraps the API, Agent and Services tiers; the Client sits outside it, on the public internet. Drawn as the dashed perimeter on the canvas.",
+          pt: "Uma rede virtual que envolve as camadas de API, Agente e Serviços; o Cliente fica fora dela, na internet pública. Desenhada como o perímetro tracejado no canvas.",
+        },
+        why: {
+          en: "The boundary is the backbone of network security: nothing inside is reachable from the internet except through the controlled public ingress.",
+          pt: "A fronteira é a espinha dorsal da segurança de rede: nada lá dentro é acessível pela internet exceto pelo ingress público controlado.",
+        },
+        where: "frontend/src/lib/stations.ts (BOUNDARY_SRC)",
+      },
+      {
+        id: "firewall-waf",
+        title: { en: "Firewall · WAF · DDoS at the edge", pt: "Firewall · WAF · DDoS na borda" },
+        what: {
+          en: "The single public hop (Client → API) is fronted by a Web Application Firewall and DDoS protection (Front Door / AWS WAF / Cloud Armor) — shown with a shield on that edge.",
+          pt: "O único hop público (Cliente → API) é protegido por um Web Application Firewall e proteção DDoS (Front Door / AWS WAF / Cloud Armor) — mostrado com um escudo nessa aresta.",
+        },
+        why: {
+          en: "Filtering malicious traffic at the edge — before it reaches your code — blocks common web attacks and volumetric floods cheaply.",
+          pt: "Filtrar tráfego malicioso na borda — antes de chegar ao seu código — bloqueia ataques web comuns e enxurradas volumétricas de forma barata.",
+        },
+        where: "public hop · frontend/src/lib/stations.ts (HOPS_SRC zone/controls)",
+      },
+      {
+        id: "private-endpoint",
+        title: { en: "Private endpoints to managed services", pt: "Private endpoints para serviços gerenciados" },
+        what: {
+          en: "Calls from the tiers to managed data/AI services (database, vector store, LLM) travel over private endpoints (Private Endpoint / PrivateLink / Private Service Connect) rather than the public internet.",
+          pt: "Chamadas das camadas para serviços gerenciados de dados/IA (banco, vector store, LLM) trafegam por private endpoints (Private Endpoint / PrivateLink / Private Service Connect) em vez da internet pública.",
+        },
+        why: {
+          en: "Private connectivity keeps managed-service traffic off the public internet, so credentials and data never traverse an exposed path.",
+          pt: "A conectividade privada mantém o tráfego de serviços gerenciados fora da internet pública, então credenciais e dados nunca passam por um caminho exposto.",
+        },
+        where: "private hops · HOPS_SRC (controls)",
       },
     ],
   },
@@ -610,16 +649,16 @@ const SECTIONS_SRC: SectionSrc[] = [
       },
       {
         id: "app-db",
-        title: { en: "Application database", pt: "Banco de dados da aplicação" },
+        title: { en: "Application database (its own station)", pt: "Banco de dados da aplicação (estação própria)" },
         what: {
-          en: "A relational/document DB the backend connects to for users, chat history and sessions. This demo keeps traces in an in-memory store; a real deployment would use Postgres, Azure SQL or Cosmos DB.",
-          pt: "Um banco relacional/documental ao qual o backend se conecta para usuários, histórico de chat e sessões. Esta demo mantém os traces em um armazenamento em memória; uma implantação real usaria Postgres, Azure SQL ou Cosmos DB.",
+          en: "A real relational database — a SQLite store here, a managed SQL service (Azure SQL / RDS / Cloud SQL) in production. The backend reads recent history (db.read) and persists every conversation (db.write); you can watch both light up on the canvas.",
+          pt: "Um banco relacional real — aqui um SQLite, em produção um serviço SQL gerenciado (Azure SQL / RDS / Cloud SQL). O backend lê o histórico recente (db.read) e persiste cada conversa (db.write); dá para ver os dois acendendo no canvas.",
         },
         why: {
-          en: "Conversations, accounts and audit logs must outlive a process and be shared across replicas — that's exactly what a managed database provides.",
-          pt: "Conversas, contas e logs de auditoria precisam sobreviver a um processo e ser compartilhados entre réplicas — é exatamente o que um banco gerenciado oferece.",
+          en: "Conversations, accounts and audit logs must outlive a process and be shared across replicas. It is deliberately separate from the RAG vector store — transactional state and embeddings are different jobs with different databases.",
+          pt: "Conversas, contas e logs de auditoria precisam sobreviver a um processo e ser compartilhados entre réplicas. É propositalmente separado do vector store do RAG — estado transacional e embeddings são trabalhos diferentes com bancos diferentes.",
         },
-        where: "backend/app/trace.py (TraceStore — in-memory today)",
+        where: "backend/app/db/store.py (ConversationStore · SQLite)",
       },
       {
         id: "in-memory",

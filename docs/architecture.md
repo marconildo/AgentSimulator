@@ -15,6 +15,7 @@ The simulator is two apps connected by a streaming event protocol.
 │  GET  /api/health → demo/openai mode, model, index status                     │
 │                                                                               │
 │  TraceEmitter  → normalizes every stage into TraceEvents (queue + store)      │
+│  App database (SQLite ConversationStore) → db.read history / db.write convo   │
 │                                                                               │
 │  LangGraph StateGraph (a bounded ReAct loop):                                 │
 │     route → retrieve → think ──(tool calls?)──▶ tools ──┐                      │
@@ -48,8 +49,10 @@ Defined once in [`backend/app/schemas.py`](../backend/app/schemas.py) and mirror
 }
 ```
 
-Stages: `frontend → backend → agent.route → rag.embed → rag.search → rag.retrieve →
-agent.think → llm.prompt → (mcp.discover, mcp.call) → llm.generate → respond`.
+Stages: `frontend → backend → db.read → agent.route → rag.embed → rag.search → rag.retrieve →
+agent.think → llm.prompt → (mcp.discover, mcp.call) → llm.generate → respond → db.write`.
+The backend reads recent history from the application database before running the agent and
+persists the finished conversation after.
 
 ## How events are produced and consumed
 
@@ -67,32 +70,41 @@ agent.think → llm.prompt → (mcp.discover, mcp.call) → llm.generate → res
 
 ## Stations, tiers and network hops
 
-The canvas shows six **stations** (Frontend, Backend, Agent, RAG, MCP, LLM). Each station
-aggregates one or more protocol **stages** — for example the RAG station covers `rag.embed`,
-`rag.search`, and `rag.retrieve`, and the Frontend station covers both `frontend` (request out)
-and `respond` (answer back).
+The canvas shows seven **stations** (Frontend, Backend, Agent, App Database, RAG, MCP, LLM). Each
+station aggregates one or more protocol **stages** — for example the RAG station covers
+`rag.embed`, `rag.search`, and `rag.retrieve`; the Frontend station covers both `frontend`
+(request out) and `respond` (answer back); and the App Database station covers `db.read` and
+`db.write`.
 
-Stations are grouped into **tiers** — deployable containers that communicate over the network:
+Stations are grouped into **tiers** — deployable containers that communicate over the network.
+Each tier keeps its friendly name plus the canonical **n-tier alias**, and maps to a concrete
+service per cloud (the header's cloud toggle picks Generic / Azure / AWS / GCP):
 
-| Tier | Stations | Example Azure hosting |
-|---|---|---|
-| Client | Frontend | Azure Static Web Apps + Front Door |
-| API | Backend | Azure Container Apps (public ingress) |
-| Agent | Agent | Azure Container Apps (internal) |
-| AI & Data Services | RAG, MCP, LLM | Azure OpenAI · AI Search / Chroma |
+| Tier (alias) | Stations | Azure | AWS | GCP |
+|---|---|---|---|---|
+| Client (Presentation) | Frontend | Static Web Apps + Front Door | S3 + CloudFront + WAF | Cloud Storage + Cloud CDN + Cloud Armor |
+| API (Application) | Backend | Container Apps (public ingress) | App Runner / ECS Fargate + ALB | Cloud Run (HTTPS LB) |
+| Agent (Compute) | Agent | Container Apps (internal) | ECS Fargate (private subnet) | Cloud Run (internal) |
+| AI & Data Services (Data) | App Database, RAG, MCP, LLM | OpenAI · AI Search · SQL | Bedrock · OpenSearch · RDS | Vertex AI · Vector Search · Cloud SQL |
 
-Each **hop** between stations carries a protocol (HTTPS/TLS 1.3, in-cluster mTLS, TCP, MCP/stdio)
-and is drawn with a lock when encrypted. The agent loop animates **back and forth** on the same
-edge (e.g. agent ⇄ MCP), and the SSE response **streams back** along the client↔API edge. Tiers,
-hops, technical detail and the Azure mapping are all centralized in
-[`frontend/src/lib/stations.ts`](../frontend/src/lib/stations.ts) — cloud-agnostic in concept,
-with Azure shown as a concrete example.
+Every tier except the Client lives inside a **private-network boundary** (VNet / VPC), drawn as a
+dashed perimeter on the canvas. Each **hop** carries a protocol (HTTPS/TLS 1.3, mTLS, TCP, SQL,
+MCP/stdio), a `zone` (public vs private) and its security `controls` (WAF · DDoS at the public
+edge; mTLS, NSG / Security Group and Private Endpoints on the private hops). The agent loop
+animates **back and forth** on the same edge (e.g. agent ⇄ MCP), and the SSE response **streams
+back** along the client↔API edge.
+
+The visual model is **cloud-agnostic**: tiers, stations, hops, the boundary and their per-cloud
+service names are centralized in
+[`frontend/src/lib/stations.ts`](../frontend/src/lib/stations.ts), with the active provider chosen
+in [`frontend/src/lib/cloud.ts`](../frontend/src/lib/cloud.ts). "Generic" shows the agnostic role;
+Azure/AWS/GCP show concrete example services.
 
 ## Demo mode vs. OpenAI mode
 
 Only the **LLM reasoning/generation and embeddings** are swapped between modes
 ([`backend/app/llm`](../backend/app/llm), [`backend/app/rag/embeddings.py`](../backend/app/rag/embeddings.py)).
-Everything else — the LangGraph loop, the Chroma vector store, the MCP server and tool
-execution — is real in both modes. Mode is chosen in
+Everything else — the LangGraph loop, the Chroma vector store, the SQLite application database,
+the MCP server and tool execution — is real in both modes. Mode is chosen in
 [`backend/app/config.py`](../backend/app/config.py): explicit `DEMO_MODE` wins, otherwise it is
 inferred from the presence of `OPENAI_API_KEY`.

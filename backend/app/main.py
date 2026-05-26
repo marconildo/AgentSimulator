@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .agent import run_agent
 from .config import get_settings
+from .db.store import get_store
 from .llm.provider import get_provider
 from .rag.ingest import build_index
 from .rag.store import is_indexed
@@ -76,7 +77,21 @@ async def chat(req: ChatRequest):
             async with emitter.stage(
                 Stage.BACKEND, "API received the request", {"message": req.message}
             ) as rec:
+                store = get_store()
+                # Read recent history from the application database (system of record).
+                async with emitter.stage(
+                    Stage.DB_READ, "Loading recent history", {"table": "conversations"}
+                ) as db_rec:
+                    db_rec.data = await store.read_history()
+
                 await run_agent(req.message, top_k, emitter)
+
+                # Persist the finished conversation — separate from the RAG vector store.
+                async with emitter.stage(
+                    Stage.DB_WRITE, "Persisting the conversation"
+                ) as db_rec:
+                    db_rec.data = await store.write(trace_id, req.message, emitter.answer)
+
                 rec.data = {"answer": emitter.answer, "demo_mode": settings.is_demo}
         except Exception as exc:  # noqa: BLE001 - report to the client, don't hang
             await emitter.emit(Stage.BACKEND, Phase.END, "error", {"error": str(exc)})

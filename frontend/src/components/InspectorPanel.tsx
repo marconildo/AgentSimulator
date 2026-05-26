@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
+import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import type { DerivedView } from "../lib/derive";
 import {
   hopsFor,
@@ -59,9 +60,11 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
 }
 
 function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I }) {
+  const cloud = useCloud((s) => s.cloud);
   const tier = tierByIdFor(lang)[meta.tier];
   const stationById = stationByIdFor(lang);
   const hops = hopsFor(lang).filter((h) => h.source === meta.id || h.target === meta.id);
+  const cloudName = CLOUDS.find((c) => c.code === cloud)?.label ?? cloud;
 
   return (
     <Section title={i.techInfra}>
@@ -69,15 +72,19 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
         <KeyVal key={row.k} k={row.k} v={row.v} />
       ))}
       <div className="my-2 h-px bg-[var(--color-line)]" />
-      <KeyVal k={i.tier} v={tier.title} />
-      <KeyVal k={i.hosting} v={meta.azure} />
+      <KeyVal k={i.tier} v={`${tier.title} · ${tier.alias}`} />
+      <KeyVal k={i.role} v={meta.generic} />
+      {cloud !== "generic" && (
+        <KeyVal k={i.cloudExample(cloudName)} v={cloudValue(meta, cloud)} />
+      )}
 
       {hops.length > 0 && (
         <Labeled label={i.networkHops}>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {hops.map((h) => {
               const outgoing = h.source === meta.id;
               const other = stationById[outgoing ? h.target : h.source];
+              const zoneLabel = h.zone === "public" ? i.zonePublic : i.zonePrivate;
               return (
                 <div key={`${h.source}-${h.target}`} className="text-[11px] text-[#aab6d8]">
                   <span className="font-mono">
@@ -89,6 +96,9 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
                     {h.protocol}
                   </span>
                   <div className="pl-3 text-[10.5px] text-[#5b688c]">{h.detail}</div>
+                  <div className="pl-3 text-[10px] text-[#5b688c]">
+                    {h.zone === "public" ? "🛡️" : "🔒"} {zoneLabel} · {h.controls}
+                  </div>
                 </div>
               );
             })}
@@ -129,6 +139,37 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
           ))}
           {ev && <KeyVal k={i.demoModeKey} v={String(ev.data.demo_mode ?? "—")} />}
         </Section>
+      );
+    }
+    case "database": {
+      const read = pick(events, "db.read", "end");
+      const write = pick(events, "db.write", "end");
+      const recent = (read?.data.recent as string[] | undefined) ?? [];
+      return (
+        <>
+          {read && (
+            <Section title={i.historyRead}>
+              <KeyVal k={i.totalRows} v={String(read.data.total_rows ?? 0)} />
+              {recent.length > 0 ? (
+                <Labeled label={i.recentMessages}>
+                  <div className="space-y-1">
+                    {recent.map((m, idx) => (
+                      <Mono key={idx}>{m}</Mono>
+                    ))}
+                  </div>
+                </Labeled>
+              ) : (
+                <p className="text-[11px] text-[#5b688c]">{i.noHistory}</p>
+              )}
+            </Section>
+          )}
+          {write && (
+            <Section title={i.persisted}>
+              <KeyVal k={i.operation} v={String(write.data.operation ?? "INSERT")} />
+              <KeyVal k={i.totalRows} v={String(write.data.total_rows ?? "—")} />
+            </Section>
+          )}
+        </>
       );
     }
     case "agent": {
@@ -377,6 +418,7 @@ function Overview({
   stations: StationMeta[];
   i: I;
 }) {
+  const cloud = useCloud((s) => s.cloud);
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
       <h2 className="text-sm font-semibold text-[var(--color-ink)]">{i.overviewTitle}</h2>
@@ -390,7 +432,9 @@ function Overview({
           >
             <span className="text-lg">{s.icon}</span>
             <span className="text-[13px] text-[var(--color-ink)]">{s.title}</span>
-            <span className="ml-auto font-mono text-[10px] text-[var(--color-muted)]">{s.azure}</span>
+            <span className="ml-auto truncate pl-2 font-mono text-[10px] text-[var(--color-muted)]">
+              {cloudValue(s, cloud)}
+            </span>
           </button>
         ))}
       </div>
