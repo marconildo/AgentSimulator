@@ -27,9 +27,15 @@ from .db.seed import seed_skills
 from .db.store import DuplicateSkillName, get_store
 from .mcp.client import get_registry
 from .rag.ingest import build_index
-from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_pdf
+from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
 from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
 from .schemas import ChatRequest, Phase, SimulateFailure, SkillIn, SkillOut, Stage
+from .storage.object_store import (
+    clear_objects,
+    delete_document_objects,
+    object_key,
+    put_object,
+)
 from .trace import TraceEmitter, trace_store
 
 
@@ -332,12 +338,14 @@ async def get_trace(trace_id: str):
 async def clear_data():
     """Reset both stores (025-clear-databases): remove every user-imported chunk
     from the vector store (the built-in corpus is kept, so retrieval still works
-    with no rebuild) and wipe all relational history. Returns the counts removed:
-    ``sessions_deleted`` / ``messages_deleted`` / ``documents_deleted`` /
-    ``vectors_removed``. Idempotent — a second call returns all zeros."""
+    with no rebuild), wipe all relational history, and delete every stored object.
+    Returns the counts removed: ``sessions_deleted`` / ``messages_deleted`` /
+    ``documents_deleted`` / ``vectors_removed`` / ``objects_deleted``. Idempotent —
+    a second call returns all zeros."""
     vectors_removed = await asyncio.to_thread(delete_uploaded_vectors)
+    objects_deleted = await asyncio.to_thread(clear_objects)
     counts = await get_store().clear_all()
-    return {**counts, "vectors_removed": vectors_removed}
+    return {**counts, "vectors_removed": vectors_removed, "objects_deleted": objects_deleted}
 
 
 # --- Sessions / messages / documents (002-interactive-chat) -----------------
@@ -397,7 +405,24 @@ async def upload_document(session_id: str, file: Annotated[UploadFile, File()]):
             async with emitter.stage(
                 Stage.BACKEND, "API received the upload", {"filename": filename}
             ) as rec:
-                result = await ingest_pdf(data, filename, session_id, document_id, emitter)
+                # 034-storage-ingestion-flow — persist the file to durable object
+                # storage first, then let the indexer read it back. The write is
+                # real (filesystem stand-in for Blob/S3), so the step is load-bearing.
+                content_type = file.content_type or "application/pdf"
+                key = object_key(session_id, document_id, filename)
+                async with emitter.stage(
+                    Stage.STORAGE_UPLOAD, "Storing the upload", {"filename": filename}
+                ) as srec:
+                    uri = await asyncio.to_thread(put_object, key, data, content_type)
+                    srec.data = {
+                        "key": key,
+                        "uri": uri,
+                        "filename": filename,
+                        "size_bytes": len(data),
+                        "content_type": content_type,
+                    }
+                    srec.metrics = {"size_bytes": float(len(data))}
+                result = await ingest_uploaded(key, filename, session_id, document_id, emitter)
                 # Track the document relationally (the vectors live in Chroma).
                 await store.add_document(session_id, document_id, filename, result["chunk_count"])
                 rec.data = result
@@ -429,10 +454,12 @@ async def upload_document(session_id: str, file: Annotated[UploadFile, File()]):
 
 @app.delete("/api/sessions/{session_id}/documents/{document_id}")
 async def delete_document(session_id: str, document_id: str):
-    """Remove a document: delete exactly its vectors, then its relational row (AC3)."""
+    """Remove a document: delete exactly its vectors, its stored object, then its
+    relational row (AC3 · 034-storage-ingestion-flow)."""
     removed = await asyncio.to_thread(delete_document_vectors, document_id)
+    objects_removed = await asyncio.to_thread(delete_document_objects, session_id, document_id)
     row = await get_store().delete_document(session_id, document_id)
-    return {**row, "vectors_removed": removed}
+    return {**row, "vectors_removed": removed, "objects_removed": objects_removed}
 
 
 # --- Skills catalog (027-skills) --------------------------------------------

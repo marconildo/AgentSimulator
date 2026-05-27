@@ -12,6 +12,7 @@ export type Stage =
   | "rag.ingest.chunk"
   | "rag.ingest.embed"
   | "rag.ingest.store"
+  | "storage.upload"
   | "mcp.discover"
   | "mcp.call"
   | "llm.prompt"

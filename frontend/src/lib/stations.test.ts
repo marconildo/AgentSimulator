@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { publicBoundaryFor, stationForEvent, stationsFor, visibleStationIdsFor } from "./stations";
+import {
+  HOP_PAIRS,
+  hopsFor,
+  publicBoundaryFor,
+  stationForEvent,
+  stationsFor,
+  visibleStationIdsFor,
+} from "./stations";
 
 describe("station tech rows", () => {
   it("never bakes a model literal into the static visual model (B2)", () => {
@@ -81,6 +88,62 @@ describe("ingestion station (033-ingestion-node)", () => {
   it("leaves the rag station with only the query-time stages", () => {
     const rag = stationsFor("en").find((s) => s.id === "rag")!;
     expect(rag.stages).toEqual(["rag.embed", "rag.search", "rag.retrieve"]);
+  });
+});
+
+describe("storage station + write-path (034-storage-ingestion-flow)", () => {
+  // AC1/AC11 — a real station with bilingual prose + a filled cloud map.
+  it("exists with bilingual prose and a full cloud map", () => {
+    for (const lang of ["en", "pt"] as const) {
+      const st = stationsFor(lang).find((s) => s.id === "storage");
+      expect(st, `storage (${lang})`).toBeDefined();
+      expect(st!.title.trim()).toBeTruthy();
+      expect(st!.subtitle.trim()).toBeTruthy();
+      expect(st!.blurb.trim()).toBeTruthy();
+      expect(st!.clouds.azure && st!.clouds.aws && st!.clouds.gcp).toBeTruthy();
+    }
+  });
+
+  // AC1 — visible in every scenario (the upload path is real everywhere).
+  it("is visible in simple, intermediate and advanced", () => {
+    for (const sc of ["simple", "intermediate", "advanced"] as const) {
+      expect(visibleStationIdsFor(sc)).toContain("storage");
+    }
+  });
+
+  // AC2 — owns the storage.upload stage and is a real (non-preview) station.
+  it("owns storage.upload and is not a comingSoon preview", () => {
+    const st = stationsFor("en").find((s) => s.id === "storage")!;
+    expect(st.stages).toEqual(["storage.upload"]);
+    expect(st.comingSoon ?? false).toBe(false);
+  });
+
+  // AC6 — the write-path hops exist, bilingual, private. The Backend orchestrates:
+  // it persists the file to storage, then calls the indexer (backend→ingestion),
+  // which upserts into the vector DB (ingestion→rag).
+  it("wires backend→storage, backend→ingestion and ingestion→rag with bilingual private hops", () => {
+    for (const lang of ["en", "pt"] as const) {
+      const hops = hopsFor(lang);
+      for (const [source, target] of [
+        ["backend", "storage"],
+        ["backend", "ingestion"],
+        ["ingestion", "rag"],
+      ] as const) {
+        const hop = hops.find((h) => h.source === source && h.target === target);
+        expect(hop, `${source}→${target} (${lang})`).toBeDefined();
+        expect(hop!.label.trim()).toBeTruthy();
+        expect(hop!.protocol.trim()).toBeTruthy();
+        expect(hop!.detail.trim()).toBeTruthy();
+        expect(hop!.controls.trim()).toBeTruthy();
+        expect(hop!.zone).toBe("private");
+      }
+    }
+  });
+
+  // AC6 — the ingestion node is no longer hop-less (≥1 incoming, ≥1 outgoing).
+  it("gives the ingestion node a real incoming and outgoing edge", () => {
+    expect(HOP_PAIRS.some((p) => p.target === "ingestion")).toBe(true);
+    expect(HOP_PAIRS.some((p) => p.source === "ingestion")).toBe(true);
   });
 });
 

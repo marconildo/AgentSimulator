@@ -137,6 +137,13 @@ export interface Strings {
     indexRefresh: string;
     indexRefreshValue: string;
     indexerIdle: string;
+    // 034-storage-ingestion-flow — the object-storage detail rows.
+    storedObject: string;
+    objectKey: string;
+    size: string;
+    contentType: string;
+    whyStorage: string;
+    whyStorageValue: string;
     discoveredTools: string;
     transport: string;
     toolCall: string;
@@ -321,6 +328,9 @@ export interface Strings {
     ingestChunking: (n: number) => string;
     ingestEmbedding: (n: number) => string;
     ingestStored: (n: number) => string;
+    // 034-storage-ingestion-flow — the object-storage node's compact readout.
+    storing: string;
+    storedObject: (name: string) => string;
     // 017-failure-injection — badge shown on the MCP/LLM readout when a run
     // carries an injected (simulated) failure.
     simulatedError: string;
@@ -568,6 +578,13 @@ const en: Strings = {
     indexRefreshValue:
       "A stale or badly-chunked index quietly degrades answer quality — re-embed when the model or corpus changes.",
     indexerIdle: "Idle — builds on startup, on PDF upload, or on embedding-dimension drift.",
+    storedObject: "Stored object",
+    objectKey: "key",
+    size: "size",
+    contentType: "content type",
+    whyStorage: "Why object storage",
+    whyStorageValue:
+      "Persisting the original decouples upload from indexing: the file is safely stored before (and independently of) being chunked, can be re-indexed if the model changes, and never touches the public internet.",
     discoveredTools: "Discovered tools",
     transport: "transport",
     toolCall: "Tool call",
@@ -787,6 +804,8 @@ const en: Strings = {
     ingestChunking: (n) => `chunking · ${n}`,
     ingestEmbedding: (n) => `embedding ${n} vec`,
     ingestStored: (n) => `stored ${n} ✓`,
+    storing: "storing…",
+    storedObject: (name) => `stored ${name} ✓`,
     simulatedError: "⚠️ simulated failure",
   },
   node: {
@@ -1028,6 +1047,13 @@ const pt: Strings = {
     indexRefreshValue:
       "Um índice desatualizado ou mal chunkado degrada silenciosamente a qualidade — re-embedde quando o modelo ou o corpus muda.",
     indexerIdle: "Ocioso — constrói na inicialização, no upload de PDF, ou ao mudar a dimensão do embedding.",
+    storedObject: "Objeto armazenado",
+    objectKey: "chave",
+    size: "tamanho",
+    contentType: "tipo de conteúdo",
+    whyStorage: "Por que armazenamento de objetos",
+    whyStorageValue:
+      "Persistir o original desacopla o upload da indexação: o arquivo é guardado com segurança antes de (e independentemente de) ser chunkado, pode ser reindexado se o modelo mudar, e nunca passa pela internet pública.",
     discoveredTools: "Ferramentas descobertas",
     transport: "transporte",
     toolCall: "Chamada de ferramenta",
@@ -1247,6 +1273,8 @@ const pt: Strings = {
     ingestChunking: (n) => `dividindo · ${n}`,
     ingestEmbedding: (n) => `incorporando ${n} vec`,
     ingestStored: (n) => `${n} armazenados ✓`,
+    storing: "armazenando…",
+    storedObject: (name) => `${name} armazenado ✓`,
     simulatedError: "⚠️ falha simulada",
   },
   node: {

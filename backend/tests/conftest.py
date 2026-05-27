@@ -16,6 +16,7 @@ import pytest
 _TMP = Path(tempfile.gettempdir())
 os.environ["APP_DB_PATH"] = str(_TMP / "agentsim_test.sqlite3")
 os.environ["CHROMA_DIR"] = str(_TMP / "agentsim_test_chroma")
+os.environ["STORAGE_DIR"] = str(_TMP / "agentsim_test_storage")
 
 
 def _has_openai_key() -> bool:

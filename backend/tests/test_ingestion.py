@@ -132,6 +132,104 @@ async def test_ingest_pdf_emits_stages_in_order_with_detail():
 
 
 @pytest.mark.openai
+async def test_ingest_uploaded_reads_the_document_from_storage():
+    # 034-storage-ingestion-flow AC4 — the indexer reads the stored object (it is
+    # load-bearing): write to storage, ingest from it; remove it and ingestion has
+    # nothing to read.
+    from app.rag.ingestion import ingest_uploaded
+    from app.storage.object_store import delete_object, object_key, put_object
+
+    sid = f"sess-{uuid.uuid4().hex}"
+    did = uuid.uuid4().hex
+    key = object_key(sid, did, "notes.pdf")
+    put_object(key, make_pdf(["Vectors capture meaning."]), "application/pdf")
+
+    result = await ingest_uploaded(key, "notes.pdf", sid, did, TraceEmitter("t", "u"))
+    assert result["document_id"] == did and result["chunk_count"] >= 1
+
+    delete_object(key)  # the durable copy is gone
+    with pytest.raises(FileNotFoundError):
+        await ingest_uploaded(key, "notes.pdf", sid, uuid.uuid4().hex, TraceEmitter("t", "u"))
+
+    delete_document_vectors(did)
+
+
+@pytest.mark.openai
+def test_upload_endpoint_stores_object_then_ingests_in_order():
+    # 034-storage-ingestion-flow AC4 — the SSE upload emits storage.upload BEFORE
+    # the rag.ingest.* stages, and the object lands in durable storage.
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.storage.object_store import delete_session_objects, storage_root
+
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        pdf = make_pdf(["Cosine similarity ranks them."])
+        order: list[str] = []
+        current = None
+        with client.stream(
+            "POST",
+            f"/api/sessions/{sid}/documents",
+            files={"file": ("notes.pdf", pdf, "application/pdf")},
+        ) as resp:
+            assert resp.status_code == 200
+            for line in resp.iter_lines():
+                if line.startswith("event:"):
+                    current = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and current == "trace":
+                    ev = json.loads(line.split(":", 1)[1].strip())
+                    if ev["phase"] == "end":
+                        order.append(ev["stage"])
+
+        assert "storage.upload" in order
+        assert order.index("storage.upload") < order.index("rag.ingest.chunk")
+        # The uploaded object really persisted under the session.
+        from app.storage.object_store import _safe  # noqa: PLC0415
+
+        assert (storage_root() / _safe(sid)).is_dir()
+        delete_session_objects(sid)
+
+
+@pytest.mark.openai
+def test_delete_document_removes_its_stored_object():
+    # 034-storage-ingestion-flow AC9 — deleting a document removes its stored
+    # object (alongside its vectors + relational row).
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.storage.object_store import _safe, storage_root  # noqa: PLC0415
+
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        pdf = make_pdf(["delete me from storage"])
+        document_id = None
+        current = None
+        with client.stream(
+            "POST",
+            f"/api/sessions/{sid}/documents",
+            files={"file": ("d.pdf", pdf, "application/pdf")},
+        ) as resp:
+            for line in resp.iter_lines():
+                if line.startswith("event:"):
+                    current = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and current == "done":
+                    document_id = json.loads(line.split(":", 1)[1].strip())["document_id"]
+
+        assert document_id
+        doc_dir = storage_root() / _safe(sid) / _safe(document_id)
+        assert doc_dir.is_dir()
+
+        resp = client.delete(f"/api/sessions/{sid}/documents/{document_id}")
+        assert resp.status_code == 200
+        assert doc_dir.exists() is False
+
+
+@pytest.mark.openai
 async def test_ingest_tags_vectors_with_session_and_document():
     # AC2 — uploaded vectors are tagged session_id / document_id / corpus=False.
     sid = f"sess-{uuid.uuid4().hex}"

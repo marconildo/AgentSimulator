@@ -38,6 +38,10 @@ class Stage(StrEnum):
     RAG_INGEST_CHUNK = "rag.ingest.chunk"
     RAG_INGEST_EMBED = "rag.ingest.embed"
     RAG_INGEST_STORE = "rag.ingest.store"
+    # Object-storage upload (034-storage-ingestion-flow): the API persists the
+    # uploaded document to durable object storage *before* the indexer reads it
+    # back to chunk/embed/store. Fires between BACKEND and the rag.ingest.* stages.
+    STORAGE_UPLOAD = "storage.upload"
     MCP_DISCOVER = "mcp.discover"
     MCP_CALL = "mcp.call"
     LLM_PROMPT = "llm.prompt"

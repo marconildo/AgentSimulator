@@ -20,10 +20,11 @@ export function PublicFrontierNode(props: NodeProps) {
           borderLeft: "1.5px dashed color-mix(in srgb, var(--color-warn) 55%, transparent)",
         }}
       />
-      {/* A small vertical label riding the line (the gap is too narrow for
-          horizontal text). */}
+      {/* A small vertical label riding the line, centered on the frontier so it
+          clears the horizontal API↔Agent hop arrow near the top (the gap is too
+          narrow for horizontal text). */}
       <span
-        className="absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-md border px-1 py-1.5 text-[9px] font-semibold uppercase tracking-wider"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border px-1 py-1.5 text-[9px] font-semibold uppercase tracking-wider"
         style={{
           borderColor: "color-mix(in srgb, var(--color-warn) 40%, transparent)",
           background: "color-mix(in srgb, var(--color-base) 88%, transparent)",

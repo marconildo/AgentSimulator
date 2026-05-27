@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     # --- Application database (relational system of record) ---
     app_db_path: str = "app/data/app.sqlite3"
 
+    # --- Object storage (034-storage-ingestion-flow) ---
+    # Durable store uploaded documents land in before the indexer reads them. A
+    # local filesystem stand-in for Blob/S3 (a mounted Docker volume, like chroma).
+    storage_dir: str = "app/data/storage"
+
     # --- HTTP ---
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
@@ -90,6 +95,10 @@ class Settings(BaseSettings):
     @property
     def app_db_path_abs(self) -> Path:
         return self._abs(self.app_db_path)
+
+    @property
+    def storage_path(self) -> Path:
+        return self._abs(self.storage_dir)
 
     @property
     def corpus_path(self) -> Path:

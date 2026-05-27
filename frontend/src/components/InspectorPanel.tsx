@@ -283,6 +283,29 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
         </>
       );
     }
+    case "storage": {
+      // 034-storage-ingestion-flow — durable object storage. Shows the real
+      // stored object (key / size / type) when an upload is in scope, plus a
+      // bilingual note on why the upload write-path goes through storage first.
+      const up = pick(events, "storage.upload", "end");
+      const size = up?.data.size_bytes as number | undefined;
+      return (
+        <>
+          {up && (
+            <Section title={i.storedObject}>
+              <KeyVal k={i.objectKey} v={String(up.data.key ?? "—")} />
+              <KeyVal k={i.size} v={typeof size === "number" ? `${size.toLocaleString()} B` : "—"} />
+              <KeyVal k={i.contentType} v={String(up.data.content_type ?? "—")} />
+            </Section>
+          )}
+          <Section title={i.whyStorage}>
+            <p className="text-[11px] leading-relaxed text-[var(--color-text-soft)]">
+              {i.whyStorageValue}
+            </p>
+          </Section>
+        </>
+      );
+    }
     case "ingestion": {
       // 033-ingestion-node — the offline RAG indexer. Shows the real
       // chunk → embed → store detail when an ingestion is in scope, plus the

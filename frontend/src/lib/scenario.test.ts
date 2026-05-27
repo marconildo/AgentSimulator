@@ -15,12 +15,14 @@ import {
 const STORAGE_KEY = "agentsim.scenario";
 
 // The set of stations the app renders today (the `simple` rung must match this).
-// 033-ingestion-node adds `ingestion` — a real station, visible in every scenario.
+// 033-ingestion-node adds `ingestion`; 034-storage-ingestion-flow adds `storage`
+// — both real stations, visible in every scenario.
 const TODAY_STATIONS = [
   "frontend",
   "backend",
   "agent",
   "database",
+  "storage",
   "rag",
   "ingestion",
   "mcp",

@@ -22,6 +22,7 @@ import tiktoken
 from pypdf import PdfReader
 
 from ..schemas import Stage
+from ..storage.object_store import get_object
 from ..trace import TraceEmitter
 from .embeddings import embedding_model_name, get_embeddings
 from .ingest import CHUNK_OVERLAP, CHUNK_SIZE, chunk_text
@@ -78,6 +79,23 @@ def delete_uploaded_vectors() -> int:
     if ids:
         store.delete(ids=ids)
     return len(ids)
+
+
+async def ingest_uploaded(
+    storage_key: str,
+    filename: str,
+    session_id: str,
+    document_id: str,
+    emitter: TraceEmitter,
+) -> dict[str, Any]:
+    """Ingest a document the indexer reads back from object storage.
+
+    The upload write-path (034-storage-ingestion-flow) persists the file to
+    durable storage first; the indexer then reads it here — so storage is
+    load-bearing, not decorative (a missing object raises ``FileNotFoundError``).
+    """
+    data = await asyncio.to_thread(get_object, storage_key)
+    return await ingest_pdf(data, filename, session_id, document_id, emitter)
 
 
 async def ingest_pdf(

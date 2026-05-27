@@ -20,6 +20,8 @@ services:
     volumes:
       # Persist the vector store between runs.
       - chroma-data:/app/app/data/chroma
+      # Persist uploaded documents (object storage) between runs.
+      - storage-data:/app/app/data/storage
 
   frontend:
     build:
@@ -33,3 +35,4 @@ services:
 
 volumes:
   chroma-data:
+  storage-data:

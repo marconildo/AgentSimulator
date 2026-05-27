@@ -50,6 +50,10 @@ export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   "rag.ingest.chunk": "retrieve",
   "rag.ingest.embed": "retrieve",
   "rag.ingest.store": "retrieve",
+  // 034-storage-ingestion-flow — persisting the uploaded file to durable object
+  // storage is a write; "persist" is the truthful label (it sorts after retrieve
+  // in the canonical rail, a harmless cosmetic on upload-only traces).
+  "storage.upload": "persist",
   "agent.think": "reason",
   "llm.prompt": "reason",
   "mcp.discover": "tools",

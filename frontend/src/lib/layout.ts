@@ -24,6 +24,7 @@ const EXPANDED_H: Record<StationId, number> = {
   backend: 188,
   agent: 268,
   database: 184,
+  storage: 192,
   rag: 220,
   ingestion: 236,
   mcp: 208,
@@ -67,7 +68,9 @@ const COLUMNS: Column[] = [
   // Big gap between the API and Agent tiers: the vertical Backend→Agent edge
   // label needs to clear the Agent tier's header, which sits above the node.
   { x: 372, gap: 168, members: ["backend", "agent"] },
-  { x: 1016, gap: 36, members: ["database", "rag", "ingestion", "mcp", "llm", "reranker"] },
+  // 034: storage → ingestion → rag are stacked in write-path order so the upload
+  // edges flow downward (storage→ingestion→rag all source-bottom → target-top).
+  { x: 1016, gap: 36, members: ["database", "storage", "ingestion", "rag", "mcp", "llm", "reranker"] },
   { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
 
@@ -78,6 +81,7 @@ const TIER_OF: Record<StationId, TierId> = {
   backend: "api",
   agent: "agent",
   database: "services",
+  storage: "services",
   rag: "services",
   ingestion: "services",
   mcp: "services",

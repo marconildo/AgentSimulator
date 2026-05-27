@@ -255,6 +255,13 @@ function readoutFor(
       }
       return rt.status === "idle" ? "" : ro.routing;
     }
+    case "storage": {
+      // 034-storage-ingestion-flow — the object store's compact readout: the
+      // uploaded file name once it's persisted, else the in-progress state.
+      const up = lastWith(rt.events, (e) => e.stage === "storage.upload" && e.phase === "end");
+      if (up) return ro.storedObject(String(up.data.filename ?? up.data.key ?? ""));
+      return rt.status === "idle" ? "" : ro.storing;
+    }
     case "ingestion": {
       // 033-ingestion-node — the offline indexer's compact readout: chunk →
       // embed → store, as the ingestion runs.

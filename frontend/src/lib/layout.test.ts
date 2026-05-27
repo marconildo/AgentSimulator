@@ -10,6 +10,34 @@ import type { Scenario } from "./scenario";
 
 const SCENARIOS: Scenario[] = ["simple", "intermediate", "advanced"];
 
+describe("storage write-path placement (034-storage-ingestion-flow AC7)", () => {
+  for (const scenario of SCENARIOS) {
+    it(`stacks storage → ingestion → rag downward inside the services tier in ${scenario}`, () => {
+      const layout = computeLayout(new Set(), scenario);
+      const { positions, heights, tierBoxes } = layout;
+
+      // All three present and stacked in write-path order so the upload edges
+      // flow downward (source-bottom → target-top).
+      expect(positions.storage).toBeDefined();
+      expect(positions.storage.y).toBeLessThan(positions.ingestion.y);
+      expect(positions.ingestion.y).toBeLessThan(positions.rag.y);
+
+      // Stacked, never overlapping its upper neighbour (database) or the next node.
+      expect(positions.storage.y).toBeGreaterThanOrEqual(
+        positions.database.y + heights.database,
+      );
+      expect(positions.ingestion.y).toBeGreaterThanOrEqual(
+        positions.storage.y + heights.storage,
+      );
+
+      // The services tier box wraps storage (a member of that tier).
+      const box = tierBoxes.services;
+      expect(positions.storage.x).toBeGreaterThanOrEqual(box.x);
+      expect(positions.storage.y + heights.storage).toBeLessThanOrEqual(box.y + box.h);
+    });
+  }
+});
+
 describe("public frontier geometry (032-network-boundary AC1)", () => {
   for (const scenario of SCENARIOS) {
     it(`sits between the client tier and the private boundary in ${scenario}`, () => {

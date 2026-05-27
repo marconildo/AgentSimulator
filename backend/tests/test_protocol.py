@@ -37,6 +37,14 @@ def test_ingestion_stages_serialize_as_dotted_strings():
         assert f'"stage":"{stage.value}"' in payload
 
 
+def test_storage_upload_stage_serializes_as_dotted_string():
+    # 034-storage-ingestion-flow — the upload write-path adds one stage on the
+    # new object-storage station, between BACKEND and the rag.ingest.* stages.
+    assert Stage.STORAGE_UPLOAD == "storage.upload"
+    payload = TraceEvent(trace_id="t", seq=1, stage=Stage.STORAGE_UPLOAD).model_dump_json()
+    assert '"stage":"storage.upload"' in payload
+
+
 def test_chat_request_accepts_session_id():
     from app.schemas import ChatRequest
 

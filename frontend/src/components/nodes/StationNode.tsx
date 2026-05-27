@@ -246,6 +246,15 @@ function innerRows(
         ...(typeof top === "number" ? [{ k: t.readout.score, v: top.toFixed(2) }] : []),
       ];
     }
+    case "storage": {
+      // 034-storage-ingestion-flow — the stored object's at-a-glance facts.
+      const up = lastWith(events, (e) => e.stage === "storage.upload" && e.phase === "end");
+      if (!up) return [];
+      const size = up.data.size_bytes as number | undefined;
+      const rows: Row[] = [{ k: i.contentType, v: String(up.data.content_type ?? "—") }];
+      if (typeof size === "number") rows.push({ k: i.size, v: `${size.toLocaleString()} B` });
+      return rows;
+    }
     case "ingestion": {
       // 033-ingestion-node — the offline indexer's at-a-glance counts.
       const store = lastWith(events, (e) => e.stage === "rag.ingest.store" && e.phase === "end");

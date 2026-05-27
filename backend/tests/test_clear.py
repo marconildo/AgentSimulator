@@ -120,10 +120,13 @@ def test_clear_data_endpoint_clears_both_stores_and_keeps_corpus():
             "messages_deleted",
             "documents_deleted",
             "vectors_removed",
+            "objects_deleted",
         } <= set(body)
         assert body["sessions_deleted"] >= 1
         assert body["documents_deleted"] >= 1
         assert body["vectors_removed"] >= 1
+        # 034-storage-ingestion-flow — clearing also wipes the stored objects.
+        assert body["objects_deleted"] >= 1
 
         assert client.get("/api/sessions").json() == []  # relational wiped
         assert client.get("/api/health").json()["indexed"] is True  # corpus survived
@@ -142,4 +145,5 @@ def test_clear_data_endpoint_is_idempotent_on_empty():
             "documents_deleted": 0,
             "skills_deleted": 0,
             "vectors_removed": 0,
+            "objects_deleted": 0,
         }

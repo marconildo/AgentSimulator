@@ -24,6 +24,7 @@ export type StationId =
   | "agent"
   | "rag"
   | "ingestion" // 033-ingestion-node — the offline RAG indexer (owns rag.ingest.*)
+  | "storage" // 034-storage-ingestion-flow — durable object storage for uploads
   | "mcp"
   | "llm"
   | "database"
@@ -412,6 +413,41 @@ const STATIONS_SRC: StationSrc[] = [
     ],
     stages: ["db.read", "db.write"],
     position: { x: 980, y: 112 },
+  },
+  {
+    id: "storage",
+    tier: "services",
+    title: { en: "Object Storage", pt: "Armazenamento de objetos" },
+    subtitle: { en: "Uploaded documents", pt: "Documentos enviados" },
+    icon: "🪣",
+    accent: "var(--color-ok)",
+    tag: "BLOB",
+    blurb: {
+      en: "Durable object storage for uploaded files. On upload the API writes the document here first; the indexer then reads it back to chunk, embed and upsert. Storing the original decouples “received” from “indexed” and lets the file be re-chunked when the embedding model changes.",
+      pt: "Armazenamento de objetos durável para arquivos enviados. No upload, a API grava o documento aqui primeiro; o indexador então o lê de volta para chunkar, embeddar e fazer upsert. Guardar o original desacopla “recebido” de “indexado” e permite re-chunkar o arquivo quando o modelo de embedding muda.",
+    },
+    why: {
+      en: "Uploading the file to durable object storage first decouples “received” from “indexed”: the original is safely stored before (and independently of) chunking, can be re-indexed when the embedding model changes, and is reached over a private endpoint rather than the public internet.",
+      pt: "Enviar o arquivo primeiro para um armazenamento de objetos durável desacopla “recebido” de “indexado”: o original é guardado com segurança antes de (e independentemente de) ser chunkado, pode ser reindexado quando o modelo de embedding muda, e é acessado por um endpoint privado em vez da internet pública.",
+    },
+    whatBreaks: {
+      en: "Skip object storage and ingestion has only the in-flight request bytes: if indexing fails there is nothing to retry from, you can't re-chunk after a model change, and a large upload must be held in memory instead of streamed from a durable store.",
+      pt: "Pule o armazenamento de objetos e a ingestão só tem os bytes da requisição em trânsito: se a indexação falhar não há de onde repetir, você não consegue re-chunkar após uma troca de modelo, e um upload grande precisa ficar em memória em vez de ser lido de um store durável.",
+    },
+    generic: { en: "Object / blob storage", pt: "Armazenamento de objetos / blobs" },
+    clouds: {
+      azure: "Azure Blob Storage",
+      aws: "Amazon S3",
+      gcp: "Cloud Storage",
+    },
+    tech: [
+      { k: { en: "store", pt: "armazenamento" }, v: "filesystem (Blob/S3 stand-in)" },
+      { k: { en: "key", pt: "chave" }, v: "session / document / filename" },
+      { k: { en: "order", pt: "ordem" }, v: "write-before-index" },
+      { k: { en: "access", pt: "acesso" }, v: "private endpoint" },
+    ],
+    stages: ["storage.upload"],
+    position: { x: 980, y: 280 },
   },
   {
     id: "rag",
@@ -890,6 +926,66 @@ const HOPS_SRC: HopSrc[] = [
     controls: { en: "Private Endpoint · TLS (egress)", pt: "Private Endpoint · TLS (egress)" },
     sourceHandle: "right",
     targetHandle: "left",
+  },
+  // 034-storage-ingestion-flow — the upload write-path. The Backend orchestrates:
+  // it persists the file to storage (backend→storage), then calls the indexer
+  // (backend→ingestion), which reads the stored object and upserts the vectors
+  // (ingestion→rag). These animate only during a PDF upload; a normal chat leaves
+  // them idle. (storage↔ingestion isn't a direct edge — that leg routes through
+  // the backend hub, matching "backend calls the indexer after the write".)
+  {
+    source: "backend",
+    target: "storage",
+    label: { en: "object PUT", pt: "PUT de objeto" },
+    protocol: {
+      en: "HTTPS / TLS — object PUT to managed storage",
+      pt: "HTTPS / TLS — PUT de objeto ao armazenamento gerenciado",
+    },
+    detail: {
+      en: "The API uploads the received file to object storage over a private endpoint",
+      pt: "A API envia o arquivo recebido ao armazenamento de objetos por um endpoint privado",
+    },
+    comm: "sync", // the API awaits the durable write before indexing
+    secure: true,
+    zone: "private",
+    controls: { en: "Private Endpoint · TLS · IAM", pt: "Private Endpoint · TLS · IAM" },
+    sourceHandle: "right",
+    targetHandle: "left",
+  },
+  {
+    source: "backend",
+    target: "ingestion",
+    label: { en: "ingest", pt: "ingestão" },
+    protocol: {
+      en: "Private network · invoke the indexer (in-process / mTLS)",
+      pt: "Rede privada · invoca o indexador (em processo / mTLS)",
+    },
+    detail: {
+      en: "Having persisted the file, the API calls the indexer with the object key; the indexer reads the stored object and builds the index",
+      pt: "Após persistir o arquivo, a API chama o indexador com a chave do objeto; o indexador lê o objeto armazenado e constrói o índice",
+    },
+    comm: "sync", // the API awaits the indexing before responding
+    secure: true,
+    zone: "private",
+    controls: { en: "mTLS · NSG / Security Group", pt: "mTLS · NSG / Security Group" },
+    sourceHandle: "right",
+    targetHandle: "left",
+  },
+  {
+    source: "ingestion",
+    target: "rag",
+    label: { en: "upsert", pt: "upsert" },
+    protocol: { en: "Vector upsert (TCP)", pt: "Upsert de vetores (TCP)" },
+    detail: {
+      en: "The indexer upserts the chunk embeddings into the vector index",
+      pt: "O indexador faz upsert dos embeddings dos chunks no índice vetorial",
+    },
+    comm: "sync",
+    secure: false,
+    zone: "private",
+    controls: { en: "Private Endpoint", pt: "Private Endpoint" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
   },
   // Orchestrator → sub-agents (advanced multi-agent preview). In-process
   // delegation, drawn as a small tree under the agent node. Advanced rung only.
