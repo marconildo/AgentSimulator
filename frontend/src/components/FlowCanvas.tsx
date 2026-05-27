@@ -19,6 +19,7 @@ import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
 import {
   boundaryFor,
+  publicBoundaryFor,
   stationByIdFor,
   visibleHopsFor,
   visibleStationsFor,
@@ -28,10 +29,16 @@ import {
 import { useSimulator } from "../store/useSimulator";
 import { FlowEdge } from "./edges/FlowEdge";
 import { BoundaryNode } from "./nodes/BoundaryNode";
+import { PublicFrontierNode } from "./nodes/PublicFrontierNode";
 import { StationNode } from "./nodes/StationNode";
 import { TierNode } from "./nodes/TierNode";
 
-const nodeTypes = { station: StationNode, tier: TierNode, boundary: BoundaryNode };
+const nodeTypes = {
+  station: StationNode,
+  tier: TierNode,
+  boundary: BoundaryNode,
+  publicFrontier: PublicFrontierNode,
+};
 const edgeTypes = { flow: FlowEdge };
 
 interface FlowCanvasProps {
@@ -52,6 +59,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const tiers = visibleTiersFor(lang, scenario);
   const hops = visibleHopsFor(lang, scenario);
   const boundary = boundaryFor(lang);
+  const publicFrontier = publicBoundaryFor(lang);
   const stationById = stationByIdFor(lang);
   const ro = t.readout;
   const comms = t.comms;
@@ -68,6 +76,20 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
       position: { x: b.x, y: b.y },
       data: { meta: boundary, service: cloudValue(boundary, cloud) },
       style: { width: b.w, height: b.h, pointerEvents: "none" },
+      selectable: false,
+      draggable: false,
+      zIndex: 0,
+    };
+
+    // 032-network-boundary — the public-internet / egress frontier, a dashed line
+    // in the gap between the client tier and the private boundary (behind nodes).
+    const f = layout.publicFrontier;
+    const frontierNode: Node = {
+      id: "public-frontier",
+      type: "publicFrontier",
+      position: { x: f.x - 12, y: f.y },
+      data: { label: publicFrontier.label },
+      style: { width: 24, height: f.h, pointerEvents: "none" },
       selectable: false,
       draggable: false,
       zIndex: 0,
@@ -114,8 +136,8 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
       zIndex: 1,
     }));
 
-    return [boundaryNode, ...tierNodes, ...stationNodes];
-  }, [view, selected, stations, tiers, boundary, cloud, ro, layout, expandedSet]);
+    return [boundaryNode, frontierNode, ...tierNodes, ...stationNodes];
+  }, [view, selected, stations, tiers, boundary, publicFrontier, cloud, ro, layout, expandedSet]);
 
   const edges: Edge[] = useMemo(
     () =>
@@ -233,15 +255,18 @@ function readoutFor(
       }
       return rt.status === "idle" ? "" : ro.routing;
     }
-    case "rag": {
-      // PDF ingestion (chunk → embed → store) takes precedence when present.
+    case "ingestion": {
+      // 033-ingestion-node — the offline indexer's compact readout: chunk →
+      // embed → store, as the ingestion runs.
       const iStore = lastWith(rt.events, (e) => e.stage === "rag.ingest.store" && e.phase === "end");
       if (iStore) return ro.ingestStored((iStore.data.chunks_stored as number | undefined) ?? 0);
       const iEmbed = lastWith(rt.events, (e) => e.stage === "rag.ingest.embed" && e.phase === "end");
       if (iEmbed) return ro.ingestEmbedding((iEmbed.data.num_vectors as number | undefined) ?? 0);
       const iChunk = lastWith(rt.events, (e) => e.stage === "rag.ingest.chunk");
       if (iChunk) return ro.ingestChunking((iChunk.data.num_chunks as number | undefined) ?? 0);
-
+      return rt.status === "idle" ? "" : ro.ingestChunking(0);
+    }
+    case "rag": {
       const ret = lastWith(rt.events, (e) => e.stage === "rag.retrieve" && e.phase === "end");
       if (ret) {
         const k = (ret.data.k as number | undefined) ?? (ret.data.chunks as unknown[] | undefined)?.length;

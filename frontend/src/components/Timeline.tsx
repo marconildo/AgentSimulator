@@ -4,6 +4,7 @@ import { useT } from "../i18n";
 import { activePhase, PHASE_ORDER, phaseMarkers } from "../lib/phases";
 import { stationForEvent } from "../lib/stations";
 import { useSimulator } from "../store/useSimulator";
+import { EventConsole } from "./EventConsole";
 import { TourControls } from "./TourControls";
 
 export function Timeline() {
@@ -133,6 +134,10 @@ export function Timeline() {
           );
         })}
       </div>
+
+      {/* 030-event-console — the expandable structured trace log (collapsed by
+          default; the one-line status above stays the "now" indicator). */}
+      <EventConsole />
     </div>
   );
 }

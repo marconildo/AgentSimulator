@@ -147,6 +147,34 @@ describe("cumulative-hud i18n (018-cumulative-hud)", () => {
   });
 });
 
+describe("event-console i18n (030-event-console AC6)", () => {
+  it("has the same console leaf keys in en and pt, all non-empty", () => {
+    const enC = UI.en.console;
+    const ptC = UI.pt.console;
+    expect(leafKeys(enC).sort()).toEqual(leafKeys(ptC).sort());
+    for (const k of leafKeys(enC)) {
+      expect((enC as Record<string, string>)[k]?.trim()).toBeTruthy();
+      expect((ptC as Record<string, string>)[k]?.trim()).toBeTruthy();
+    }
+  });
+});
+
+describe("ttft-throughput i18n (029-ttft-throughput AC6)", () => {
+  it("has the TTFT + throughput labels in en and pt", () => {
+    for (const k of ["ttft", "throughput"] as const) {
+      expect(UI.en.inspector[k]?.trim()).toBeTruthy();
+      expect(UI.pt.inspector[k]?.trim()).toBeTruthy();
+    }
+  });
+
+  it("has the input/output token-split labels in en and pt", () => {
+    for (const k of ["tokensIn", "tokensOut"] as const) {
+      expect(UI.en.hud[k]?.trim()).toBeTruthy();
+      expect(UI.pt.hud[k]?.trim()).toBeTruthy();
+    }
+  });
+});
+
 describe("chat cancel i18n (016-cancel-stream)", () => {
   it("has a non-empty cancel control + cancelled-status label in en and pt", () => {
     for (const key of ["cancel", "cancelled"] as const) {
@@ -224,12 +252,41 @@ describe("settings.experiment i18n", () => {
     expect(leafKeys(en).sort()).toEqual(leafKeys(pt).sort());
   });
 
-  it("has a label for every MCP tool in both languages", () => {
-    const tools = ["calculator", "current_time", "kb_lookup"];
+  // 031-tool-catalog-clarity — AC1/AC5: every advertised tool (the canonical
+  // agent tool set) has a friendly, non-empty label in both languages, and the
+  // label is not a bare fallback to the raw snake_case handle.
+  it("has a friendly label for every advertised tool in both languages (AC1)", () => {
+    const tools = [
+      "search_knowledge_base",
+      "calculator",
+      "current_time",
+      "kb_lookup",
+      "load_skill",
+    ];
     for (const name of tools) {
-      expect(en.toolLabels[name]?.trim()).toBeTruthy();
-      expect(pt.toolLabels[name]?.trim()).toBeTruthy();
+      for (const dict of [en, pt]) {
+        expect(dict.toolLabels[name]?.trim(), `${name} label`).toBeTruthy();
+        expect(dict.toolLabels[name], `${name} not raw snake_case`).not.toBe(name);
+      }
     }
+  });
+
+  // AC2 — retrieval vs glossary are disambiguated: distinct labels + a hint that
+  // distinguishes full RAG retrieval from the canned glossary, per language.
+  it("disambiguates knowledge-base search from the glossary (AC2/AC4)", () => {
+    expect(en.toolLabels.search_knowledge_base).not.toBe(en.toolLabels.kb_lookup);
+    expect(pt.toolLabels.search_knowledge_base).not.toBe(pt.toolLabels.kb_lookup);
+
+    expect(en.toolsDisambig?.trim()).toBeTruthy();
+    expect(pt.toolsDisambig?.trim()).toBeTruthy();
+    // mentions the glossary, the "any tool can be turned off" truth, and that
+    // disabling retrieval yields an ungrounded run.
+    expect(en.toolsDisambig).toMatch(/glossary/i);
+    expect(en.toolsDisambig).toMatch(/any tool/i);
+    expect(en.toolsDisambig).toMatch(/ungrounded/i);
+    expect(pt.toolsDisambig).toMatch(/gloss/i);
+    expect(pt.toolsDisambig).toMatch(/qualquer tool/i);
+    expect(pt.toolsDisambig).toMatch(/fundament/i);
   });
 
   it("has no empty strings", () => {

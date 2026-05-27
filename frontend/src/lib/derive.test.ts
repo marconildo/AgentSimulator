@@ -69,6 +69,23 @@ describe("deriveView — settled end state", () => {
   });
 });
 
+// 032-network-boundary (AC4) — the persist (db.write) emphasis is not cleared the
+// instant the event passes: a run whose last event is db.write keeps the database
+// station as the emphasized active station (the dwell is handled in pacing.ts).
+describe("deriveView — persistence emphasis (032 AC4)", () => {
+  it("keeps the database station active at a run ending in db.write", () => {
+    seq = 0;
+    const events = [
+      ev("respond", "end", { answer: "x" }),
+      ev("db.write", "start"),
+      ev("db.write", "end", { operation: "INSERT", total_rows: 1 }),
+    ];
+    const view = deriveView(events, events.length - 1);
+    expect(view.activeStation).toBe("database");
+    expect(view.stations.database.status).toBe("done");
+  });
+});
+
 // 014-tour-scripted (AC2/AC3) — the guided tour emphasizes the station it is
 // narrating. Emphasis is a pure projection: `deriveView` takes the tour's current
 // station and echoes it as `emphasizedStation` (exactly one while touring, null

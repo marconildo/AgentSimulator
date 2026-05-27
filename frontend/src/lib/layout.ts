@@ -24,7 +24,8 @@ const EXPANDED_H: Record<StationId, number> = {
   backend: 188,
   agent: 268,
   database: 184,
-  rag: 236,
+  rag: 220,
+  ingestion: 236,
   mcp: 208,
   llm: 208,
   reranker: COLLAPSED_H,
@@ -66,7 +67,7 @@ const COLUMNS: Column[] = [
   // Big gap between the API and Agent tiers: the vertical Backend→Agent edge
   // label needs to clear the Agent tier's header, which sits above the node.
   { x: 372, gap: 168, members: ["backend", "agent"] },
-  { x: 1016, gap: 36, members: ["database", "rag", "mcp", "llm", "reranker"] },
+  { x: 1016, gap: 36, members: ["database", "rag", "ingestion", "mcp", "llm", "reranker"] },
   { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
 
@@ -78,6 +79,7 @@ const TIER_OF: Record<StationId, TierId> = {
   agent: "agent",
   database: "services",
   rag: "services",
+  ingestion: "services",
   mcp: "services",
   llm: "services",
   reranker: "services",
@@ -109,6 +111,10 @@ export interface LayoutResult {
   widths: Record<StationId, number>;
   tierBoxes: Record<TierId, Box>;
   boundary: Box;
+  // 032-network-boundary — the public-internet / egress frontier: a vertical line
+  // at `x` spanning `y..y+h`, in the gap between the client tier and the private
+  // boundary (rendered as a dashed line + label, behind the stations).
+  publicFrontier: { x: number; y: number; h: number };
 }
 
 export function heightOf(id: StationId, expanded: ReadonlySet<StationId>): number {
@@ -190,5 +196,14 @@ export function computeLayout(
     h: bMaxY - by + BOUND_LABEL + BOUND_PAD,
   };
 
-  return { positions, heights, widths, tierBoxes, boundary };
+  // The public-internet / egress frontier: a vertical line midway through the gap
+  // between the client tier's right edge and the private boundary's left edge,
+  // spanning the boundary's height. The client tier is always present (frontend
+  // is in every scenario), so there is always a gap to place it in.
+  const client = tierBoxes.client;
+  const clientRight = client ? client.x + client.w : boundary.x - 18;
+  const frontierX = (clientRight + boundary.x) / 2;
+  const publicFrontier = { x: frontierX, y: boundary.y, h: boundary.h };
+
+  return { positions, heights, widths, tierBoxes, boundary, publicFrontier };
 }

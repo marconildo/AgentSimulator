@@ -143,3 +143,18 @@ describe("cumulativeUsage (018 AC1 — fold over turns)", () => {
     expect(c.partial).toBe(true);
   });
 });
+
+describe("input/output token split (029-ttft-throughput AC5)", () => {
+  it("input (prompt) + output (completion) tokens sum to the displayed total", () => {
+    const c = cumulativeUsage([tallyUsage(oneTurn())]);
+    expect(c.promptTokens + c.completionTokens).toBe(c.totalTokens);
+    expect(c.promptTokens).toBeGreaterThan(0);
+    expect(c.completionTokens).toBeGreaterThan(0);
+  });
+
+  it("has no input/output split when there is no usage", () => {
+    const c = cumulativeUsage([]);
+    expect(c.totalTokens).toBe(0);
+    expect(c.promptTokens + c.completionTokens).toBe(0);
+  });
+});

@@ -3,7 +3,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
-import { formatTokens, formatUsd } from "../lib/cost";
+import { formatTokens, formatTps, formatUsd } from "../lib/cost";
 import type { DerivedView, UsageTotals } from "../lib/derive";
 import { useHealth } from "../lib/health";
 import { useScenario } from "../lib/scenario";
@@ -89,9 +89,29 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
         <Chip>{i.events(rt.events.length)}</Chip>
       </div>
 
+      <WhySection meta={meta} i={i} />
       <TechSection meta={meta} lang={lang} i={i} />
       {renderDetail(selected, rt.events, i, view.usage)}
     </div>
+  );
+}
+
+// 028-why-this-layer — the "why this layer / what breaks without it" block. Sits
+// between the summary and the tech detail; renders only when the selected station
+// carries the (additive, optional) `why`/`whatBreaks` fields from stations.ts.
+function WhySection({ meta, i }: { meta: StationMeta; i: I }) {
+  if (!meta.why || !meta.whatBreaks) return null;
+  return (
+    <Section title={i.whyTitle}>
+      <Labeled label={i.whyLabel}>
+        <p className="text-[12px] leading-relaxed text-[var(--color-text-soft)]">{meta.why}</p>
+      </Labeled>
+      <Labeled label={i.whatBreaksLabel}>
+        <p className="text-[12px] leading-relaxed text-[var(--color-text-soft)]">
+          {meta.whatBreaks}
+        </p>
+      </Labeled>
+    </Section>
   );
 }
 
@@ -263,15 +283,39 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
         </>
       );
     }
-    case "rag": {
-      // PDF ingestion view (chunk → embed → store) when an upload is in scope.
+    case "ingestion": {
+      // 033-ingestion-node — the offline RAG indexer. Shows the real
+      // chunk → embed → store detail when an ingestion is in scope, plus the
+      // production concepts (chunking params, trigger/timing, refresh/staleness).
       const ingChunk = pick(events, "rag.ingest.chunk", "end");
       const ingEmbed = pick(events, "rag.ingest.embed", "end");
       const ingStore = pick(events, "rag.ingest.store", "end");
-      if (ingChunk || ingEmbed || ingStore) {
-        return <IngestionDetail chunk={ingChunk} embed={ingEmbed} store={ingStore} i={i} />;
-      }
-
+      return (
+        <>
+          {(ingChunk || ingEmbed || ingStore) && (
+            <IngestionDetail chunk={ingChunk} embed={ingEmbed} store={ingStore} i={i} />
+          )}
+          <Section title={i.indexerTitle}>
+            <Labeled label={i.chunking}>
+              <p className="text-[11px] leading-relaxed text-[var(--color-text-soft)]">
+                {i.chunkingValue}
+              </p>
+            </Labeled>
+            <Labeled label={i.trigger}>
+              <p className="text-[11px] leading-relaxed text-[var(--color-text-soft)]">
+                {i.triggerValue}
+              </p>
+            </Labeled>
+            <Labeled label={i.indexRefresh}>
+              <p className="text-[11px] leading-relaxed text-[var(--color-text-soft)]">
+                {i.indexRefreshValue}
+              </p>
+            </Labeled>
+          </Section>
+        </>
+      );
+    }
+    case "rag": {
       const embed = pick(events, "rag.embed", "end");
       const retrieve = pick(events, "rag.retrieve", "end");
       const chunks = (retrieve?.data.chunks as Array<RagChunk>) ?? [];
@@ -416,6 +460,15 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
           {gen?.data.answer !== undefined && (
             <Section title={i.generatedAnswer}>
               <KeyVal k={i.model} v={String(gen.data.model ?? "—")} />
+              {/* 029-ttft-throughput: the two clocks of a streamed answer — the
+                  wait before text appears, and the rate it then types out.
+                  Rendered only when the generate END carried the real metrics. */}
+              {typeof gen.metrics.ttft_ms === "number" && (
+                <KeyVal k={i.ttft} v={formatLatency(gen.metrics.ttft_ms)} />
+              )}
+              {typeof gen.metrics.tokens_per_sec === "number" && (
+                <KeyVal k={i.throughput} v={formatTps(gen.metrics.tokens_per_sec)} />
+              )}
               <Mono>{String(gen.data.answer)}</Mono>
             </Section>
           )}

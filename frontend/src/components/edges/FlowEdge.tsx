@@ -2,6 +2,7 @@ import { BaseEdge, EdgeLabelRenderer, getBezierPath, useViewport, type EdgeProps
 import { useState } from "react";
 
 import { useT } from "../../i18n";
+import { returnStyleFor } from "../../lib/edgeStyle";
 
 interface FlowEdgeData {
   accent?: string;
@@ -48,7 +49,10 @@ export function FlowEdge(props: EdgeProps) {
     targetPosition,
   });
 
-  const strokeColor = stream ? STREAM_COLOR : active ? accent : "var(--color-line)";
+  // 032-network-boundary: an active reverse leg (internal respond walk) reads as
+  // a return — dashed, stream color — distinct from an outbound request.
+  const stroke = returnStyleFor(active, Boolean(data.reverse), stream, accent);
+  const strokeColor = stroke.color;
 
   // The tooltip normally sits above the edge; if the label is too close to the
   // top of the pane (e.g. the Backend↔App Database hop), "up" gets clipped by
@@ -64,7 +68,7 @@ export function FlowEdge(props: EdgeProps) {
         style={{
           stroke: strokeColor,
           strokeWidth: lit ? 2.5 : 1.5,
-          strokeDasharray: stream ? "5 5" : undefined,
+          strokeDasharray: stroke.dashed ? "5 5" : undefined,
           opacity: lit ? 1 : hovered ? 0.9 : 0.6,
           filter: lit ? `drop-shadow(0 0 6px ${strokeColor})` : "none",
           transition: "stroke 0.2s ease, opacity 0.2s ease",

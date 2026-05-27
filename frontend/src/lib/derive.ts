@@ -46,6 +46,10 @@ export interface DerivedView {
   answer: string;
   iterations: number; // agent reasoning turns so far
   usage: UsageTotals; // real tokens + cost across the run's LLM calls (011)
+  // 029-ttft-throughput: real generation metrics off the llm.generate END event.
+  // Both optional — absent on a legacy/replayed trace or a run with no tokens, so
+  // the LLM readout omits the rows rather than rendering zeros.
+  generation: { ttftMs?: number; tokensPerSec?: number };
   // 014-tour-scripted: the station the guided tour is currently narrating, so
   // the canvas can lead the eye to it. Exactly one while a tour stop is active;
   // null when idle/done (no `tourStation` passed). Independent of `activeStation`
@@ -127,6 +131,9 @@ export function deriveView(
   let respondAnswer = "";
   let generateAnswer = ""; // batch mode: the whole answer arrives on the END event
   let iterations = 0;
+  // 029-ttft-throughput: surfaced from the llm.generate END metrics (if present).
+  let ttftMs: number | undefined;
+  let tokensPerSec: number | undefined;
   // 011-token-cost: real tokens + cost across the run's LLM calls. Shared with the
   // 018 HUD via tallyUsage so the two can never drift (UsageTotals is the subset
   // the LLM block reads; the tally also carries toolCalls/ragHits for the HUD).
@@ -149,8 +156,10 @@ export function deriveView(
     if (ev.stage === "llm.generate" && ev.phase === "progress" && typeof ev.data.token === "string") {
       tokens.push(ev.data.token);
     }
-    if (ev.stage === "llm.generate" && ev.phase === "end" && typeof ev.data.answer === "string") {
-      generateAnswer = ev.data.answer;
+    if (ev.stage === "llm.generate" && ev.phase === "end") {
+      if (typeof ev.data.answer === "string") generateAnswer = ev.data.answer;
+      if (typeof ev.metrics.ttft_ms === "number") ttftMs = ev.metrics.ttft_ms;
+      if (typeof ev.metrics.tokens_per_sec === "number") tokensPerSec = ev.metrics.tokens_per_sec;
     }
     if (ev.stage === "respond" && ev.phase === "end" && typeof ev.data.answer === "string") {
       respondAnswer = ev.data.answer;
@@ -191,6 +200,7 @@ export function deriveView(
     answer: tokens.length ? tokens.join("") : respondAnswer || generateAnswer,
     iterations,
     usage,
+    generation: { ttftMs, tokensPerSec },
     emphasizedStation: tourStation,
   };
 }

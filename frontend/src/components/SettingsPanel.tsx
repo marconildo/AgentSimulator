@@ -6,6 +6,7 @@ import { SkillsSettings } from "./SkillsSettings";
 import { getConfig, type AppConfig, type ClearResult } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { type DeliveryMode, useSettings } from "../lib/settings";
+import { toolRows } from "../lib/tools";
 import { useChat } from "../store/useChat";
 
 // Gear button in the header that opens a small panel of architecture options:
@@ -204,7 +205,7 @@ export function SettingsPanel() {
           </div>
           <p className="mb-1.5 text-[10px] leading-snug text-[var(--color-muted)]">{ex.toolsHint}</p>
           <div className="flex flex-col gap-1">
-            {config?.tools.map((tool) => {
+            {toolRows(config?.tools ?? [], ex.toolLabels).map((tool) => {
               const on = enabled.includes(tool.name);
               return (
                 <label
@@ -219,7 +220,7 @@ export function SettingsPanel() {
                     className="accent-[var(--color-accent)]"
                   />
                   <span className={on ? "" : "text-[var(--color-muted)] line-through"}>
-                    {ex.toolLabels[tool.name] ?? tool.name}
+                    {tool.label}
                   </span>
                   <span className="ml-auto font-mono text-[9px] text-[var(--color-muted)]">
                     {tool.name}
@@ -228,6 +229,10 @@ export function SettingsPanel() {
               );
             })}
           </div>
+          {/* 031-tool-catalog-clarity — RAG-vs-glossary + toggle-everything truth. */}
+          <p className="mt-1.5 text-[10px] leading-snug text-[var(--color-label)]">
+            {ex.toolsDisambig}
+          </p>
 
           {/* top-k */}
           <div className="mt-3 mb-1 flex items-center justify-between text-[10.5px] font-semibold text-[var(--color-ink)]">

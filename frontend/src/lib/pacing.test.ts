@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { deriveView } from "./derive";
-import { isFastForward, LIVE_STEP_MS, paceAdvance } from "./pacing";
+import { dwellFor, isFastForward, LIVE_STEP_MS, paceAdvance } from "./pacing";
 import type { Phase, Stage, TraceEvent } from "../types/events";
 
 let seq = 0;
@@ -65,6 +65,29 @@ describe("paceAdvance — AC2 tokens flush at arrival speed", () => {
     expect(r.cursor).toBe(3); // flushed all 3 tokens, stopped before the structural end
     expect(isFastForward(events[1])).toBe(true);
     expect(isFastForward(events[0])).toBe(false);
+  });
+});
+
+describe("persistence dwell (032-network-boundary AC4)", () => {
+  it("gives db.write a longer dwell than a regular structural step", () => {
+    expect(dwellFor(ev("db.write", "end"))).toBeGreaterThan(LIVE_STEP_MS);
+    expect(dwellFor(ev("respond", "end"))).toBe(LIVE_STEP_MS);
+  });
+
+  it("holds the playhead on db.write until its longer dwell elapses", () => {
+    seq = 0;
+    const events = [
+      ev("respond", "end", { answer: "x" }),
+      ev("db.write", "end", { operation: "INSERT" }),
+      ev("backend", "end", { answer: "x" }),
+    ];
+    // Cursor parked on db.write (index 1). A normal step's worth of time is not
+    // enough — the persist must linger.
+    const before = paceAdvance(events, 1, 1000, 1000 + LIVE_STEP_MS);
+    expect(before.cursor).toBe(1);
+    // Once the longer persist dwell elapses, it advances toward the close.
+    const after = paceAdvance(events, 1, 1000, 1000 + dwellFor(events[1]));
+    expect(after.cursor).toBe(2);
   });
 });
 

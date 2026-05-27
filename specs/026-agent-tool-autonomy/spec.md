@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 026-agent-tool-autonomy |
-| **Status** | in-progress |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |
 

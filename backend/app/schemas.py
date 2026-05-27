@@ -93,6 +93,11 @@ class TraceEvent(BaseModel):
     phase: Phase = Phase.END
     label: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
+    # An open numeric map (no per-key type). Known keys include `latency_ms`
+    # (every stage), `prompt_tokens`/`completion_tokens`/`total_tokens`/`cost_usd`
+    # (011, on agent.think + llm.generate ENDs) and `tokens`/`ttft_ms`/
+    # `tokens_per_sec` (029, on the llm.generate END). Adding keys is additive —
+    # the frontend mirror needs no type change.
     metrics: dict[str, float] = Field(default_factory=dict)
 
 

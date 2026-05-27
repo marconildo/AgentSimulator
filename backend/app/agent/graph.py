@@ -23,6 +23,7 @@ the runnable ``config``, so the whole run is observable from the frontend.
 from __future__ import annotations
 
 from functools import lru_cache
+from time import perf_counter
 from typing import Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -306,17 +307,40 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
     streaming = state["mode"] != "batch"
     async with emitter.stage(Stage.LLM_GENERATE, "Generating the answer") as rec:
         tokens: list[str] = []
+        # 029-ttft-throughput: measure time-to-first-token and generation
+        # throughput with a monotonic clock (perf_counter — never wall-clock, to
+        # avoid NTP skew). A streamed answer has two distinct clocks: the latency
+        # the user feels before text appears (TTFT) and the rate it then types
+        # out (tokens/sec). Both are real, additive keys on the generate END.
+        # The provider yields tokens in batch mode too (only the per-token
+        # PROGRESS emit is suppressed), so this measures in both modes (AC3).
+        t0 = perf_counter()
+        t_first: float | None = None
         async for token in provider.stream_answer(
             system=_effective_system(state),
             thread=state["messages"],
             history=state["history"],
         ):
+            if t_first is None:
+                t_first = perf_counter()
             tokens.append(token)
             if streaming:
                 await emitter.emit(Stage.LLM_GENERATE, Phase.PROGRESS, data={"token": token})
+        t_last = perf_counter()
         answer = "".join(tokens)
         rec.data = {"answer": answer, "model": provider.model_name, "delivery": state["mode"]}
         rec.metrics["tokens"] = float(len(tokens))
+        if t_first is not None:
+            rec.metrics["ttft_ms"] = round((t_first - t0) * 1000, 1)
+            # Throughput over the post-first-token window. A single-token answer
+            # has no such window, so fall back to the token count — keeps the
+            # metric > 0 without a 1/ε blow-up.
+            window = t_last - t_first
+            rec.metrics["tokens_per_sec"] = (
+                round(len(tokens) / window, 2)
+                if len(tokens) >= 2 and window > 0
+                else float(len(tokens))
+            )
         # Real generation usage + cost (011), captured from the streamed final chunk.
         if provider.last_stream_usage:
             rec.metrics.update(usage_metrics(provider.model_name, provider.last_stream_usage))

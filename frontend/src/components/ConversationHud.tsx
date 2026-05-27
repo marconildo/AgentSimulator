@@ -16,9 +16,16 @@ export function ConversationHud() {
   // Nothing to account for yet (a fresh draft / first turn still running).
   if (c.turns === 0) return null;
 
+  // 029-ttft-throughput: decompose the token total into input (prompt) vs output
+  // (completion) — priced and sized differently — when there is usage to split.
+  const tokenStat =
+    c.totalTokens > 0
+      ? `${formatTokens(c.totalTokens)} ${t.hud.tokens} (${formatTokens(c.promptTokens)} ${t.hud.tokensIn} · ${formatTokens(c.completionTokens)} ${t.hud.tokensOut})`
+      : `${formatTokens(c.totalTokens)} ${t.hud.tokens}`;
+
   const stats = [
     `${c.turns} ${t.hud.turns}`,
-    `${formatTokens(c.totalTokens)} ${t.hud.tokens}`,
+    tokenStat,
     formatUsd(c.costUsd),
     `${c.toolCalls} ${t.hud.toolCalls}`,
     `${c.ragHits} ${t.hud.ragHits}`,

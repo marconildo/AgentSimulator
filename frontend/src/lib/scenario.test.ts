@@ -15,7 +15,17 @@ import {
 const STORAGE_KEY = "agentsim.scenario";
 
 // The set of stations the app renders today (the `simple` rung must match this).
-const TODAY_STATIONS = ["frontend", "backend", "agent", "database", "rag", "mcp", "llm"];
+// 033-ingestion-node adds `ingestion` — a real station, visible in every scenario.
+const TODAY_STATIONS = [
+  "frontend",
+  "backend",
+  "agent",
+  "database",
+  "rag",
+  "ingestion",
+  "mcp",
+  "llm",
+];
 
 async function freshStore(stored?: string) {
   localStorage.clear();

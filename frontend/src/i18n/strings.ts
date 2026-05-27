@@ -78,11 +78,18 @@ export interface Strings {
     partial: string;
     estimate: string;
     tokenizer: string;
+    // 029-ttft-throughput: the input/output (prompt/completion) token split.
+    tokensIn: string;
+    tokensOut: string;
   };
   inspector: {
     overviewTitle: string;
     overviewBody: string;
     overviewBack: string;
+    // 028-why-this-layer — the "why this layer / what breaks" section.
+    whyTitle: string;
+    whyLabel: string;
+    whatBreaksLabel: string;
     techInfra: string;
     tier: string;
     role: string;
@@ -121,6 +128,15 @@ export interface Strings {
     totalInCollection: string;
     vectorPreview: string;
     fromDocument: string;
+    // 033-ingestion-node — the offline-indexer concept rows (real values).
+    indexerTitle: string;
+    chunking: string;
+    chunkingValue: string;
+    trigger: string;
+    triggerValue: string;
+    indexRefresh: string;
+    indexRefreshValue: string;
+    indexerIdle: string;
     discoveredTools: string;
     transport: string;
     toolCall: string;
@@ -147,6 +163,9 @@ export interface Strings {
     userMessage: string;
     history: string;
     generatedAnswer: string;
+    // 029-ttft-throughput — generation latency/rate on the LLM block.
+    ttft: string;
+    throughput: string;
     // Token usage + cost (011-token-cost).
     usageCost: string;
     rounds: string;
@@ -185,6 +204,9 @@ export interface Strings {
       reset: string;
       tools: string;
       toolsHint: string;
+      // 031-tool-catalog-clarity — distinguishes full RAG retrieval from the
+      // canned glossary and states the toggle-everything / ungrounded-if-off truth.
+      toolsDisambig: string;
       topK: string;
       topKHint: string;
       // Friendly per-tool labels, keyed by MCP tool name.
@@ -249,6 +271,21 @@ export interface Strings {
       overhead: string;
       empty: string;
     };
+  };
+  // 030-event-console — the expandable, scrollable trace log next to the footer.
+  console: {
+    title: string;
+    expand: string;
+    collapse: string;
+    explain: string;
+    copyEvent: string;
+    copyTrace: string;
+    copyId: string;
+    copied: string;
+    size: string;
+    latency: string;
+    from: string;
+    to: string;
   };
   // Guided tour — storytelling playback (005-guided-tour, 014-tour-scripted).
   tour: {
@@ -474,12 +511,17 @@ const en: Strings = {
     partial: "partial · some traces expired",
     estimate: "≈ estimate · not billed",
     tokenizer: "tiktoken · o200k_base",
+    tokensIn: "in",
+    tokensOut: "out",
   },
   inspector: {
     overviewTitle: "Inspector",
     overviewBody:
       "The pipeline is split into deployable tiers (containers) that talk over the network. Send a message, then click any station to inspect the real data — protocols and routes, retrieved chunks and scores, tool calls, the assembled prompt, and latency.",
     overviewBack: "← Overview",
+    whyTitle: "Why this layer · What breaks without it",
+    whyLabel: "Why this exists",
+    whatBreaksLabel: "What breaks without it",
     techInfra: "Technical & infrastructure",
     tier: "tier",
     role: "role (cloud-agnostic)",
@@ -517,6 +559,15 @@ const en: Strings = {
     totalInCollection: "total in collection",
     vectorPreview: "vector preview",
     fromDocument: "from your PDF",
+    indexerTitle: "Offline indexer",
+    chunking: "chunking",
+    chunkingValue: "900-char windows · 150 overlap · paragraph-packing",
+    trigger: "trigger / timing",
+    triggerValue: "startup build-if-missing · on PDF upload · rebuild on dimension drift",
+    indexRefresh: "index refresh",
+    indexRefreshValue:
+      "A stale or badly-chunked index quietly degrades answer quality — re-embed when the model or corpus changes.",
+    indexerIdle: "Idle — builds on startup, on PDF upload, or on embedding-dimension drift.",
     discoveredTools: "Discovered tools",
     transport: "transport",
     toolCall: "Tool call",
@@ -539,6 +590,8 @@ const en: Strings = {
     userMessage: "user message",
     history: "conversation history",
     generatedAnswer: "Generated answer",
+    ttft: "time to first token",
+    throughput: "throughput",
     usageCost: "Usage & cost",
     rounds: "LLM rounds",
     promptTokens: "prompt tokens",
@@ -578,12 +631,16 @@ const en: Strings = {
       reset: "Reset to default",
       tools: "Tools (MCP)",
       toolsHint: "Turn tools off and watch the agent re-plan without them.",
+      toolsDisambig:
+        "Knowledge base search is full vector retrieval over the corpus and your PDFs; Glossary lookup is a tiny canned term list. Any tool can be turned off — disabling Knowledge base search makes the run ungrounded (LLM-only).",
       topK: "Retrieved chunks (top-k)",
       topKHint: "How many chunks RAG pulls per query.",
       toolLabels: {
+        search_knowledge_base: "Knowledge base search",
         calculator: "Calculator",
         current_time: "Current time",
         kb_lookup: "Glossary lookup",
+        load_skill: "Load skill",
       },
       failure: {
         label: "Simulate failure",
@@ -663,6 +720,20 @@ const en: Strings = {
       overhead: "overhead / transit",
       empty: "Run a turn to see where the time went.",
     },
+  },
+  console: {
+    title: "Event log",
+    expand: "Show log",
+    collapse: "Hide log",
+    explain: "Explain this event",
+    copyEvent: "Copy JSON",
+    copyTrace: "Copy full trace",
+    copyId: "Copy request id",
+    copied: "Copied",
+    size: "payload",
+    latency: "latency",
+    from: "from",
+    to: "to",
   },
   tour: {
     start: "▶ Tour",
@@ -900,12 +971,17 @@ const pt: Strings = {
     partial: "parcial · alguns traces expiraram",
     estimate: "≈ estimativa · não cobrado",
     tokenizer: "tiktoken · o200k_base",
+    tokensIn: "entrada",
+    tokensOut: "saída",
   },
   inspector: {
     overviewTitle: "Inspetor",
     overviewBody:
       "O pipeline é dividido em camadas implantáveis (containers) que se comunicam pela rede. Envie uma mensagem e clique em qualquer estação para inspecionar os dados reais — protocolos e rotas, trechos recuperados e seus scores, chamadas de ferramentas, o prompt montado e a latência.",
     overviewBack: "← Visão geral",
+    whyTitle: "Por que esta camada · O que quebra sem ela",
+    whyLabel: "Por que existe",
+    whatBreaksLabel: "O que quebra sem ela",
     techInfra: "Técnico e infraestrutura",
     tier: "camada",
     role: "papel (agnóstico de nuvem)",
@@ -943,6 +1019,15 @@ const pt: Strings = {
     totalInCollection: "total na coleção",
     vectorPreview: "prévia do vetor",
     fromDocument: "do seu PDF",
+    indexerTitle: "Indexador offline",
+    chunking: "chunking",
+    chunkingValue: "janelas de 900 chars · 150 de sobreposição · empacotamento por parágrafo",
+    trigger: "gatilho / timing",
+    triggerValue: "build na inicialização se ausente · no upload de PDF · rebuild ao mudar a dimensão",
+    indexRefresh: "atualização do índice",
+    indexRefreshValue:
+      "Um índice desatualizado ou mal chunkado degrada silenciosamente a qualidade — re-embedde quando o modelo ou o corpus muda.",
+    indexerIdle: "Ocioso — constrói na inicialização, no upload de PDF, ou ao mudar a dimensão do embedding.",
     discoveredTools: "Ferramentas descobertas",
     transport: "transporte",
     toolCall: "Chamada de ferramenta",
@@ -965,6 +1050,8 @@ const pt: Strings = {
     userMessage: "mensagem do usuário",
     history: "histórico de conversas",
     generatedAnswer: "Resposta gerada",
+    ttft: "tempo até o 1º token",
+    throughput: "vazão",
     usageCost: "Uso e custo",
     rounds: "Rodadas da LLM",
     promptTokens: "tokens de prompt",
@@ -1004,12 +1091,16 @@ const pt: Strings = {
       reset: "Restaurar padrão",
       tools: "Ferramentas (MCP)",
       toolsHint: "Desligue ferramentas e veja o agente replanejar sem elas.",
+      toolsDisambig:
+        "A Busca na base de conhecimento é recuperação vetorial completa sobre o corpus e seus PDFs; a Consulta ao glossário é uma lista enlatada de termos. Qualquer tool pode ser desligada — desligar a Busca na base de conhecimento deixa a execução sem fundamentação (só o LLM).",
       topK: "Trechos recuperados (top-k)",
       topKHint: "Quantos trechos o RAG busca por consulta.",
       toolLabels: {
+        search_knowledge_base: "Busca na base de conhecimento",
         calculator: "Calculadora",
         current_time: "Hora atual",
         kb_lookup: "Consulta ao glossário",
+        load_skill: "Carregar skill",
       },
       failure: {
         label: "Simular falha",
@@ -1089,6 +1180,20 @@ const pt: Strings = {
       overhead: "sobrecarga / trânsito",
       empty: "Rode um turno para ver para onde foi o tempo.",
     },
+  },
+  console: {
+    title: "Log de eventos",
+    expand: "Mostrar log",
+    collapse: "Ocultar log",
+    explain: "Explicar este evento",
+    copyEvent: "Copiar JSON",
+    copyTrace: "Copiar trace completo",
+    copyId: "Copiar id da requisição",
+    copied: "Copiado",
+    size: "payload",
+    latency: "latência",
+    from: "de",
+    to: "para",
   },
   tour: {
     start: "▶ Tour",

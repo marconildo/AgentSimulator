@@ -77,3 +77,32 @@ describe("deriveView usage aggregation (011 AC3)", () => {
     expect(u.costUsd).toBe(0);
   });
 });
+
+describe("deriveView generation metrics (029-ttft-throughput AC4)", () => {
+  it("surfaces ttft + throughput from the llm.generate END metrics", () => {
+    seq = 0;
+    const events = [
+      ev("frontend", "end", { message: "hi" }),
+      ev("llm.generate", "end", { answer: "hi there" }, {
+        tokens: 8,
+        ttft_ms: 320,
+        tokens_per_sec: 42.5,
+      }),
+      ev("backend", "end", {}),
+    ];
+    const g = deriveView(events, events.length - 1).generation;
+    expect(g.ttftMs).toBe(320);
+    expect(g.tokensPerSec).toBe(42.5);
+  });
+
+  it("omits them on a legacy/replayed trace without the metrics", () => {
+    seq = 0;
+    const events = [
+      ev("llm.generate", "end", { answer: "hi" }),
+      ev("backend", "end", {}),
+    ];
+    const g = deriveView(events, events.length - 1).generation;
+    expect(g.ttftMs).toBeUndefined();
+    expect(g.tokensPerSec).toBeUndefined();
+  });
+});

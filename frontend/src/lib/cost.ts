@@ -15,3 +15,8 @@ export function formatUsd(n: number): string {
   if (n < 1) return `$${n.toFixed(4)}`;
   return `$${n.toFixed(2)}`;
 }
+
+/** Generation throughput, e.g. 42.5 → "~42 tok/s" (029-ttft-throughput). */
+export function formatTps(n: number): string {
+  return `~${Math.round(n)} tok/s`;
+}

@@ -246,6 +246,15 @@ function innerRows(
         ...(typeof top === "number" ? [{ k: t.readout.score, v: top.toFixed(2) }] : []),
       ];
     }
+    case "ingestion": {
+      // 033-ingestion-node — the offline indexer's at-a-glance counts.
+      const store = lastWith(events, (e) => e.stage === "rag.ingest.store" && e.phase === "end");
+      const chunk = lastWith(events, (e) => e.stage === "rag.ingest.chunk" && e.phase === "end");
+      const rows: Row[] = [];
+      if (chunk) rows.push({ k: i.chunkStrategy, v: String(chunk.data.strategy ?? "—") });
+      if (store) rows.push({ k: i.vectorsStored, v: String(store.data.chunks_stored ?? 0) });
+      return rows;
+    }
     case "mcp": {
       const disc = lastWith(events, (e) => e.stage === "mcp.discover" && e.phase === "end");
       const call = lastWith(events, (e) => e.stage === "mcp.call" && e.phase === "end");

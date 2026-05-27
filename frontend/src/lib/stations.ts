@@ -23,6 +23,7 @@ export type StationId =
   | "backend"
   | "agent"
   | "rag"
+  | "ingestion" // 033-ingestion-node — the offline RAG indexer (owns rag.ingest.*)
   | "mcp"
   | "llm"
   | "database"
@@ -66,7 +67,12 @@ export interface StationMeta {
   icon: string;
   accent: string;
   tag: string; // tiny pill shown on the node, at-a-glance tech
-  blurb: string;
+  blurb: string; // what this station does
+  // 028-why-this-layer: why the layer is its own thing, and the concrete failure
+  // mode if it were removed or merged. Authored on the executing stations;
+  // preview nodes may omit them (nothing depends on it there).
+  why?: string;
+  whatBreaks?: string;
   generic: string; // cloud-agnostic role (the thing that matters)
   clouds: CloudMap; // concrete example service per provider
   tech: TechRow[];
@@ -120,6 +126,16 @@ export interface BoundaryMeta {
   box: { x: number; y: number; w: number; h: number };
 }
 
+// 032-network-boundary — the public-internet / egress frontier between the public
+// client tier and the private interior. Unlike the private boundary it is
+// **cloud-generic**: no `clouds` map, so its label never changes with the active
+// provider (edge controls already live on the client tier + the frontend→backend
+// hop). Geometry is computed in layout.ts.
+export interface PublicFrontierMeta {
+  id: string;
+  label: string;
+}
+
 // --- Source data (translatable fields as `Tr`) -------------------------------
 
 interface TechRowSrc {
@@ -128,11 +144,13 @@ interface TechRowSrc {
 }
 type StationSrc = Omit<
   StationMeta,
-  "title" | "subtitle" | "blurb" | "generic" | "tech" | "scenarios"
+  "title" | "subtitle" | "blurb" | "why" | "whatBreaks" | "generic" | "tech" | "scenarios"
 > & {
   title: Tr;
   subtitle: Tr;
   blurb: Tr;
+  why?: Tr;
+  whatBreaks?: Tr;
   generic: Tr;
   tech: TechRowSrc[];
   scenarios?: Scenario[]; // omitted ⇒ ALL_SCENARIOS (base element, in every rung)
@@ -245,6 +263,13 @@ const BOUNDARY_SRC: BoundarySrc = {
   box: { x: 298, y: 6, w: 972, h: 656 },
 };
 
+// 032-network-boundary — the public-internet / egress frontier. Generic only:
+// no `clouds` map, so the label is identical in every cloud (AC2).
+const PUBLIC_BOUNDARY_SRC: { id: string; label: Tr } = {
+  id: "public-internet",
+  label: { en: "Public internet / egress", pt: "Internet pública / egress" },
+};
+
 const STATIONS_SRC: StationSrc[] = [
   {
     id: "frontend",
@@ -257,6 +282,14 @@ const STATIONS_SRC: StationSrc[] = [
     blurb: {
       en: "Runs in the user's browser. It POSTs the message over HTTPS and holds open a Server-Sent Events connection, rendering each stage — and the streamed answer — as events arrive.",
       pt: "Roda no navegador do usuário. Envia a mensagem via POST sobre HTTPS e mantém aberta uma conexão Server-Sent Events, renderizando cada etapa — e a resposta transmitida — conforme os eventos chegam.",
+    },
+    why: {
+      en: "The UI is kept thin and client-side so a CDN can serve it globally while every secret and decision stays on the server — the browser is the only piece running on the user's device.",
+      pt: "A UI é mantida fina e client-side para uma CDN servi-la globalmente enquanto todo segredo e decisão ficam no servidor — o navegador é a única peça rodando no dispositivo do usuário.",
+    },
+    whatBreaks: {
+      en: "Put logic or keys in the browser and anyone can read them from devtools. Honest caveat: this demo has no real authentication — it is a stub; production needs login, sessions and rate limiting before the agent ever runs.",
+      pt: "Coloque lógica ou chaves no navegador e qualquer um as lê pelo devtools. Ressalva honesta: esta demo não tem autenticação real — é um stub; produção precisa de login, sessões e rate limiting antes de o agente rodar.",
     },
     generic: { en: "Browser SPA on static hosting + CDN", pt: "SPA no navegador em hosting estático + CDN" },
     clouds: {
@@ -286,6 +319,14 @@ const STATIONS_SRC: StationSrc[] = [
       en: "A FastAPI web service terminates TLS at the ingress, validates the request, reads recent history from the database, opens an SSE response, and invokes the agent — relaying every trace event back to the browser.",
       pt: "Um serviço web FastAPI encerra o TLS no ingress, valida a requisição, lê o histórico recente do banco, abre uma resposta SSE e invoca o agente — repassando cada evento de trace ao navegador.",
     },
+    why: {
+      en: "A thin, validated public edge is the only internet-facing surface: it terminates TLS, checks the request, and is the single door an attacker can knock on — keeping the agent runtime off the public internet.",
+      pt: "Uma borda pública fina e validada é a única superfície voltada à internet: encerra o TLS, valida a requisição e é a única porta em que um atacante pode bater — mantendo o runtime do agente fora da internet pública.",
+    },
+    whatBreaks: {
+      en: "Without a dedicated edge the agent runtime would face the internet directly. Honest caveat: this demo has no real auth — authentication is a stub; production needs authn/z, sessions and rate limiting at this layer before any agent work.",
+      pt: "Sem uma borda dedicada o runtime do agente ficaria exposto direto à internet. Ressalva honesta: esta demo não tem autenticação real — é um stub; produção precisa de authn/z, sessões e rate limiting nesta camada antes de qualquer trabalho do agente.",
+    },
     generic: { en: "Containerized API · public ingress", pt: "API em container · ingress público" },
     clouds: {
       azure: "Azure Container Apps",
@@ -313,6 +354,14 @@ const STATIONS_SRC: StationSrc[] = [
       en: "A LangGraph state machine on a private network. It reasons in a loop: decide whether to call a tool — search the knowledge base, run a calculation, check the time — observe the result, and reason again, until it can answer. The agent owns every tool-call decision, including whether to retrieve.",
       pt: "Uma máquina de estados LangGraph em rede privada. Raciocina em loop: decidir se chama uma ferramenta — buscar na base de conhecimento, calcular, consultar a hora — observar o resultado e raciocinar de novo, até poder responder. O agente decide cada chamada de ferramenta, inclusive se vai recuperar contexto.",
     },
+    why: {
+      en: "The reasoning loop holds tool access and model credentials, so it runs on a private network the internet can't reach directly — least privilege at the most sensitive layer.",
+      pt: "O loop de raciocínio detém o acesso às ferramentas e as credenciais do modelo, então roda numa rede privada que a internet não alcança diretamente — menor privilégio na camada mais sensível.",
+    },
+    whatBreaks: {
+      en: "Put it in the public API container and a single web-tier compromise exposes every tool credential and the model egress — the blast radius becomes the whole system instead of one isolated service.",
+      pt: "Coloque-o no container da API pública e um único comprometimento da camada web expõe todas as credenciais de ferramentas e a saída do modelo — o raio de impacto passa a ser o sistema inteiro em vez de um serviço isolado.",
+    },
     generic: { en: "Private container runtime", pt: "Runtime privado em container" },
     clouds: {
       azure: "Azure Container Apps (internal)",
@@ -339,6 +388,14 @@ const STATIONS_SRC: StationSrc[] = [
     blurb: {
       en: "The application's system of record — conversations and history. A real SQLite store here (separate from the RAG vector DB); in production a managed relational service. The backend reads recent history and persists each conversation.",
       pt: "O sistema de registro da aplicação — conversas e histórico. Aqui é um SQLite real (separado do vector DB do RAG); em produção, um serviço relacional gerenciado. O backend lê o histórico recente e persiste cada conversa.",
+    },
+    why: {
+      en: "Transactional conversation state needs ACID guarantees and a different engine than vector search, so the relational store is its own service — reached over a pooled, TLS connection.",
+      pt: "O estado transacional da conversa precisa de garantias ACID e de um motor diferente do da busca vetorial, então o banco relacional é um serviço próprio — acessado por uma conexão TLS com pool.",
+    },
+    whatBreaks: {
+      en: "Merge it into the vector DB and you lose ACID or pay vector-search latency on every read. Honest caveat: this demo is single-instance (the trace store is in-memory, lost on restart, not shared across replicas); production fronts the DB with a connection pool and runs more than one replica.",
+      pt: "Funda-o no banco vetorial e você perde o ACID ou paga a latência da busca vetorial em cada leitura. Ressalva honesta: esta demo é de instância única (o armazenamento de traces fica em memória, perdido ao reiniciar, não compartilhado entre réplicas); produção coloca um pool de conexões na frente do banco e roda mais de uma réplica.",
     },
     generic: { en: "Managed relational database", pt: "Banco relacional gerenciado" },
     clouds: {
@@ -368,6 +425,14 @@ const STATIONS_SRC: StationSrc[] = [
       en: "Embeds the query and runs an approximate nearest-neighbor search over the knowledge base using cosine similarity, returning the most relevant top-k chunks as grounding context. It also ingests user-uploaded PDFs — chunk → embed → store — so the agent can ground answers on your own documents.",
       pt: "Gera o embedding da consulta e executa uma busca aproximada por vizinhos mais próximos na base de conhecimento usando similaridade de cosseno, retornando os top-k trechos mais relevantes como contexto de fundamentação. Também faz a ingestão de PDFs enviados pelo usuário — dividir → incorporar → armazenar — para o agente fundamentar respostas nos seus próprios documentos.",
     },
+    why: {
+      en: "Approximate-nearest-neighbour search over embeddings is a distinct job from transactional storage: a vector index (HNSW, cosine) makes 'find the most similar chunks' fast — something a relational DB can't do efficiently.",
+      pt: "A busca aproximada por vizinhos mais próximos sobre embeddings é um trabalho distinto do armazenamento transacional: um índice vetorial (HNSW, cosseno) torna rápido 'achar os trechos mais similares' — algo que um banco relacional não faz de forma eficiente.",
+    },
+    whatBreaks: {
+      en: "Without a vector store the agent can't ground answers in your documents — it falls back to the model's parametric memory, which goes stale and hallucinates on facts outside its training.",
+      pt: "Sem um banco vetorial o agente não consegue fundamentar respostas nos seus documentos — recai na memória paramétrica do modelo, que envelhece e alucina sobre fatos fora do treinamento.",
+    },
     generic: { en: "Managed vector database", pt: "Banco de dados vetorial gerenciado" },
     clouds: {
       azure: "Azure AI Search / Chroma",
@@ -379,17 +444,47 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "index", pt: "índice" }, v: "HNSW" },
       { k: { en: "metric", pt: "métrica" }, v: "cosine similarity" },
       { k: { en: "embeddings", pt: "embeddings" }, v: "text-embedding-3-small" },
-      { k: { en: "ingestion", pt: "ingestão" }, v: "PDF → chunk → embed → store" },
+      { k: { en: "query", pt: "consulta" }, v: "embed → search → retrieve top-k" },
     ],
-    stages: [
-      "rag.embed",
-      "rag.search",
-      "rag.retrieve",
-      "rag.ingest.chunk",
-      "rag.ingest.embed",
-      "rag.ingest.store",
-    ],
+    // 033-ingestion-node: the rag.ingest.* stages moved to the `ingestion`
+    // station; the query-time RAG node keeps only embed/search/retrieve.
+    stages: ["rag.embed", "rag.search", "rag.retrieve"],
     position: { x: 980, y: 320 },
+  },
+  {
+    id: "ingestion",
+    tier: "services",
+    title: { en: "Ingestion / Indexer", pt: "Ingestão / Indexador" },
+    subtitle: { en: "Offline index build", pt: "Construção offline do índice" },
+    icon: "📥",
+    accent: "var(--color-ok)",
+    tag: "INDEX",
+    blurb: {
+      en: "Builds the knowledge base offline: split documents into chunks, embed them, and upsert the vectors into the index. Runs on startup (if missing), on each PDF upload, and rebuilds when the embedding model/dimension changes.",
+      pt: "Constrói a base de conhecimento offline: divide documentos em chunks, gera embeddings e faz upsert dos vetores no índice. Roda na inicialização (se ausente), a cada upload de PDF e reconstrói quando o modelo/dimensão de embedding muda.",
+    },
+    why: {
+      en: "Indexing is the offline half of RAG and a different job from query-time search: documents are chunked, embedded and upserted ahead of time so retrieval can be fast at request time. Chunking strategy and refresh policy live here, not on the query path.",
+      pt: "A indexação é a metade offline do RAG e um trabalho diferente da busca em tempo de consulta: documentos são chunkados, embeddados e feito upsert com antecedência para a recuperação ser rápida na requisição. A estratégia de chunking e a política de atualização vivem aqui, não no caminho da consulta.",
+    },
+    whatBreaks: {
+      en: "Skip the indexer and there is nothing to retrieve — the agent has no grounding. A stale or badly-chunked index quietly wrecks answer quality: chunks too big bury the answer, too small lose context, and an index not re-embedded after a model change silently mismatches the query vectors.",
+      pt: "Pule o indexador e não há o que recuperar — o agente fica sem fundamentação. Um índice desatualizado ou mal chunkado destrói silenciosamente a qualidade: chunks grandes demais soterram a resposta, pequenos demais perdem contexto, e um índice não re-embeddado após troca de modelo descasa silenciosamente dos vetores da consulta.",
+    },
+    generic: { en: "Offline indexing / ingestion job", pt: "Job de indexação / ingestão offline" },
+    clouds: {
+      azure: "Azure AI Search indexer / Functions",
+      aws: "OpenSearch Ingestion / Glue",
+      gcp: "Vertex AI Pipelines / Dataflow",
+    },
+    tech: [
+      { k: { en: "pipeline", pt: "pipeline" }, v: "docs → chunk → embed → upsert" },
+      { k: { en: "chunking", pt: "chunking" }, v: "900 chars / 150 overlap" },
+      { k: { en: "embeddings", pt: "embeddings" }, v: "text-embedding-3-small" },
+      { k: { en: "trigger", pt: "gatilho" }, v: "startup · PDF upload · dim drift" },
+    ],
+    stages: ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"],
+    position: { x: 980, y: 400 },
   },
   {
     id: "mcp",
@@ -402,6 +497,14 @@ const STATIONS_SRC: StationSrc[] = [
     blurb: {
       en: "An MCP server exposes tools to the agent. The agent discovers them, and when the model chooses one, the call and its result travel over the MCP transport (here, stdio / JSON-RPC).",
       pt: "Um servidor MCP expõe ferramentas ao agente. O agente as descobre e, quando o modelo escolhe uma, a chamada e seu resultado trafegam pelo transporte MCP (aqui, stdio / JSON-RPC).",
+    },
+    why: {
+      en: "Tools sit behind a standard protocol (MCP) as a separate process so the agent doesn't hard-link tool code, secrets or dependencies — they can be swapped, sandboxed and scaled independently.",
+      pt: "As ferramentas ficam atrás de um protocolo padrão (MCP) como processo separado para o agente não acoplar código, segredos ou dependências de ferramentas — podem ser trocadas, isoladas e escaladas de forma independente.",
+    },
+    whatBreaks: {
+      en: "Inline the tools and every tool dependency and secret lives in the agent process. Note stdio is local-only — when tools must scale or run out-of-process, MCP also speaks HTTP/SSE as the transport.",
+      pt: "Embuta as ferramentas e toda dependência e segredo de ferramenta passa a viver no processo do agente. Note que o stdio é apenas local — quando as ferramentas precisam escalar ou rodar fora do processo, o MCP também fala HTTP/SSE como transporte.",
     },
     generic: { en: "Tool service (sidecar)", pt: "Serviço de ferramentas (sidecar)" },
     clouds: {
@@ -428,6 +531,14 @@ const STATIONS_SRC: StationSrc[] = [
     blurb: {
       en: "Receives the assembled prompt (system + context + tool results) over HTTPS and streams the answer back token by token — which is why the response types itself out in the chat.",
       pt: "Recebe o prompt montado (sistema + contexto + resultados de ferramentas) sobre HTTPS e transmite a resposta de volta token a token — por isso a resposta vai sendo digitada no chat.",
+    },
+    why: {
+      en: "Generation runs on a managed model endpoint reached over TLS, not in your process: the weights are huge, GPU-bound and provider-operated, so you call them as a service.",
+      pt: "A geração roda num endpoint de modelo gerenciado acessado por TLS, não no seu processo: os pesos são enormes, dependem de GPU e são operados pelo provedor, então você os chama como serviço.",
+    },
+    whatBreaks: {
+      en: "Without a separate model endpoint you'd have to host and scale GPUs yourself; coupling it into the agent also removes the seam where a gateway can add routing, fallback, budgets and caching.",
+      pt: "Sem um endpoint de modelo separado, você teria de hospedar e escalar GPUs por conta própria; acoplá-lo ao agente também remove o ponto onde um gateway pode adicionar roteamento, fallback, orçamentos e cache.",
     },
     generic: { en: "Managed model endpoint", pt: "Endpoint de modelo gerenciado" },
     clouds: {
@@ -814,6 +925,8 @@ function resolveStation(s: StationSrc, lang: Lang): StationMeta {
     title: r(s.title, lang),
     subtitle: r(s.subtitle, lang),
     blurb: r(s.blurb, lang),
+    why: s.why ? r(s.why, lang) : undefined,
+    whatBreaks: s.whatBreaks ? r(s.whatBreaks, lang) : undefined,
     generic: r(s.generic, lang),
     tech: s.tech.map((t) => ({ k: r(t.k, lang), v: t.v })),
     scenarios: s.scenarios ?? ALL_SCENARIOS,
@@ -886,6 +999,16 @@ export function hopsFor(lang: Lang): HopMeta[] {
 
 export function boundaryFor(lang: Lang): BoundaryMeta {
   return (boundaryCache[lang] ??= resolveBoundary(BOUNDARY_SRC, lang));
+}
+
+const publicBoundaryCache: Partial<Record<Lang, PublicFrontierMeta>> = {};
+
+/** The public-internet / egress frontier label (cloud-generic — no cloud arg). */
+export function publicBoundaryFor(lang: Lang): PublicFrontierMeta {
+  return (publicBoundaryCache[lang] ??= {
+    id: PUBLIC_BOUNDARY_SRC.id,
+    label: r(PUBLIC_BOUNDARY_SRC.label, lang),
+  });
 }
 
 // Lang-independent structural exports (ids / endpoints) — for pure logic such

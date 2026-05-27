@@ -1,6 +1,7 @@
-// 002-interactive-chat — the three PDF-ingestion stages must map to the `rag`
-// station (constitution §6) and flow through the pure projection without
-// breaking it (an unmapped stage would crash deriveView).
+// 033-ingestion-node — the three PDF-ingestion stages are owned by the new
+// `ingestion` station (re-mapped off `rag`, constitution §6), and flow through
+// the pure projection without breaking it. The query-time RAG node keeps only
+// embed/search/retrieve. (Updated from 002, which mapped ingest → rag.)
 
 import { describe, expect, it } from "vitest";
 
@@ -14,12 +15,18 @@ function ev(stage: Stage, phase: Phase, data: Record<string, unknown> = {}): Tra
   return { trace_id: "t", seq: 0, ts: 0, stage, phase, label: "", data, metrics: {} };
 }
 
-describe("ingestion stages", () => {
-  it("each map to the rag station", () => {
-    for (const stage of INGEST) expect(STAGE_TO_STATION[stage]).toBe("rag");
+describe("ingestion stages (033-ingestion-node)", () => {
+  it("each map to the ingestion station, not rag (AC2)", () => {
+    for (const stage of INGEST) expect(STAGE_TO_STATION[stage]).toBe("ingestion");
   });
 
-  it("light the rag station through the projection", () => {
+  it("the rag station owns only the query-time stages (AC2)", () => {
+    expect(STAGE_TO_STATION["rag.embed"]).toBe("rag");
+    expect(STAGE_TO_STATION["rag.search"]).toBe("rag");
+    expect(STAGE_TO_STATION["rag.retrieve"]).toBe("rag");
+  });
+
+  it("light the ingestion station through the projection (AC3)", () => {
     const events: TraceEvent[] = [
       ev("frontend", "end", { filename: "a.pdf" }),
       ev("backend", "start"),
@@ -31,9 +38,11 @@ describe("ingestion stages", () => {
       ev("rag.ingest.store", "end", { chunks_stored: 2 }),
     ];
     const view = deriveView(events, events.length - 1);
-    expect(view.stations.rag.status).toBe("done");
-    // The six rag.ingest events all land on the rag station.
-    expect(view.stations.rag.events).toHaveLength(6);
-    expect(view.activeStation).toBe("rag");
+    expect(view.stations.ingestion.status).toBe("done");
+    // The six rag.ingest events all land on the ingestion station.
+    expect(view.stations.ingestion.events).toHaveLength(6);
+    expect(view.activeStation).toBe("ingestion");
+    // …and none of them light the query-time rag node.
+    expect(view.stations.rag.events).toHaveLength(0);
   });
 });

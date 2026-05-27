@@ -11,6 +11,11 @@ import type { TraceEvent } from "../types/events";
 /** Minimum on-screen dwell for a structural stage change, in milliseconds. */
 export const LIVE_STEP_MS = 120;
 
+// 032-network-boundary — the final persist (db.write) lingers longer than a
+// regular structural step so the learner actually notices the write before the
+// run closes (otherwise it zips past into the run-finished backend END).
+export const PERSIST_DWELL_MS = 600;
+
 /**
  * Token (`llm.generate/progress`) events don't change the active station, so they
  * carry no dwell — they flush to the live tail and the answer types at the
@@ -18,6 +23,11 @@ export const LIVE_STEP_MS = 120;
  */
 export function isFastForward(ev: TraceEvent): boolean {
   return ev.stage === "llm.generate" && ev.phase === "progress";
+}
+
+/** On-screen dwell before the playhead advances past `ev` (032-network-boundary). */
+export function dwellFor(ev: TraceEvent): number {
+  return ev.stage === "db.write" ? PERSIST_DWELL_MS : LIVE_STEP_MS;
 }
 
 export interface PaceResult {
@@ -44,8 +54,10 @@ export function paceAdvance(
   while (c < tail && isFastForward(events[c + 1])) c++;
 
   // Advance past one structural event once its minimum dwell has elapsed, then
-  // flush any token run that immediately follows it.
-  if (c < tail && now - at >= LIVE_STEP_MS) {
+  // flush any token run that immediately follows it. The dwell is per-event so
+  // the final persist (db.write) lingers longer than a regular step (032).
+  const dwell = c >= 0 && events[c] ? dwellFor(events[c]) : LIVE_STEP_MS;
+  if (c < tail && now - at >= dwell) {
     c++;
     at = now;
     while (c < tail && isFastForward(events[c + 1])) c++;

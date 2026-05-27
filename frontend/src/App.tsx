@@ -220,7 +220,7 @@ export default function App() {
         <a
           href="https://github.com/reginaldosilva27/AgentSimulator"
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           aria-label="GitHub"
           title="GitHub"
           className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[var(--color-line)] text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"

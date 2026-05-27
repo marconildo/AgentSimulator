@@ -122,8 +122,8 @@ SCENARIOS: list[dict[str, Any]] = [
         "id": "simple",
         "name": {"en": "Simple", "pt": "Simples"},
         "blurb": {
-            "en": "ReAct + vector RAG + MCP tools, single-turn — today's app.",
-            "pt": "ReAct + RAG vetorial + ferramentas MCP, turno único — o app de hoje.",
+            "en": "ReAct + vector RAG + MCP tools, bounded loop — today's app.",
+            "pt": "ReAct + RAG vetorial + ferramentas MCP, loop limitado — o app de hoje.",
         },
         "available": True,
     },
