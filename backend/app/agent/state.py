@@ -30,6 +30,10 @@ class AgentState(TypedDict):
     simulate_failure: str
     # Long-term memory: prior {message, answer} turns from the application DB.
     history: list[dict[str, str]]
+    # Skill catalog (027-skills), request-derived: each {name, description} advertised
+    # in the system prompt so the agent knows what it can load via `load_skill`. The
+    # body is never here — it is loaded on demand. Empty list = no skills advertised.
+    skills_catalog: list[dict[str, str]]
     # The canonical ReAct message thread (026-agent-tool-autonomy). The agent is
     # called on this running thread: a HumanMessage, then AIMessage(tool_calls) →
     # ToolMessage pairs as it decides + observes, then the final AIMessage. The

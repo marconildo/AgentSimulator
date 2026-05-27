@@ -81,6 +81,34 @@ def _kb_lookup(topic: str) -> str:
     return f"{_KB_MISS_PREFIX} '{topic}'."
 
 
+# --- skills (027-skills) -----------------------------------------------------
+
+# Wire name the model calls and the UI lists; a proper noun, not translated.
+LOAD_SKILL_TOOL = "load_skill"
+
+# Functional description sent to the model (English, like the other tools).
+LOAD_SKILL_DESCRIPTION = (
+    "Load the full instructions (body) of a named skill from the catalog. Call this "
+    "with the exact `name` of a skill from the advertised skills list when it fits the "
+    "user's request, then follow the loaded instructions."
+)
+
+
+def _load_skill(name: str) -> str:
+    """Return the body of the named skill, or an ``error:`` string if unknown.
+
+    Reads the relational store directly. This runs both in the stdio MCP server
+    subprocess (which inherits ``APP_DB_PATH``, so it opens the same SQLite file)
+    and via the in-process fallback — both see the same catalog.
+    """
+    from ..db.store import get_store
+
+    skill = get_store()._get_skill_by_name_sync((name or "").strip())
+    if skill is None:
+        return f"error: skill '{name}' not found"
+    return skill["body"]
+
+
 def found_for(name: str, content: str) -> bool:
     """Structured not-found signal for a tool result — the single source of truth.
 
@@ -125,6 +153,16 @@ def current_time() -> str:
 def kb_lookup(topic: str) -> str:
     """Look up a one-line glossary definition for an AI engineering topic."""
     return _kb_lookup(topic)
+
+
+@mcp.tool()
+def load_skill(name: str) -> str:
+    """Load the full instructions (body) of a named skill from the catalog.
+
+    Call this with the exact `name` of a skill from the advertised skills list when
+    it fits the user's request, then follow the loaded instructions.
+    """
+    return _load_skill(name)
 
 
 if __name__ == "__main__":

@@ -72,13 +72,14 @@ describe("useChat — clearAll (025-clear-databases)", () => {
       sessions_deleted: 3,
       messages_deleted: 9,
       documents_deleted: 2,
+      skills_deleted: 4,
       vectors_removed: 17,
     };
     vi.mocked(chatApi.clearData).mockResolvedValue(counts);
     useChat.setState({
       sessions: [session("a"), session("b")],
       activeSessionId: "a",
-      messages: [{ id: "m", message: "hi", answer: "yo", chunks: [], created_at: 0 }],
+      messages: [{ id: "m", message: "hi", answer: "yo", chunks: [], skills: [], created_at: 0 }],
       documents: [{ document_id: "d", filename: "x.pdf", chunk_count: 3, created_at: 0 }],
     });
     // A leftover run on the canvas must be wiped too.

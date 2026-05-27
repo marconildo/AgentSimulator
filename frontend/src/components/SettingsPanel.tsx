@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../i18n";
 import { CloudToggle } from "./CloudToggle";
+import { SkillsSettings } from "./SkillsSettings";
 import { getConfig, type AppConfig, type ClearResult } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { type DeliveryMode, useSettings } from "../lib/settings";
@@ -337,6 +338,11 @@ export function SettingsPanel() {
                 .replace("{chunks}", String(cleared.vectors_removed))}
             </p>
           )}
+
+          <div className="my-2.5 border-t border-[var(--color-line)]" />
+
+          {/* --- Skills catalog (027-skills) ------------------------------ */}
+          <SkillsSettings />
         </div>
       )}
     </div>

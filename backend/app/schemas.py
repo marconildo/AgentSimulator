@@ -130,6 +130,27 @@ class ChatRequest(BaseModel):
     simulate_failure: SimulateFailure = SimulateFailure.NONE
 
 
+class SkillIn(BaseModel):
+    """Create/update payload for a catalog skill (027-skills).
+
+    ``name`` is the unique handle the model passes to ``load_skill``; the body is
+    the instructions loaded on demand. Lengths are bounded to keep the always-on
+    prompt catalog (name + description) and the loaded body reasonable.
+    """
+
+    name: str = Field(..., min_length=1, max_length=80)
+    description: str = Field(..., min_length=1, max_length=400)
+    body: str = Field(..., min_length=1, max_length=8000)
+
+
+class SkillOut(SkillIn):
+    """A persisted skill, as returned by the skills REST surface."""
+
+    id: str
+    created_at: float
+    updated_at: float
+
+
 class TraceSummary(BaseModel):
     """Returned by GET /api/trace/{id} for replay."""
 

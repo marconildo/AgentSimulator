@@ -35,7 +35,14 @@ async def test_clear_all_wipes_all_relational_history(tmp_path):
 
     result = await store.clear_all()
 
-    assert result == {"sessions_deleted": 2, "messages_deleted": 3, "documents_deleted": 1}
+    # 027-skills extends the clear contract with `skills_deleted` (0 here — this
+    # test seeds no skills); the relational counts are unchanged.
+    assert result == {
+        "sessions_deleted": 2,
+        "messages_deleted": 3,
+        "documents_deleted": 1,
+        "skills_deleted": 0,
+    }
     assert await store.list_sessions() == []
     assert await store.list_messages(s1) == []
     assert await store.list_documents(s1) == []
@@ -45,7 +52,12 @@ async def test_clear_all_is_safe_and_idempotent_on_empty_store(tmp_path):
     # AC4 (relational side) — clearing an empty store, or clearing twice, returns
     # all-zero counts and raises nothing.
     store = ConversationStore(tmp_path / "app.sqlite3")
-    zero = {"sessions_deleted": 0, "messages_deleted": 0, "documents_deleted": 0}
+    zero = {
+        "sessions_deleted": 0,
+        "messages_deleted": 0,
+        "documents_deleted": 0,
+        "skills_deleted": 0,
+    }
     assert await store.clear_all() == zero
     assert await store.clear_all() == zero
 
@@ -128,5 +140,6 @@ def test_clear_data_endpoint_is_idempotent_on_empty():
             "sessions_deleted": 0,
             "messages_deleted": 0,
             "documents_deleted": 0,
+            "skills_deleted": 0,
             "vectors_removed": 0,
         }

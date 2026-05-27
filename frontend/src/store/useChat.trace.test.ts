@@ -41,6 +41,7 @@ const msg = (id: string, createdAt: number) => ({
   message: "q",
   answer: "a",
   chunks: [],
+  skills: [],
   created_at: createdAt,
 });
 

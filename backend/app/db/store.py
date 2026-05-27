@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS messages (
     message    TEXT NOT NULL,
     answer     TEXT NOT NULL,
     chunks     TEXT NOT NULL DEFAULT '[]',
+    -- 027-skills: the skill names the agent loaded for this turn (JSON list),
+    -- mirroring `chunks` so the "skills applied" badge survives reload/replay.
+    skills     TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS documents (
@@ -53,6 +56,18 @@ CREATE TABLE IF NOT EXISTS documents (
     filename    TEXT NOT NULL,
     chunk_count INTEGER NOT NULL DEFAULT 0,
     created_at  REAL NOT NULL
+);
+-- 027-skills: the global, agent-loadable skill catalog. A skill is a named
+-- instruction bundle the agent advertises by name+description and loads on
+-- demand (the `body`) via the `load_skill` tool. `name` is unique so the model
+-- can reference it unambiguously. Independent of sessions (global catalog).
+CREATE TABLE IF NOT EXISTS skills (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_session ON documents(session_id, created_at);
@@ -63,6 +78,14 @@ CREATE INDEX IF NOT EXISTS idx_documents_session ON documents(session_id, create
 _TITLE_MAX = 60
 
 
+class DuplicateSkillName(ValueError):
+    """Raised when creating/renaming a skill to a `name` already in the catalog.
+
+    027-skills: `name` is the unique handle the model references in `load_skill`,
+    so the catalog rejects duplicates. The REST layer maps this to a 409.
+    """
+
+
 class ConversationStore:
     """Session-scoped conversation store backed by SQLite."""
 
@@ -71,6 +94,19 @@ class ConversationStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate(conn)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Forward-only column adds for DBs created before a column existed.
+
+        ``CREATE TABLE IF NOT EXISTS`` never alters an existing table, so a dev
+        database from before 027-skills has a ``messages`` table without the
+        ``skills`` column. Add it lazily (idempotent: skip when already present).
+        """
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+        if "skills" not in cols:
+            conn.execute("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
@@ -147,11 +183,97 @@ class ConversationStore:
                 "documents_deleted": conn.execute("SELECT COUNT(*) AS n FROM documents").fetchone()[
                     "n"
                 ],
+                # 027-skills: the skill catalog is user data, so a global reset
+                # wipes it too (the built-in corpus is the only thing kept).
+                "skills_deleted": conn.execute("SELECT COUNT(*) AS n FROM skills").fetchone()["n"],
             }
             conn.execute("DELETE FROM documents")
             conn.execute("DELETE FROM messages")
             conn.execute("DELETE FROM sessions")
+            conn.execute("DELETE FROM skills")
         return {k: int(v) for k, v in counts.items()}
+
+    # --- skills (027-skills) -------------------------------------------------
+
+    @staticmethod
+    def _skill_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "body": row["body"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def _create_skill_sync(self, name: str, description: str, body: str) -> dict[str, Any]:
+        sid = uuid.uuid4().hex
+        now = time()
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO skills (id, name, description, body, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (sid, name, description, body, now, now),
+                )
+        except sqlite3.IntegrityError as exc:  # UNIQUE(name)
+            raise DuplicateSkillName(f"a skill named '{name}' already exists") from exc
+        return {
+            "id": sid,
+            "name": name,
+            "description": description,
+            "body": body,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def _list_skills_sync(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, description, body, created_at, updated_at "
+                "FROM skills ORDER BY name ASC"
+            ).fetchall()
+        return [self._skill_row(r) for r in rows]
+
+    def _get_skill_sync(self, skill_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, name, description, body, created_at, updated_at "
+                "FROM skills WHERE id = ?",
+                (skill_id,),
+            ).fetchone()
+        return self._skill_row(row) if row else None
+
+    def _get_skill_by_name_sync(self, name: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, name, description, body, created_at, updated_at "
+                "FROM skills WHERE name = ?",
+                (name,),
+            ).fetchone()
+        return self._skill_row(row) if row else None
+
+    def _update_skill_sync(
+        self, skill_id: str, name: str, description: str, body: str
+    ) -> dict[str, Any] | None:
+        now = time()
+        try:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "UPDATE skills SET name = ?, description = ?, body = ?, updated_at = ? "
+                    "WHERE id = ?",
+                    (name, description, body, now, skill_id),
+                )
+                if cur.rowcount == 0:
+                    return None
+        except sqlite3.IntegrityError as exc:  # renamed onto an existing name
+            raise DuplicateSkillName(f"a skill named '{name}' already exists") from exc
+        return self._get_skill_sync(skill_id)
+
+    def _delete_skill_sync(self, skill_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM skills WHERE id = ?", (skill_id,))
+        return {"deleted": cur.rowcount > 0, "id": skill_id}
 
     # --- messages ------------------------------------------------------------
 
@@ -162,14 +284,23 @@ class ConversationStore:
         message: str,
         answer: str,
         chunks: list[dict[str, Any]] | None,
+        skills: list[str] | None,
     ) -> dict[str, Any]:
         now = time()
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO messages "
-                "(id, session_id, message, answer, chunks, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (message_id, session_id, message, answer, json.dumps(chunks or []), now),
+                "(id, session_id, message, answer, chunks, skills, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    message_id,
+                    session_id,
+                    message,
+                    answer,
+                    json.dumps(chunks or []),
+                    json.dumps(skills or []),
+                    now,
+                ),
             )
             # Bump activity (drives recent-first ordering) and label the session
             # by its first message if it has no title yet (D7).
@@ -212,7 +343,7 @@ class ConversationStore:
     def _list_messages_sync(self, session_id: str) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, message, answer, chunks, created_at FROM messages "
+                "SELECT id, message, answer, chunks, skills, created_at FROM messages "
                 "WHERE session_id = ? ORDER BY created_at ASC",
                 (session_id,),
             ).fetchall()
@@ -222,6 +353,8 @@ class ConversationStore:
                 "message": r["message"],
                 "answer": r["answer"],
                 "chunks": json.loads(r["chunks"] or "[]"),
+                # 027-skills: the skill names applied to this turn (badge source).
+                "skills": json.loads(r["skills"] or "[]"),
                 "created_at": r["created_at"],
             }
             for r in rows
@@ -301,10 +434,33 @@ class ConversationStore:
         message: str,
         answer: str,
         chunks: list[dict[str, Any]] | None = None,
+        skills: list[str] | None = None,
     ) -> dict[str, Any]:
         return await asyncio.to_thread(
-            self._write_message_sync, session_id, message_id, message, answer, chunks
+            self._write_message_sync, session_id, message_id, message, answer, chunks, skills
         )
+
+    # --- skills (027-skills) -------------------------------------------------
+
+    async def create_skill(self, name: str, description: str, body: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._create_skill_sync, name, description, body)
+
+    async def list_skills(self) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_skills_sync)
+
+    async def get_skill(self, skill_id: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_skill_sync, skill_id)
+
+    async def get_skill_by_name(self, name: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_skill_by_name_sync, name)
+
+    async def update_skill(
+        self, skill_id: str, name: str, description: str, body: str
+    ) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._update_skill_sync, skill_id, name, description, body)
+
+    async def delete_skill(self, skill_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._delete_skill_sync, skill_id)
 
     async def read_history(self, session_id: str, limit: int = 5) -> dict[str, Any]:
         return await asyncio.to_thread(self._read_history_sync, session_id, limit)

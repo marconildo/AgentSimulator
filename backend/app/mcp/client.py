@@ -9,6 +9,7 @@ shows the same MCP stages. The registry is built once and cached.
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -133,6 +134,13 @@ async def _load_via_mcp() -> ToolRegistry:
                 "command": sys.executable,
                 "args": ["-m", "app.mcp.server"],
                 "transport": "stdio",
+                # The MCP stdio client otherwise spawns the server with a *minimal*
+                # sanitized environment (PATH/HOME only), so app vars like
+                # APP_DB_PATH / CHROMA_DIR would not reach it. The `load_skill` tool
+                # (027-skills) reads the app's SQLite catalog, so the subprocess must
+                # resolve the *same* database path — pass the parent environment
+                # through explicitly. (The other tools are pure and unaffected.)
+                "env": dict(os.environ),
             }
         }
     )
@@ -191,6 +199,18 @@ def _load_local() -> ToolRegistry:
                 "required": ["topic"],
             },
             runner=wrap(local_server._kb_lookup),
+        ),
+        # 027-skills: load the full body of a named skill from the catalog. Mirrors
+        # the @mcp.tool() registration in server.py; both read the same store.
+        RegisteredTool(
+            name=local_server.LOAD_SKILL_TOOL,
+            description=local_server.LOAD_SKILL_DESCRIPTION,
+            schema={
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+            runner=wrap(local_server._load_skill),
         ),
     ]
     return ToolRegistry(tools, transport="local-fallback")

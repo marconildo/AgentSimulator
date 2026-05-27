@@ -76,7 +76,7 @@ describe("useChat — lazy session creation", () => {
     useChat.setState({
       sessions: [session("old")],
       activeSessionId: "old",
-      messages: [{ id: "m", message: "hi", answer: "yo", chunks: [], created_at: 0 }],
+      messages: [{ id: "m", message: "hi", answer: "yo", chunks: [], skills: [], created_at: 0 }],
     });
 
     await useChat.getState().newChat();
@@ -222,7 +222,7 @@ describe("useChat — chat stays in lockstep with the paced flow", () => {
 
   it("holds the persisted swap until the flow settles", async () => {
     vi.mocked(chatApi.listMessages).mockResolvedValue([
-      { id: "m", message: "hi", answer: "Hello.", chunks: [], created_at: 1 },
+      { id: "m", message: "hi", answer: "Hello.", chunks: [], skills: [], created_at: 1 },
     ]);
     vi.mocked(chatApi.listSessions).mockResolvedValue([session("s")]);
     // The stream resolves on the network WITHOUT calling onDone, so the run is

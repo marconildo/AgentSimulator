@@ -58,6 +58,9 @@ export interface Strings {
     // 016-cancel-stream: the in-flight cancel control + the cancelled-state note.
     cancel: string;
     cancelled: string;
+    // 027-skills: the "skills applied" badge on an answer (count + hover list).
+    skillsApplied: (n: number) => string;
+    skillsBadge: string;
   };
   // 022-message-trace-link: revisit a past turn's trace on the canvas.
   trace: {
@@ -205,6 +208,24 @@ export interface Strings {
       cancel: string;
       clearing: string;
       cleared: string;
+    };
+    // 027-skills — the global skill-catalog CRUD section (list + inline editor).
+    skills: {
+      title: string;
+      hint: string;
+      new: string;
+      name: string;
+      namePlaceholder: string;
+      description: string;
+      descPlaceholder: string;
+      body: string;
+      bodyPlaceholder: string;
+      save: string;
+      delete: string;
+      cancel: string;
+      empty: string;
+      nameTaken: string;
+      saveFailed: string;
     };
   };
   // One-line plain-language hints for the dense tech tags on each station node,
@@ -436,6 +457,8 @@ const en: Strings = {
     enterToSend: "Enter to send",
     cancel: "Cancel",
     cancelled: "Run cancelled",
+    skillsApplied: (n) => `${n} ${n === 1 ? "skill" : "skills"} applied in this response`,
+    skillsBadge: "Skills applied",
   },
   trace: {
     clickToLoad: "Click a message to load its trace",
@@ -583,6 +606,23 @@ const en: Strings = {
       cancel: "Cancel",
       clearing: "Clearing…",
       cleared: "Cleared {sessions} conversations · {chunks} chunks",
+    },
+    skills: {
+      title: "Skills",
+      hint: "Named instruction bundles the agent loads on demand via the load_skill tool.",
+      new: "New skill",
+      name: "Name",
+      namePlaceholder: "e.g. summarize-in-bullets",
+      description: "Description",
+      descPlaceholder: "When should the agent use this skill?",
+      body: "Body",
+      bodyPlaceholder: "The full instructions loaded when the skill is used…",
+      save: "Save",
+      delete: "Delete",
+      cancel: "Cancel",
+      empty: "No skills yet.",
+      nameTaken: "A skill with this name already exists.",
+      saveFailed: "Could not save the skill.",
     },
   },
   glossary: {
@@ -843,6 +883,8 @@ const pt: Strings = {
     enterToSend: "Enter para enviar",
     cancel: "Cancelar",
     cancelled: "Execução cancelada",
+    skillsApplied: (n) => `${n} ${n === 1 ? "skill aplicada" : "skills aplicadas"} nesta resposta`,
+    skillsBadge: "Skills aplicadas",
   },
   trace: {
     clickToLoad: "Clique numa mensagem para carregar seu trace",
@@ -990,6 +1032,23 @@ const pt: Strings = {
       cancel: "Cancelar",
       clearing: "Limpando…",
       cleared: "Limpou {sessions} conversas · {chunks} chunks",
+    },
+    skills: {
+      title: "Skills",
+      hint: "Pacotes de instruções nomeados que o agente carrega sob demanda via a tool load_skill.",
+      new: "Nova skill",
+      name: "Nome",
+      namePlaceholder: "ex.: resumo-em-bullets",
+      description: "Descrição",
+      descPlaceholder: "Quando o agente deve usar esta skill?",
+      body: "Conteúdo",
+      bodyPlaceholder: "As instruções completas carregadas quando a skill é usada…",
+      save: "Salvar",
+      delete: "Excluir",
+      cancel: "Cancelar",
+      empty: "Nenhuma skill ainda.",
+      nameTaken: "Já existe uma skill com esse nome.",
+      saveFailed: "Não foi possível salvar a skill.",
     },
   },
   glossary: {

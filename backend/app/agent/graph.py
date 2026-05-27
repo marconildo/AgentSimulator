@@ -32,11 +32,11 @@ from langgraph.graph import END, START, StateGraph
 from ..llm.pricing import usage_metrics
 from ..llm.provider import LLMProvider, get_provider
 from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
-from ..mcp.server import found_for
+from ..mcp.server import LOAD_SKILL_TOOL, found_for
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import TraceEmitter
-from .prompts import SYSTEM_PROMPT
+from .prompts import SYSTEM_PROMPT, compose_system
 from .state import AgentState
 from .tools import agent_tool_specs, is_retrieval
 
@@ -59,17 +59,32 @@ def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegist
     return c["emitter"], c["provider"], c["registry"]
 
 
+def _skills_advertised(state: AgentState) -> bool:
+    """Whether ``load_skill`` is in the advertised tool set this run (027-skills).
+
+    Gated exactly like any tool by the 006 ``enabled_tools`` override: ``None`` =
+    all tools (advertised), a list must contain it, ``[]`` = none. When it is not
+    advertised the agent can load nothing, so the catalog block is omitted.
+    """
+    enabled = state["enabled_tools"]
+    return enabled is None or LOAD_SKILL_TOOL in enabled
+
+
 def _effective_system(state: AgentState) -> str:
     """The system prompt actually sent to the model.
 
     006-interactive-experiments: a non-blank ``system_prompt`` override fully
     replaces the default; a blank/whitespace one (or absent) falls back to the
-    default ``SYSTEM_PROMPT``.
+    default ``SYSTEM_PROMPT``. 027-skills: the skill catalog (name + description)
+    is appended when there are skills *and* ``load_skill`` is advertised — the
+    body is never included (loaded on demand via the tool).
     """
     override = state["system_prompt"]
-    if override and override.strip():
-        return override
-    return SYSTEM_PROMPT
+    base = override if (override and override.strip()) else SYSTEM_PROMPT
+    catalog = state.get("skills_catalog") or []
+    if catalog and _skills_advertised(state):
+        return compose_system(base, catalog)
+    return base
 
 
 async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -368,6 +383,7 @@ async def run_agent_state(
     enabled_tools: list[str] | None = None,
     scenario: str = "simple",
     simulate_failure: str = "none",
+    skills_catalog: list[dict[str, str]] | None = None,
 ) -> AgentState:
     """Run the agent for one message and return the final graph state.
 
@@ -388,6 +404,7 @@ async def run_agent_state(
         "scenario": scenario,
         "simulate_failure": simulate_failure,
         "history": history or [],
+        "skills_catalog": skills_catalog or [],
         "messages": [HumanMessage(content=message)],
         "context": "",
         "chunks": [],
@@ -413,6 +430,7 @@ async def run_agent(
     enabled_tools: list[str] | None = None,
     scenario: str = "simple",
     simulate_failure: str = "none",
+    skills_catalog: list[dict[str, str]] | None = None,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -439,5 +457,6 @@ async def run_agent(
         enabled_tools=enabled_tools,
         scenario=scenario,
         simulate_failure=simulate_failure,
+        skills_catalog=skills_catalog,
     )
     return final_state["answer"]

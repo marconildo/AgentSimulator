@@ -23,12 +23,13 @@ from .agent import run_agent
 from .agent.prompts import SYSTEM_PROMPT
 from .agent.tools import agent_tool_specs
 from .config import get_settings
-from .db.store import get_store
+from .db.seed import seed_skills
+from .db.store import DuplicateSkillName, get_store
 from .mcp.client import get_registry
 from .rag.ingest import build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_pdf
 from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
-from .schemas import ChatRequest, Phase, SimulateFailure, Stage
+from .schemas import ChatRequest, Phase, SimulateFailure, SkillIn, SkillOut, Stage
 from .trace import TraceEmitter, trace_store
 
 
@@ -39,6 +40,25 @@ def _retrieved_chunks(emitter: TraceEmitter) -> list[dict[str, Any]]:
         if ev.stage == Stage.RAG_RETRIEVE and ev.phase == Phase.END:
             return list(ev.data.get("chunks", []))
     return []
+
+
+def _applied_skills(emitter: TraceEmitter) -> list[str]:
+    """The distinct skills the agent loaded this run (027-skills): the ``name`` arg
+    of each successful ``load_skill`` ``mcp.call``. Persisted with the message so
+    the "skills applied" badge survives reload/replay (a pure projection of the
+    trace — no new Stage)."""
+    applied: list[str] = []
+    for ev in emitter.events:
+        if ev.stage != Stage.MCP_CALL or ev.phase != Phase.END:
+            continue
+        if ev.data.get("tool") != "load_skill":
+            continue
+        result = ev.data.get("result", "")
+        name = (ev.data.get("args") or {}).get("name")
+        if name and isinstance(result, str) and not result.startswith("error:"):
+            if name not in applied:
+                applied.append(name)
+    return applied
 
 
 @asynccontextmanager
@@ -56,6 +76,13 @@ async def lifespan(_app: FastAPI):
             print(f"[startup] Embedding model changed — rebuilt index ({count} chunks).")
     except Exception as exc:  # noqa: BLE001 - app should still start
         print(f"[startup] Could not build index: {exc!r}")
+    # 027-skills: seed the example skill catalog when it's empty (idempotent).
+    try:
+        added = await seed_skills()
+        if added:
+            print(f"[startup] Seeded {added} example skills.")
+    except Exception as exc:  # noqa: BLE001 - app should still start
+        print(f"[startup] Could not seed skills: {exc!r}")
     yield
 
 
@@ -204,6 +231,13 @@ async def chat(req: ChatRequest):
                     history = await store.read_history(session_id)
                     db_rec.data = history
 
+                # 027-skills: advertise the global catalog to the agent by
+                # name + description (the body is loaded on demand via load_skill).
+                skills_catalog = [
+                    {"name": s["name"], "description": s["description"]}
+                    for s in await store.list_skills()
+                ]
+
                 await run_agent(
                     req.message,
                     top_k,
@@ -215,6 +249,7 @@ async def chat(req: ChatRequest):
                     enabled_tools=req.enabled_tools,
                     scenario=req.scenario,
                     simulate_failure=req.simulate_failure,
+                    skills_catalog=skills_catalog,
                 )
 
                 # Persist the finished message + the chunks retrieved for it
@@ -226,6 +261,7 @@ async def chat(req: ChatRequest):
                         req.message,
                         emitter.answer,
                         chunks=_retrieved_chunks(emitter),
+                        skills=_applied_skills(emitter),
                     )
 
                 rec.data = {
@@ -397,3 +433,39 @@ async def delete_document(session_id: str, document_id: str):
     removed = await asyncio.to_thread(delete_document_vectors, document_id)
     row = await get_store().delete_document(session_id, document_id)
     return {**row, "vectors_removed": removed}
+
+
+# --- Skills catalog (027-skills) --------------------------------------------
+
+
+@app.get("/api/skills", response_model=list[SkillOut])
+async def list_skills():
+    """The global skill catalog, name-ordered — backs the ⚙️ Skills section."""
+    return await get_store().list_skills()
+
+
+@app.post("/api/skills", response_model=SkillOut)
+async def create_skill(skill: SkillIn):
+    """Create a skill. A duplicate ``name`` is a 409 (the handle must be unique)."""
+    try:
+        return await get_store().create_skill(skill.name, skill.description, skill.body)
+    except DuplicateSkillName as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.put("/api/skills/{skill_id}", response_model=SkillOut)
+async def update_skill(skill_id: str, skill: SkillIn):
+    """Replace a skill's fields. 404 if it doesn't exist, 409 on a name clash."""
+    try:
+        row = await get_store().update_skill(skill_id, skill.name, skill.description, skill.body)
+    except DuplicateSkillName as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="skill not found")
+    return row
+
+
+@app.delete("/api/skills/{skill_id}")
+async def delete_skill(skill_id: str):
+    """Delete a skill from the catalog."""
+    return await get_store().delete_skill(skill_id)

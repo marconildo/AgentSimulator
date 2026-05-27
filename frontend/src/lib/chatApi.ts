@@ -27,6 +27,8 @@ export interface ChatMessage {
   message: string;
   answer: string;
   chunks: ChatChunk[];
+  // 027-skills: names of the skills the agent loaded for this turn (badge source).
+  skills: string[];
   created_at: number;
 }
 
@@ -58,6 +60,8 @@ export interface ClearResult {
   sessions_deleted: number;
   messages_deleted: number;
   documents_deleted: number;
+  // 027-skills: the global skill catalog is wiped by the reset too.
+  skills_deleted: number;
   vectors_removed: number;
 }
 /** Wipe all relational history + imported vectors (keeps the built-in corpus). */
@@ -68,6 +72,45 @@ export const listMessages = (id: string) => api<ChatMessage[]>(`/api/sessions/${
 export const listDocuments = (id: string) => api<DocumentMeta[]>(`/api/sessions/${id}/documents`);
 export const deleteDocument = (id: string, documentId: string) =>
   api<unknown>(`/api/sessions/${id}/documents/${documentId}`, { method: "DELETE" });
+
+// --- Skills catalog (027-skills) --------------------------------------------
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  body: string;
+  created_at: number;
+  updated_at: number;
+}
+export type SkillInput = { name: string; description: string; body: string };
+
+/** An HTTP error carrying its status so callers can branch (e.g. 409 = name taken). */
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function jsonApi<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const resp = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!resp.ok) throw new ApiError(resp.status, `${method} ${path} failed: ${resp.status}`);
+  return (await resp.json()) as T;
+}
+
+export const listSkills = () => api<Skill[]>("/api/skills");
+export const createSkill = (s: SkillInput) => jsonApi<Skill>("/api/skills", "POST", s);
+export const updateSkill = (id: string, s: SkillInput) =>
+  jsonApi<Skill>(`/api/skills/${id}`, "PUT", s);
+export const deleteSkill = (id: string) => jsonApi<{ deleted: boolean }>(`/api/skills/${id}`, "DELETE");
 
 // Agent defaults the experiment panel prefills from (006-interactive-experiments)
 // so nothing about the backend is hardcoded client-side. Fetched once on demand.

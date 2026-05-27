@@ -416,7 +416,13 @@ function Exchange({
         t={t}
         lang={lang}
         ts={message.created_at}
-        below={message.chunks.length > 0 ? <Sources chunks={message.chunks} t={t} /> : null}
+        below={
+          <>
+            {/* 027-skills: which skills the agent loaded for this turn. */}
+            {message.skills.length > 0 && <SkillsBadge skills={message.skills} t={t} />}
+            {message.chunks.length > 0 && <Sources chunks={message.chunks} t={t} />}
+          </>
+        }
         onClick={onSelect}
         title={active ? t.trace.loaded : t.trace.clickToLoad}
         active={active}
@@ -546,6 +552,37 @@ function StageStatus({ phase, t }: { phase: TimelinePhase | null; t: Strings }) 
       <TypingDots />
       <span className="text-[12.5px]">{label}</span>
     </span>
+  );
+}
+
+// 027-skills: a compact badge on the answer footer — a spark + the count of
+// skills the agent applied, with a hover popover listing them (mirrors the
+// reference image). The set is `message.skills`, persisted server-side, so it
+// survives reload/replay; `lib/skills.appliedSkills` derives the same set live.
+function SkillsBadge({ skills, t }: { skills: string[]; t: Strings }) {
+  return (
+    <div className="group relative mt-2 inline-flex">
+      <button
+        type="button"
+        aria-label={t.chat.skillsBadge}
+        className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--color-accent)_45%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--color-indigo-soft)] transition hover:brightness-110"
+      >
+        <SparkIcon className="h-3 w-3" />
+        {skills.length}
+      </button>
+      <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 hidden w-max max-w-[240px] rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] p-2 shadow-xl group-hover:block">
+        <div className="mb-1 text-[10.5px] font-semibold text-[var(--color-ink)]">
+          {t.chat.skillsApplied(skills.length)}
+        </div>
+        <ul className="space-y-0.5">
+          {skills.map((s) => (
+            <li key={s} className="font-mono text-[10px] leading-snug text-[var(--color-muted)]">
+              • {s}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
