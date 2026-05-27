@@ -72,6 +72,14 @@ export interface SimulatedError {
   simulated: boolean;
 }
 
+// 021-abstain-badge — the structured not-found signal on an `mcp.call` END
+// `data` record. `found === false` means the tool returned empty/not-found and
+// the agent could honestly abstain. Optional (an older trace lacks it); `data`
+// stays an open record (no required TraceEvent type change).
+export interface ToolResultData {
+  found?: boolean;
+}
+
 export interface TraceSummary {
   trace_id: string;
   message: string;

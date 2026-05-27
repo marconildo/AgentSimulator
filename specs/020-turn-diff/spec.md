@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 020-turn-diff |
-| **Status** | planned |
+| **Status** | done |
 | **Depends on** | 022-message-trace-link (prior-turn trace source) |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |

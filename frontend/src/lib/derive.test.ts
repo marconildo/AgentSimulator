@@ -99,6 +99,43 @@ describe("deriveView — tour emphasis (014 AC2/AC3)", () => {
   });
 });
 
+// 026-agent-tool-autonomy (AC7) — retrieval is now an agent *decision*, not a
+// forced pre-step. A run where the agent never calls search_knowledge_base emits
+// no rag.* events, so the RAG station must stay idle throughout and never light a
+// hop — the projection tolerates a run with conditional (absent) retrieval.
+describe("deriveView — conditional retrieval (026 AC7)", () => {
+  function noRetrievalRun(): TraceEvent[] {
+    seq = 0;
+    // A math run: the agent decides to call the calculator (an MCP tool) and
+    // never retrieves — no rag.embed/search/retrieve at all.
+    return [
+      ev("frontend", "end", { message: "2+2?" }),
+      ev("backend", "start"),
+      ev("agent.route", "end", { query: "2+2?" }),
+      ev("mcp.discover", "end", { tools: [{ name: "calculator" }] }),
+      ev("agent.think", "start"),
+      ev("llm.prompt", "end", { system: "…" }),
+      ev("agent.think", "end", { decision: "call_tools" }),
+      ev("mcp.call", "start", { tool: "calculator" }),
+      ev("mcp.call", "end", { tool: "calculator", result: "4", found: true }),
+      ev("agent.think", "end", { decision: "answer" }),
+      ev("llm.generate", "end", { answer: "4." }),
+      ev("respond", "end", { answer: "4." }),
+      ev("backend", "end", { answer: "4." }),
+    ];
+  }
+
+  it("never lights the RAG station when the agent did not retrieve", () => {
+    const events = noRetrievalRun();
+    // The RAG station stays idle at every cursor of the run.
+    for (let cursor = 0; cursor < events.length; cursor++) {
+      const view = deriveView(events, cursor);
+      expect(view.stations.rag.status).toBe("idle");
+      expect(view.activeHops.some((h) => h.id.includes("rag"))).toBe(false);
+    }
+  });
+});
+
 // 010-llm-as-brain (AC2) — the reasoning round-trip: the agent calls the model to
 // decide, so `llm.prompt` is now a START/END span. The LLM station must light up
 // *during* that span and the Agent ⇄ LLM hop must animate both ways.

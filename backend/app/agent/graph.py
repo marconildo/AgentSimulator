@@ -1,12 +1,20 @@
-"""The LangGraph agent.
+"""The LangGraph agent — a canonical, tool-calling ReAct loop.
 
-Topology (a bounded ReAct loop)::
+Topology::
 
-    START -> route -> retrieve -> think --(tool calls?)--> tools --+
-                                    ^                               |
-                                    +-------------------------------+
-                                    |
-                                    +--(no tool calls)--> generate -> respond -> END
+    START -> route -> think --(tool calls?)--> tools --+
+                        ^                                |
+                        +--------------------------------+
+                        |
+                        +--(no tool calls)--> generate -> respond -> END
+
+The agent reasons over a **canonical message thread** (``AgentState.messages``):
+the model is bound to the advertised tools and *chooses* what to call; its
+``AIMessage(tool_calls=…)`` is appended to the thread and each tool's result
+returns as a ``ToolMessage`` (026-agent-tool-autonomy). Every tool call —
+including **knowledge-base retrieval**, which is just another tool
+(``search_knowledge_base``) — is therefore an honest agent decision, visible as
+the standard tool-calling chain in a LangSmith trace.
 
 Each node emits trace stages through the :class:`TraceEmitter` it receives via
 the runnable ``config``, so the whole run is observable from the frontend.
@@ -15,19 +23,22 @@ the runnable ``config``, so the whole run is observable from the frontend.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
 from ..llm.pricing import usage_metrics
 from ..llm.provider import LLMProvider, get_provider
 from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
+from ..mcp.server import found_for
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import TraceEmitter
 from .prompts import SYSTEM_PROMPT
 from .state import AgentState
+from .tools import agent_tool_specs, is_retrieval
 
 MAX_ITERATIONS = 3
 
@@ -67,12 +78,13 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     async with emitter.stage(Stage.AGENT_ROUTE, "Agent received the query") as rec:
         rec.data = {
             "query": state["message"],
-            "plan": "Retrieve context from the knowledge base, then decide whether to call tools.",
+            "plan": "Decide which tools to call — search the knowledge base, run a "
+            "calculation, check the time — then answer.",
             "memory_turns": len(state["history"]),
         }
 
-    async with emitter.stage(Stage.MCP_DISCOVER, "Discovering MCP tools") as rec:
-        specs = registry.specs(state["enabled_tools"])
+    async with emitter.stage(Stage.MCP_DISCOVER, "Discovering available tools") as rec:
+        specs = agent_tool_specs(registry, state["enabled_tools"])
         rec.data = {
             "transport": registry.transport,
             "tools": [{"name": s.name, "description": s.description} for s in specs],
@@ -97,18 +109,9 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     return {}
 
 
-async def retrieve_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
-    emitter, _provider, _registry = _deps(config)
-    context, chunks = await rag_retrieve(
-        state["message"], state["top_k"], emitter, session_id=state["session_id"]
-    )
-    return {"context": context, "chunks": chunks}
-
-
 async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, provider, registry = _deps(config)
-    messages = [{"role": "user", "content": state["message"]}]
-    used = set(state["used_tools"])
+    specs = agent_tool_specs(registry, state["enabled_tools"])
 
     async with emitter.stage(Stage.AGENT_THINK, "Agent reasoning") as rec:
         # The agent reasons by *calling the model* — the LLM is its brain, used on
@@ -119,21 +122,18 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         try:
             async with emitter.stage(Stage.LLM_PROMPT, "Reasoning with the model") as prompt_rec:
                 # 017-failure-injection: a deterministic, *simulated* model timeout.
-                # We record it on the llm.prompt END (so the LLM station shows it),
-                # then raise a TimeoutError the node catches below. It never really
-                # hangs — the run short-circuits to a clean degraded state (AC3).
                 if state.get("simulate_failure") == "llm_timeout":
                     prompt_rec.data = {"error": SIMULATED_TIMEOUT, "simulated": True}
                     raise TimeoutError(SIMULATED_TIMEOUT)
                 decision = await provider.decide(
                     system=_effective_system(state),
-                    messages=messages,
-                    context=state["context"],
-                    tools=registry.specs(state["enabled_tools"]),
-                    used_tools=used,
+                    thread=state["messages"],
+                    tools=specs,
                     history=state["history"],
                 )
-                prompt_rec.data = decision.prompt_preview
+                # The retrieved-context readout (the inspector's "context window")
+                # comes from state — the thread carries it as a ToolMessage.
+                prompt_rec.data = {**decision.prompt_preview, "context": state["context"]}
         except TimeoutError as exc:
             # Only the *injected* timeout degrades here; a real model timeout
             # propagates unchanged to main.py's handler (preserves prior behavior).
@@ -148,7 +148,6 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
             # Degrade cleanly: set the fallback answer and route straight to
             # respond (_should_continue), skipping tools + a real generation.
             return {
-                "pending_tool_calls": [],
                 "iterations": state["iterations"] + 1,
                 "answer": DEGRADED_TIMEOUT_ANSWER,
             }
@@ -162,75 +161,139 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         if decision.usage:
             rec.metrics.update(usage_metrics(provider.model_name, decision.usage))
 
-    pending = [{"id": tc.id, "name": tc.name, "args": tc.args} for tc in decision.tool_calls]
-    return {"pending_tool_calls": pending, "iterations": state["iterations"] + 1}
+    # Continue the loop only when there are tool calls AND we are within the
+    # iteration bound. We append the tool-calling AIMessage to the thread *only*
+    # when we will actually execute it, so the thread never ends with a dangling
+    # AIMessage(tool_calls) that has no matching ToolMessage (which OpenAI rejects).
+    iterations = state["iterations"] + 1
+    continue_loop = bool(decision.tool_calls) and iterations <= MAX_ITERATIONS
+    update: dict[str, Any] = {"iterations": iterations}
+    if continue_loop:
+        update["messages"] = [decision.message]
+    return update
+
+
+async def _run_mcp_tool(
+    name: str,
+    args: dict[str, Any],
+    state: AgentState,
+    registry: ToolRegistry,
+    emitter: TraceEmitter,
+    fail_tool: bool,
+) -> str:
+    """Execute an MCP tool, animating the MCP station (mcp.call)."""
+    async with emitter.stage(
+        Stage.MCP_CALL,
+        f"Calling tool: {name}",
+        start_data={"tool": name, "args": args},
+    ) as rec:
+        if fail_tool:
+            output = SIMULATED_TOOL_ERROR
+        else:
+            output = await registry.call(name, args, enabled=state["enabled_tools"])
+        is_error = str(output).startswith("error:")
+        rec.data = {
+            "tool": name,
+            "args": args,
+            "result": output,
+            # 021-abstain-badge: a structured not-found signal on the open `data`
+            # record (no new Stage). False = the tool returned empty/not-found, so
+            # a well-behaved agent abstains on this sub-query; the UI badges it.
+            # A simulated failure is an *error* (017), not an abstention, so it
+            # keeps found=True (the error badge covers that case).
+            "found": True if fail_tool else found_for(name, output),
+            # The actual JSON-RPC tool-call exchange (007): a `tools/call` request
+            # and a CallToolResult response with text content.
+            "jsonrpc": jsonrpc_frames(
+                "tools/call",
+                {"name": name, "arguments": args},
+                {"content": [{"type": "text", "text": output}], "isError": is_error},
+                reconstructed=registry.transport == "local-fallback",
+            ),
+        }
+        if fail_tool:
+            rec.data["error"] = SIMULATED_TOOL_ERROR
+            rec.data["simulated"] = True
+    return output
+
+
+async def _run_retrieval_tool(
+    args: dict[str, Any],
+    state: AgentState,
+    emitter: TraceEmitter,
+    fail_tool: bool,
+) -> tuple[str, str, list[dict[str, Any]]]:
+    """Execute the knowledge-base retrieval tool, animating the RAG station.
+
+    Returns ``(observation, context, chunks)``: the observation becomes the
+    ToolMessage fed back to the model; context + chunks update the display mirrors.
+    """
+    query = args.get("query") or state["message"]
+    if fail_tool:
+        # 017: surface the injected failure on a rag.retrieve END (so it is visible
+        # on the RAG station) without running the real search.
+        async with emitter.stage(Stage.RAG_RETRIEVE, "Selecting top-k chunks") as rec:
+            rec.data = {
+                "chunks": [],
+                "k": state["top_k"],
+                "error": SIMULATED_TOOL_ERROR,
+                "simulated": True,
+            }
+        return SIMULATED_TOOL_ERROR, state["context"], state["chunks"]
+
+    context, chunks = await rag_retrieve(
+        query, state["top_k"], emitter, session_id=state["session_id"]
+    )
+    observation = context or "(no relevant passages found in the knowledge base)"
+    return observation, context, chunks
 
 
 async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, _provider, registry = _deps(config)
-    results = list(state["tool_results"])
-    used = list(state["used_tools"])
+    # The pending calls are the tool_calls on the AIMessage think just appended.
+    last = state["messages"][-1]
+    pending = getattr(last, "tool_calls", None) or []
 
-    # 017-failure-injection: with tool_error, short-circuit the real call to a
-    # simulated error observation (no real `registry.call`). The error is recorded
-    # on the event AND fed back as the tool's result, so the model reasons over the
-    # failure and degrades/abstains — the run stays alive to a terminal state.
+    used = list(state["used_tools"])
+    context = state["context"]
+    chunks = list(state["chunks"])
     fail_tool = state.get("simulate_failure") == "tool_error"
 
-    for tc in state["pending_tool_calls"]:
-        async with emitter.stage(
-            Stage.MCP_CALL,
-            f"Calling tool: {tc['name']}",
-            start_data={"tool": tc["name"], "args": tc["args"]},
-        ) as rec:
-            if fail_tool:
-                output = SIMULATED_TOOL_ERROR
-            else:
-                output = await registry.call(tc["name"], tc["args"], enabled=state["enabled_tools"])
-            is_error = str(output).startswith("error:")
-            rec.data = {
-                "tool": tc["name"],
-                "args": tc["args"],
-                "result": output,
-                # The actual JSON-RPC tool-call exchange (007): a `tools/call`
-                # request and a CallToolResult response with text content.
-                "jsonrpc": jsonrpc_frames(
-                    "tools/call",
-                    {"name": tc["name"], "arguments": tc["args"]},
-                    {
-                        "content": [{"type": "text", "text": output}],
-                        "isError": is_error,
-                    },
-                    reconstructed=registry.transport == "local-fallback",
-                ),
-            }
-            if fail_tool:
-                # Surface the injected failure on the open `data` record (no new
-                # Stage/type) so the inspector can badge it "simulated" (AC2).
-                rec.data["error"] = SIMULATED_TOOL_ERROR
-                rec.data["simulated"] = True
-        results.append({"tool": tc["name"], "args": tc["args"], "result": output})
-        used.append(tc["name"])
+    tool_messages: list[ToolMessage] = []
+    for tc in pending:
+        name = tc["name"]
+        args = tc.get("args", {}) or {}
+        call_id = tc.get("id", "")
+        if is_retrieval(name):
+            output, context, chunks = await _run_retrieval_tool(args, state, emitter, fail_tool)
+        else:
+            output = await _run_mcp_tool(name, args, state, registry, emitter, fail_tool)
+        # Feed the observation back as a ToolMessage so the next reasoning round
+        # (and the trace) sees the canonical AIMessage(tool_calls) → ToolMessage
+        # chain — the result is never stuffed into the system prompt.
+        tool_messages.append(ToolMessage(content=str(output), tool_call_id=call_id, name=name))
+        used.append(name)
 
-    return {"tool_results": results, "used_tools": used, "pending_tool_calls": []}
+    return {
+        "messages": tool_messages,
+        "used_tools": used,
+        "context": context,
+        "chunks": chunks,
+    }
 
 
 async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, provider, _registry = _deps(config)
-    messages = [{"role": "user", "content": state["message"]}]
 
     # In stream mode each token is emitted as a PROGRESS event so the UI types
     # the answer out live; in batch mode we collect them silently and surface
-    # the whole answer at once on the END event (a single, non-incremental
-    # delivery — the synchronous request/response contract).
+    # the whole answer at once on the END event (the synchronous contract).
     streaming = state["mode"] != "batch"
     async with emitter.stage(Stage.LLM_GENERATE, "Generating the answer") as rec:
         tokens: list[str] = []
         async for token in provider.stream_answer(
             system=_effective_system(state),
-            messages=messages,
-            context=state["context"],
-            tool_results=state["tool_results"],
+            thread=state["messages"],
             history=state["history"],
         ):
             tokens.append(token)
@@ -243,7 +306,8 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
         if provider.last_stream_usage:
             rec.metrics.update(usage_metrics(provider.model_name, provider.last_stream_usage))
 
-    return {"answer": answer}
+    # Close the canonical thread with the final assistant message.
+    return {"answer": answer, "messages": [AIMessage(content=answer)]}
 
 
 async def respond_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -259,8 +323,13 @@ def _should_continue(state: AgentState) -> str:
     # — skip tools + generation and go straight to respond with the fallback answer.
     if state.get("simulate_failure") == "llm_timeout":
         return "respond"
-    if state["pending_tool_calls"] and state["iterations"] <= MAX_ITERATIONS:
-        return "tools"
+    # think appends the tool-calling AIMessage only when it intends to loop, so a
+    # trailing AIMessage with tool_calls is the signal to execute them.
+    messages = state["messages"]
+    if messages:
+        last = messages[-1]
+        if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+            return "tools"
     return "generate"
 
 
@@ -268,15 +337,13 @@ def _should_continue(state: AgentState) -> str:
 def get_compiled_graph():
     builder = StateGraph(AgentState)
     builder.add_node("route", route_node)
-    builder.add_node("retrieve", retrieve_node)
     builder.add_node("think", think_node)
     builder.add_node("tools", tools_node)
     builder.add_node("generate", generate_node)
     builder.add_node("respond", respond_node)
 
     builder.add_edge(START, "route")
-    builder.add_edge("route", "retrieve")
-    builder.add_edge("retrieve", "think")
+    builder.add_edge("route", "think")
     builder.add_conditional_edges(
         "think",
         _should_continue,
@@ -288,6 +355,51 @@ def get_compiled_graph():
     builder.add_edge("generate", "respond")
     builder.add_edge("respond", END)
     return builder.compile()
+
+
+async def run_agent_state(
+    message: str,
+    top_k: int,
+    emitter: TraceEmitter,
+    history: list[dict[str, str]] | None = None,
+    mode: str = "stream",
+    session_id: str | None = None,
+    system_prompt: str | None = None,
+    enabled_tools: list[str] | None = None,
+    scenario: str = "simple",
+    simulate_failure: str = "none",
+) -> AgentState:
+    """Run the agent for one message and return the final graph state.
+
+    Exposed (alongside :func:`run_agent`) so tests can inspect the canonical
+    message thread (``state["messages"]``) the run produced.
+    """
+    provider = get_provider()
+    registry = await get_registry()
+    graph = get_compiled_graph()
+
+    initial: AgentState = {
+        "message": message,
+        "session_id": session_id,
+        "top_k": top_k,
+        "mode": mode,
+        "system_prompt": system_prompt,
+        "enabled_tools": enabled_tools,
+        "scenario": scenario,
+        "simulate_failure": simulate_failure,
+        "history": history or [],
+        "messages": [HumanMessage(content=message)],
+        "context": "",
+        "chunks": [],
+        "used_tools": [],
+        "iterations": 0,
+        "answer": "",
+    }
+    config: RunnableConfig = {
+        "configurable": {"emitter": emitter, "provider": provider, "registry": registry},
+        "recursion_limit": 25,
+    }
+    return cast(AgentState, await graph.ainvoke(initial, config=config))
 
 
 async def run_agent(
@@ -312,34 +424,20 @@ async def run_agent(
 
     006-interactive-experiments request-only overrides (all optional; omitting
     them reproduces today's behavior): ``system_prompt`` fully replaces the
-    default prompt (blank ⇒ default); ``enabled_tools`` restricts which MCP tools
-    are discovered and callable (``None`` = all, ``[]`` = none).
+    default prompt (blank ⇒ default); ``enabled_tools`` restricts which tools are
+    discovered and callable — including knowledge-base retrieval
+    (``None`` = all, ``[]`` = none).
     """
-    provider = get_provider()
-    registry = await get_registry()
-    graph = get_compiled_graph()
-
-    initial: AgentState = {
-        "message": message,
-        "session_id": session_id,
-        "top_k": top_k,
-        "mode": mode,
-        "system_prompt": system_prompt,
-        "enabled_tools": enabled_tools,
-        "scenario": scenario,
-        "simulate_failure": simulate_failure,
-        "context": "",
-        "chunks": [],
-        "history": history or [],
-        "pending_tool_calls": [],
-        "tool_results": [],
-        "used_tools": [],
-        "iterations": 0,
-        "answer": "",
-    }
-    config: RunnableConfig = {
-        "configurable": {"emitter": emitter, "provider": provider, "registry": registry},
-        "recursion_limit": 25,
-    }
-    final_state = await graph.ainvoke(initial, config=config)
+    final_state = await run_agent_state(
+        message,
+        top_k,
+        emitter,
+        history=history,
+        mode=mode,
+        session_id=session_id,
+        system_prompt=system_prompt,
+        enabled_tools=enabled_tools,
+        scenario=scenario,
+        simulate_failure=simulate_failure,
+    )
     return final_state["answer"]

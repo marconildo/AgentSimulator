@@ -66,13 +66,44 @@ _KB = {
     "prompt": "A prompt is the full input assembled and sent to the model.",
 }
 
+# 021-abstain-badge: the single, owned sentinel for a knowledge-base miss. Both
+# the not-found return and the `found_for` classifier reference it, so the two
+# can never drift (and it is not a fuzzy "No … found" heuristic — it is this
+# module's exact, declared not-found result).
+_KB_MISS_PREFIX = "No glossary entry found for"
+
 
 def _kb_lookup(topic: str) -> str:
     key = topic.strip().lower()
     for k, v in _KB.items():
         if k in key:
             return v
-    return f"No glossary entry found for '{topic}'."
+    return f"{_KB_MISS_PREFIX} '{topic}'."
+
+
+def found_for(name: str, content: str) -> bool:
+    """Structured not-found signal for a tool result — the single source of truth.
+
+    021-abstain-badge: a well-behaved agent **abstains** when a tool reports
+    nothing (e.g. ``kb_lookup`` for an unknown topic) instead of inventing an
+    answer. This classifier marks that case as ``found=False`` so the trace can
+    record a robust, structured flag on the ``mcp.call`` ``data`` (the frontend
+    badges ``found is False`` — no string matching on the client).
+
+    It is computed at the registry/observation boundary because the MCP-stdio
+    transport flattens a tool's structured output (the langchain-mcp adapter
+    drops ``structuredContent`` / a ``dict`` return would pollute the model's
+    observation with JSON), so a ``dict``-typed wire result is not viable. Both
+    transports yield the *same clean text*, so this classifier gives identical
+    results on either path (a parity test pins it). Only ``kb_lookup`` can miss;
+    an empty result from any tool also counts as not-found.
+    """
+    text = (content or "").strip()
+    if not text:
+        return False
+    if name == "kb_lookup":
+        return not text.startswith(_KB_MISS_PREFIX)
+    return True
 
 
 # --- MCP tool registrations --------------------------------------------------

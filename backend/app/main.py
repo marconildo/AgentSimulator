@@ -21,6 +21,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .agent import run_agent
 from .agent.prompts import SYSTEM_PROMPT
+from .agent.tools import agent_tool_specs
 from .config import get_settings
 from .db.store import get_store
 from .mcp.client import get_registry
@@ -134,7 +135,12 @@ async def config() -> dict:
         "default_top_k": settings.rag_top_k,
         "top_k_min": 1,
         "top_k_max": 8,
-        "tools": [{"name": s.name, "description": s.description} for s in registry.specs()],
+        # The full tool list the agent sees — knowledge-base retrieval plus the
+        # MCP tools (026-agent-tool-autonomy) — so the experiment panel lists every
+        # tool the agent can choose, not just the MCP ones.
+        "tools": [
+            {"name": s.name, "description": s.description} for s in agent_tool_specs(registry, None)
+        ],
         "scenarios": SCENARIOS,
         # 017-failure-injection: the allowed values for the "Simulate failure"
         # selector, so the frontend never hardcodes them (AC4).

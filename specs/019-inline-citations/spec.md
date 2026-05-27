@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 019-inline-citations |
-| **Status** | planned |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |
 

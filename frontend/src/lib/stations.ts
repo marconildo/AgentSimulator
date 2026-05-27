@@ -310,8 +310,8 @@ const STATIONS_SRC: StationSrc[] = [
     accent: "var(--color-pink)",
     tag: "ReAct",
     blurb: {
-      en: "A LangGraph state machine on a private network. It retrieves context, then loops: reason → maybe call a tool → observe → reason again, until it can answer. This is the agent loop.",
-      pt: "Uma máquina de estados LangGraph em rede privada. Recupera contexto e então entra em loop: raciocinar → talvez chamar uma ferramenta → observar → raciocinar de novo, até poder responder. Este é o loop do agente.",
+      en: "A LangGraph state machine on a private network. It reasons in a loop: decide whether to call a tool — search the knowledge base, run a calculation, check the time — observe the result, and reason again, until it can answer. The agent owns every tool-call decision, including whether to retrieve.",
+      pt: "Uma máquina de estados LangGraph em rede privada. Raciocina em loop: decidir se chama uma ferramenta — buscar na base de conhecimento, calcular, consultar a hora — observar o resultado e raciocinar de novo, até poder responder. O agente decide cada chamada de ferramenta, inclusive se vai recuperar contexto.",
     },
     generic: { en: "Private container runtime", pt: "Runtime privado em container" },
     clouds: {
@@ -322,7 +322,7 @@ const STATIONS_SRC: StationSrc[] = [
     tech: [
       { k: { en: "runtime", pt: "runtime" }, v: "LangGraph StateGraph" },
       { k: { en: "pattern", pt: "padrão" }, v: "bounded ReAct loop" },
-      { k: { en: "flow", pt: "fluxo" }, v: "route → retrieve → think ⇄ tools → generate" },
+      { k: { en: "flow", pt: "fluxo" }, v: "route → think ⇄ tools (search KB · calc · …) → generate" },
       { k: { en: "state", pt: "estado" }, v: "in-process per request" },
     ],
     stages: ["agent.route", "agent.think"],

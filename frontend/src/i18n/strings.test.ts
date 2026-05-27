@@ -177,6 +177,48 @@ describe("failure-injection i18n (017-failure-injection)", () => {
   });
 });
 
+describe("inline-citations i18n (019-inline-citations)", () => {
+  it("has the citation chrome (+ the fromTool builder) in en and pt", () => {
+    for (const k of ["sources", "fromChunk", "score", "none", "hint"] as const) {
+      expect(UI.en.citation[k]?.trim()).toBeTruthy();
+      expect(UI.pt.citation[k]?.trim()).toBeTruthy();
+    }
+    expect(UI.en.citation.fromTool("kb_lookup").trim()).toBeTruthy();
+    expect(UI.en.citation.fromTool("kb_lookup")).toContain("kb_lookup");
+    expect(UI.pt.citation.fromTool("kb_lookup").trim()).toBeTruthy();
+    expect(UI.pt.citation.fromTool("kb_lookup")).toContain("kb_lookup");
+  });
+});
+
+describe("turn-diff i18n (020-turn-diff)", () => {
+  it("has every compare label in en and pt", () => {
+    for (const k of [
+      "compareTitle",
+      "show",
+      "hide",
+      "previous",
+      "current",
+      "grew",
+      "shrank",
+      "same",
+      "needsPrior",
+      "totalDelta",
+    ] as const) {
+      expect(UI.en.diff[k]?.trim()).toBeTruthy();
+      expect(UI.pt.diff[k]?.trim()).toBeTruthy();
+    }
+  });
+});
+
+describe("abstain-badge i18n (021-abstain-badge)", () => {
+  it("has the badge + hint in en and pt", () => {
+    for (const k of ["badge", "hint"] as const) {
+      expect(UI.en.abstain[k]?.trim()).toBeTruthy();
+      expect(UI.pt.abstain[k]?.trim()).toBeTruthy();
+    }
+  });
+});
+
 describe("settings.experiment i18n", () => {
   it("has the same keys in en and pt", () => {
     expect(leafKeys(en).sort()).toEqual(leafKeys(pt).sort());

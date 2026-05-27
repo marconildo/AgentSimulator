@@ -40,8 +40,14 @@ async def _run(message: str, top_k: int = 3, history=None, system_prompt=None, e
     return answer, events
 
 
+# A corpus-detail question (chunk size / top-k) the canned kb_lookup glossary
+# cannot answer, so the agent must call search_knowledge_base — exercising the
+# full pipeline including the conditional rag.* stages (026-agent-tool-autonomy).
+_RETRIEVAL_QUESTION = "Why does chunk size matter in a RAG pipeline, and what is top-k?"
+
+
 async def test_pipeline_emits_all_core_stages():
-    answer, events = await _run("What is RAG?")
+    answer, events = await _run(_RETRIEVAL_QUESTION)
     stages = {e.stage for e in events}
     for required in [
         "agent.route",
@@ -164,19 +170,57 @@ async def test_disabling_calculator_re_plans_without_it():
 
 
 async def test_all_tools_disabled_makes_no_tool_calls():
-    # AC3 — enabled_tools=[] ⇒ no discovery, no mcp.call, answer still returned.
+    # AC3 (006) + AC10 (026) — enabled_tools=[] ⇒ no discovery, no mcp.call, and
+    # no retrieval either (the retrieval tool is gated like any tool); answer still
+    # returned (an honest LLM-only run with no grounding).
     answer, events = await _run("What is 2 + 2?", enabled_tools=[])
     discover = next(e for e in events if e.stage == "mcp.discover" and e.phase == "end")
     assert discover.data["tools"] == []
     assert not [e for e in events if e.stage == "mcp.call"]
+    assert not [e for e in events if e.stage in ("rag.embed", "rag.search", "rag.retrieve")]
     assert answer.strip()
 
 
-async def test_no_overrides_discovers_all_three_tools_with_default_prompt():
-    # AC5 — regression guard: no overrides ⇒ today's structure.
+async def test_no_overrides_discovers_all_tools_with_default_prompt():
+    # AC5 (006) + AC1 (026) — no overrides ⇒ the agent sees the MCP tools *plus*
+    # the knowledge-base retrieval tool, with the default prompt.
     _answer, events = await _run("What is MCP?")
     discover = next(e for e in events if e.stage == "mcp.discover" and e.phase == "end")
     discovered = {t["name"] for t in discover.data["tools"]}
-    assert {"calculator", "current_time", "kb_lookup"} == discovered
+    assert {"calculator", "current_time", "kb_lookup", "search_knowledge_base"} == discovered
     prompt = next(e for e in events if e.stage == "llm.prompt" and e.phase == "end")
     assert "AI Agent Simulator" in prompt.data["system"]
+
+
+# --- 026-agent-tool-autonomy: retrieval is an agent decision ----------------
+
+
+async def test_math_question_skips_retrieval():
+    # AC2 — a question the model answers without documents fires NO rag.* events:
+    # retrieval only runs when the agent *decides* to call search_knowledge_base.
+    _answer, events = await _run("What is 2 + 2?")
+    rag = [e for e in events if e.stage in ("rag.embed", "rag.search", "rag.retrieve")]
+    assert not rag, "math question should not trigger knowledge-base retrieval"
+
+
+async def test_knowledge_question_retrieves_by_agent_decision():
+    # AC3 — a corpus question makes the agent *decide* to call the retrieval tool,
+    # and the rag.* events follow that decision (not a forced pre-step): the
+    # search_knowledge_base decision is recorded on a think round at or before the
+    # first rag.* event.
+    answer, events = await _run(_RETRIEVAL_QUESTION)
+    decision_idx = next(
+        (
+            i
+            for i, e in enumerate(events)
+            if e.stage == "agent.think"
+            and e.phase == "end"
+            and any(tc["name"] == "search_knowledge_base" for tc in e.data.get("tool_calls", []))
+        ),
+        None,
+    )
+    assert decision_idx is not None, "agent should decide to call search_knowledge_base"
+    first_rag = next((i for i, e in enumerate(events) if e.stage == "rag.embed"), None)
+    assert first_rag is not None, "expected a retrieval to run"
+    assert decision_idx < first_rag, "retrieval must follow the agent's decision"
+    assert answer.strip()

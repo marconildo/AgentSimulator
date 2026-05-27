@@ -1,15 +1,35 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useT } from "../i18n";
+import {
+  citations,
+  sourcesFromEvents,
+  type AnswerSegment,
+  type CitationSource,
+} from "../lib/citations";
 import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView } from "../lib/derive";
-import type { TraceEvent } from "../types/events";
+import { abstained } from "../lib/abstain";
+import { loadTrace, type TraceLoad } from "../lib/traceCache";
+import {
+  contextSections,
+  diffTurns,
+  SECTIONS,
+  type Section,
+} from "../lib/turnDiff";
+import { useChat } from "../store/useChat";
+import { useSimulator } from "../store/useSimulator";
+import type { ToolResultData, TraceEvent } from "../types/events";
 
 // Focused drill-in for the Agent: the **anatomy** of an AI agent — its brain (the
 // LLM, called on every reasoning round), its senses (the message), its memory
 // (working + long-term + vector recall), its hands (tools) and its speech (the
 // answer). Everything is composed from the captured trace + the projection's real
 // token/cost totals (no extra requests), so it stays in sync with the cursor.
+//
+// 019 attaches honest provenance chips to grounded answer sentences; 020 diffs
+// this turn's context window against the previous one (loaded via 022); 021
+// badges a tool call that returned empty/not-found (the agent abstained).
 
 const BRAIN = "var(--color-orange)";
 
@@ -25,11 +45,28 @@ function lastEnd(events: TraceEvent[], stage: string): TraceEvent | undefined {
   return undefined;
 }
 
-const tok = (s: string | undefined): number => Math.ceil((s?.length ?? 0) / 4);
+// Section → its anatomy label + bar color (shared by the bar and the diff rows).
+const SECTION_COLOR: Record<Section, string> = {
+  system: "var(--color-violet)",
+  rag: "var(--color-ok)",
+  tools: "var(--color-warn)",
+  history: "var(--color-blue)",
+  user: "var(--color-sky)",
+};
 
 export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const t = useT();
   const a = t.agentDetail;
+
+  // The raw event log up to the cursor — the same `visible` slice `deriveView`
+  // projects, so the pure libs (citations / contextSections) see exactly what the
+  // canvas does. Live streaming and step/replay therefore stay consistent.
+  const events = useSimulator((s) => s.events);
+  const cursor = useSimulator((s) => s.cursor);
+  const visible = useMemo(
+    () => (cursor >= 0 ? events.slice(0, cursor + 1) : []),
+    [events, cursor],
+  );
 
   const agentEv = view.stations.agent.events;
   const llmEv = view.stations.llm.events;
@@ -48,9 +85,16 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
     (thinks.length ? (thinks[thinks.length - 1].data.model as string | undefined) : undefined) ??
     "";
 
+  // 021-abstain-badge: each tool call carries the structured `found` signal so a
+  // call that returned empty/not-found can be badged (the agent abstained).
   const toolCalls = mcpEv
     .filter((e) => e.stage === "mcp.call" && e.phase === "end")
-    .map((e) => ({ tool: String(e.data.tool), args: e.data.args, result: String(e.data.result) }));
+    .map((e) => ({
+      tool: String(e.data.tool),
+      args: e.data.args,
+      result: String(e.data.result),
+      found: (e.data as ToolResultData).found,
+    }));
 
   const read = lastEnd(dbEv, "db.read");
   const historyPairs = (read?.data.recent as { message: string; answer: string }[] | undefined) ?? [];
@@ -58,26 +102,30 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const retrieve = lastEnd(ragEv, "rag.retrieve");
   const chunks = (retrieve?.data.chunks as { source: string; score: number }[] | undefined) ?? [];
 
-  const system = (prompt?.data.system as string | undefined) ?? "";
-  const context = (prompt?.data.context as string | undefined) ?? "";
   const tools = (prompt?.data.tools as string[] | undefined) ?? [];
   const lastDecision = thinks.length ? String(thinks[thinks.length - 1].data.decision ?? "—") : "—";
-  const toolResultsText = toolCalls.map((c) => `${c.tool} -> ${c.result}`).join("\n");
-  const historyText = historyPairs.map((h) => `${h.message} / ${h.answer}`).join("\n");
 
   const started = agentEv.length > 0;
   const rounds = usage.rounds || thinks.length;
   const hasRealUsage = usage.totalTokens > 0;
 
-  // Context-window parts with rough token estimates for a proportional bar. These
-  // are an *approximation* of the mix (the real totals are in the Brain block).
-  const parts = [
-    { label: a.systemPrompt, tokens: tok(system), color: "var(--color-violet)" },
-    { label: a.retrievedContext, tokens: tok(context), color: "var(--color-ok)" },
-    { label: a.toolResults, tokens: tok(toolResultsText), color: "var(--color-warn)" },
-    { label: a.history, tokens: tok(historyText), color: "var(--color-blue)" },
-  ].filter((p) => p.tokens > 0);
+  // 020-turn-diff: the per-section context-window estimate — one source, shared
+  // with the proportional bar below and the "compare with previous turn" view.
+  const sections = useMemo(() => contextSections(visible), [visible]);
+  const parts = (["system", "rag", "tools", "history"] as const)
+    .map((key) => ({
+      key,
+      label: { system: a.systemPrompt, rag: a.retrievedContext, tools: a.toolResults, history: a.history }[key],
+      tokens: sections[key],
+      color: SECTION_COLOR[key],
+    }))
+    .filter((p) => p.tokens > 0);
   const totalTokens = parts.reduce((s, p) => s + p.tokens, 0) || 1;
+
+  // 019-inline-citations: honest, sentence-level provenance over the settled
+  // answer, composed from this turn's tool results + retrieved chunks.
+  const sources = useMemo(() => sourcesFromEvents(visible), [visible]);
+  const cited = useMemo(() => citations(view.answer, sources), [view.answer, sources]);
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-[color-mix(in_srgb,var(--color-base)_94%,transparent)] backdrop-blur-sm">
@@ -151,14 +199,26 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                 <p className="text-[11px] italic text-[var(--color-label)]">{a.noToolCalls}</p>
               ) : (
                 <div className="space-y-1">
-                  {toolCalls.map((c, idx) => (
-                    <div key={idx} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
-                      <div className="font-mono text-[11px] text-[var(--color-ink)]">
-                        {c.tool}({JSON.stringify(c.args)})
+                  {toolCalls.map((c, idx) => {
+                    const isAbstain = abstained({ found: c.found });
+                    return (
+                      <div key={idx} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
+                        <div className="font-mono text-[11px] text-[var(--color-ink)]">
+                          {c.tool}({JSON.stringify(c.args)})
+                        </div>
+                        <div className="font-mono text-[11px] text-[var(--color-ok-soft)]">→ {c.result}</div>
+                        {isAbstain && (
+                          <div
+                            title={t.abstain.hint}
+                            className="mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
+                            style={{ borderColor: "var(--color-warn)", color: "var(--color-warn)" }}
+                          >
+                            ⚠️ {t.abstain.badge}
+                          </div>
+                        )}
                       </div>
-                      <div className="font-mono text-[11px] text-[var(--color-ok-soft)]">→ {c.result}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </Labeled>
@@ -227,18 +287,184 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                 </div>
               </Labeled>
             )}
+            <TurnCompare current={sections} />
           </Panel>
 
-          {/* Speech — what the agent says back. */}
+          {/* Speech — what the agent says back, with honest provenance chips. */}
           <div className="lg:col-span-2">
             <Panel title={a.speech} accent="var(--color-sky)">
               {view.answer ? (
-                <Mono>{view.answer}</Mono>
+                <CitedAnswerView segments={cited.segments} />
               ) : (
                 <p className="text-[11px] italic text-[var(--color-label)]">{a.noAnswerYet}</p>
               )}
+              {cited.citations.length > 0 && (
+                <div className="mt-2 border-t border-[var(--color-line)] pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--color-label)]">
+                    {t.citation.sources}
+                  </div>
+                  <div className="space-y-0.5">
+                    {cited.citations.map((c) => (
+                      <div key={c.index} className="flex items-baseline gap-1.5 text-[11px]">
+                        <span className="font-mono text-[var(--color-sky)]">[{c.index}]</span>
+                        <span className="text-[var(--color-muted)]">{sourceLabel(c.source, t)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Panel>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- 019: cited answer rendering ---------------------------------------------
+
+type Translated = ReturnType<typeof useT>;
+
+/** Hover/legend detail for a source — chrome bilingual, args/snippet verbatim. */
+function sourceLabel(source: CitationSource, t: Translated): string {
+  const snippet = truncate(source.text, 120);
+  if (source.kind === "tool") {
+    return `${t.citation.fromTool(source.tool)} · ${JSON.stringify(source.args)} · "${snippet}"`;
+  }
+  return `${t.citation.fromChunk} · ${source.source} · ${t.citation.score} ${source.score.toFixed(2)} · "${snippet}"`;
+}
+
+function CitedAnswerView({ segments }: { segments: AnswerSegment[] }) {
+  const t = useT();
+  return (
+    <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-[var(--color-ink)]">
+      {segments.map((seg, idx) => (
+        <span key={idx}>
+          {seg.sentence}
+          {seg.citation && (
+            <sup
+              title={`${t.citation.hint}\n${sourceLabel(seg.citation.source, t)}`}
+              className="ml-0.5 cursor-help font-sans text-[10px] font-semibold text-[var(--color-sky)]"
+            >
+              [{seg.citation.index}]
+            </sup>
+          )}
+          {idx < segments.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+// --- 020: compare with the previous turn -------------------------------------
+
+function TurnCompare({ current }: { current: Record<Section, number> }) {
+  const t = useT();
+  const a = t.agentDetail;
+  const messages = useChat((s) => s.messages);
+  const loadedTraceId = useChat((s) => s.loadedTraceId);
+
+  // The immediately-previous persisted turn (n-1), or null if this is the first
+  // turn / no turn is loaded. message.id === trace_id (022).
+  const priorId = useMemo(() => {
+    if (!loadedTraceId) return null;
+    const idx = messages.findIndex((m) => m.id === loadedTraceId);
+    return idx > 0 ? messages[idx - 1].id : null;
+  }, [messages, loadedTraceId]);
+
+  const [comparing, setComparing] = useState(false);
+  const [prior, setPrior] = useState<TraceLoad | null>(null);
+
+  useEffect(() => {
+    if (!comparing || !priorId) {
+      setPrior(null);
+      return;
+    }
+    let alive = true;
+    void loadTrace(priorId).then((r) => {
+      if (alive) setPrior(r);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [comparing, priorId]);
+
+  const sectionLabel: Record<Section, string> = {
+    system: a.systemPrompt,
+    history: a.history,
+    rag: a.retrievedContext,
+    tools: a.toolResults,
+    user: a.userMessage,
+  };
+
+  const prevSections = prior?.ok ? contextSections(prior.events) : null;
+  const diff = prevSections ? diffTurns(prevSections, current) : null;
+
+  return (
+    <div className="mt-3 border-t border-[var(--color-line)] pt-2">
+      <button
+        onClick={() => setComparing((v) => !v)}
+        className="rounded-full border border-[var(--color-line)] px-2.5 py-0.5 text-[11px] text-[var(--color-text-soft)] transition hover:bg-[var(--color-panel-2)]"
+      >
+        {comparing ? t.diff.hide : t.diff.show}
+      </button>
+
+      {comparing && (
+        <div className="mt-2">
+          {!priorId || prior?.ok === false ? (
+            <p className="text-[11px] italic text-[var(--color-label)]">{t.diff.needsPrior}</p>
+          ) : !diff || !prevSections ? (
+            <p className="text-[11px] italic text-[var(--color-muted)]">…</p>
+          ) : (
+            <>
+              <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-[var(--color-label)]">
+                <span>{t.diff.previous}</span>
+                <span>{t.diff.current}</span>
+              </div>
+              <div className="space-y-1">
+                {SECTIONS.map((s) => {
+                  const d = diff.perSection[s];
+                  const tone =
+                    d > 0 ? "var(--color-warn)" : d < 0 ? "var(--color-blue)" : "var(--color-muted)";
+                  const verb = d > 0 ? t.diff.grew : d < 0 ? t.diff.shrank : t.diff.same;
+                  return (
+                    <div key={s} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full" style={{ background: SECTION_COLOR[s] }} />
+                        <span className="text-[var(--color-text-soft)]">{sectionLabel[s]}</span>
+                      </span>
+                      <span className="flex items-center gap-2 font-mono text-[var(--color-muted)]">
+                        <span>
+                          {prevSections[s]} → {current[s]}
+                        </span>
+                        <span style={{ color: tone }}>
+                          {verb}
+                          {d !== 0 ? ` ${d > 0 ? "+" : ""}${d}` : ""}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-1.5 flex justify-between border-t border-[var(--color-line)] pt-1.5 text-[11px]">
+                <span className="text-[var(--color-text-soft)]">{t.diff.totalDelta}</span>
+                <span
+                  className="font-mono"
+                  style={{
+                    color:
+                      diff.total > 0
+                        ? "var(--color-warn)"
+                        : diff.total < 0
+                          ? "var(--color-blue)"
+                          : "var(--color-muted)",
+                  }}
+                >
+                  {diff.total > 0 ? "+" : ""}
+                  {diff.total}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

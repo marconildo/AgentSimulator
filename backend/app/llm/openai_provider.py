@@ -1,8 +1,11 @@
 """Real OpenAI-backed provider.
 
 Uses LangChain's ``ChatOpenAI``. ``decide`` binds the advertised tools and lets
-the model choose; ``stream_answer`` makes a tool-free streaming call to produce
-the final, grounded answer token by token.
+the model choose, reasoning over the running message *thread* (the canonical
+ReAct conversation); ``stream_answer`` makes a streaming call over that same
+thread to produce the final, grounded answer token by token. Tool results live
+in the thread as ``ToolMessage``s — they are never stuffed into the system prompt
+(026-agent-tool-autonomy).
 """
 
 from __future__ import annotations
@@ -10,7 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from .provider import Decision, LLMProvider, TokenUsage, ToolCall, ToolSpec
@@ -39,13 +42,11 @@ class OpenAIProvider(LLMProvider):
         self,
         *,
         system: str,
-        messages: list[dict[str, str]],
-        context: str,
+        thread: list[AnyMessage],
         tools: list[ToolSpec],
-        used_tools: set[str],
         history: list[dict[str, str]] | None = None,
     ) -> Decision:
-        lc_messages = _build_messages(system, context, messages, history=history)
+        lc_messages = _assemble(system, thread, history)
         client = self._client(streaming=False)
 
         if tools:
@@ -58,11 +59,11 @@ class OpenAIProvider(LLMProvider):
         tool_calls = [
             ToolCall(id=tc.get("id", ""), name=tc["name"], args=tc.get("args", {}))
             for tc in raw_calls
-            if tc["name"] not in used_tools
         ]
         return Decision(
+            message=result,
             tool_calls=tool_calls,
-            prompt_preview=_preview(system, context, messages, tools, history or []),
+            prompt_preview=_preview(system, thread, tools, history or []),
             usage=TokenUsage.from_metadata(getattr(result, "usage_metadata", None)),
         )
 
@@ -70,12 +71,10 @@ class OpenAIProvider(LLMProvider):
         self,
         *,
         system: str,
-        messages: list[dict[str, str]],
-        context: str,
-        tool_results: list[dict[str, Any]],
+        thread: list[AnyMessage],
         history: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[str]:
-        lc_messages = _build_messages(system, context, messages, tool_results, history)
+        lc_messages = _assemble(system, thread, history)
         client = self._client(streaming=True)
         self.last_stream_usage = None
         async for chunk in client.astream(lc_messages):
@@ -89,32 +88,24 @@ class OpenAIProvider(LLMProvider):
                 yield text
 
 
-def _build_messages(
-    system: str,
-    context: str,
-    messages: list[dict[str, str]],
-    tool_results: list[dict[str, Any]] | None = None,
-    history: list[dict[str, str]] | None = None,
-) -> list[Any]:
-    system_block = system
+def _system_block(system: str, history: list[dict[str, str]] | None) -> str:
+    """The system prompt, with long-term-memory history folded in (if any).
+
+    Retrieved context and tool results are NOT injected here anymore — they live
+    in the thread as ToolMessages (026), so the model sees them as observations of
+    its own tool calls, not as pre-supplied prompt text.
+    """
+    block = system
     if history:
         rendered = "\n".join(f"- user: {h['message']}\n  assistant: {h['answer']}" for h in history)
-        system_block += f"\n\n# Recent conversation history (long-term memory)\n{rendered}"
-    if context.strip():
-        system_block += f"\n\n# Retrieved context\n{context}"
-    if tool_results:
-        rendered = "\n".join(
-            f"- {tr['tool']}({tr['args']}) -> {tr['result']}" for tr in tool_results
-        )
-        system_block += f"\n\n# Tool results\n{rendered}"
+        block += f"\n\n# Recent conversation history (long-term memory)\n{rendered}"
+    return block
 
-    out: list[Any] = [SystemMessage(content=system_block)]
-    for m in messages:
-        if m["role"] == "user":
-            out.append(HumanMessage(content=m["content"]))
-        else:
-            out.append(AIMessage(content=m["content"]))
-    return out
+
+def _assemble(
+    system: str, thread: list[AnyMessage], history: list[dict[str, str]] | None
+) -> list[Any]:
+    return [SystemMessage(content=_system_block(system, history)), *thread]
 
 
 def _to_openai_tool(tool: ToolSpec) -> dict[str, Any]:
@@ -130,15 +121,22 @@ def _to_openai_tool(tool: ToolSpec) -> dict[str, Any]:
 
 def _preview(
     system: str,
-    context: str,
-    messages: list[dict[str, str]],
+    thread: list[AnyMessage],
     tools: list[ToolSpec],
     history: list[dict[str, str]],
 ) -> dict[str, Any]:
+    """The assembled prompt, surfaced verbatim in the inspector.
+
+    ``messages`` keeps just the user turns from the thread (what the inspector's
+    message list shows); the retrieved-context readout (``context``) is added by
+    the agent node from state, since the thread carries it as a ToolMessage.
+    """
+    user_turns = [
+        {"role": "user", "content": m.content} for m in thread if isinstance(m, HumanMessage)
+    ]
     return {
         "system": system,
-        "context": context,
-        "messages": messages,
+        "messages": user_turns,
         "tools": [t.name for t in tools],
         "history": history,
     }

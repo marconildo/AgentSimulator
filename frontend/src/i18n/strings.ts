@@ -325,6 +325,34 @@ export interface Strings {
     cost: string;
     approxProportion: string;
   };
+  // 019-inline-citations — provenance chips on the settled answer. Chrome only;
+  // tool args / chunk snippets / proper nouns stay verbatim (not translated).
+  citation: {
+    sources: string;
+    fromTool: (tool: string) => string;
+    fromChunk: string;
+    score: string;
+    none: string;
+    hint: string;
+  };
+  // 020-turn-diff — compare the context window with the previous turn.
+  diff: {
+    compareTitle: string;
+    show: string;
+    hide: string;
+    previous: string;
+    current: string;
+    grew: string;
+    shrank: string;
+    same: string;
+    needsPrior: string;
+    totalDelta: string;
+  };
+  // 021-abstain-badge — an empty/not-found tool result → honest abstention.
+  abstain: {
+    badge: string;
+    hint: string;
+  };
   learn: {
     rootTitle: string;
     rootHint: string;
@@ -706,6 +734,30 @@ const en: Strings = {
     totalTokens: "total tokens",
     cost: "cost (USD)",
     approxProportion: "approx. proportion of the context",
+  },
+  citation: {
+    sources: "sources",
+    fromTool: (tool) => `from ${tool}`,
+    fromChunk: "from retrieved chunk",
+    score: "score",
+    none: "(no traceable source)",
+    hint: "grounded in a source — hover the marker",
+  },
+  diff: {
+    compareTitle: "Compare with previous turn",
+    show: "compare with previous turn",
+    hide: "hide comparison",
+    previous: "previous turn",
+    current: "this turn",
+    grew: "grew",
+    shrank: "shrank",
+    same: "unchanged",
+    needsPrior: "Needs a previous turn to compare (this is the first, or its trace expired).",
+    totalDelta: "total change",
+  },
+  abstain: {
+    badge: "Tool returned empty — agent abstained",
+    hint: "No result found for this sub-query.",
   },
   learn: {
     rootTitle: "How this app works",
@@ -1089,6 +1141,30 @@ const pt: Strings = {
     totalTokens: "tokens totais",
     cost: "custo (US$)",
     approxProportion: "proporção aprox. do contexto",
+  },
+  citation: {
+    sources: "fontes",
+    fromTool: (tool) => `de ${tool}`,
+    fromChunk: "de trecho recuperado",
+    score: "score",
+    none: "(sem fonte rastreável)",
+    hint: "fundamentado numa fonte — passe o mouse no marcador",
+  },
+  diff: {
+    compareTitle: "Comparar com o turno anterior",
+    show: "comparar com o turno anterior",
+    hide: "ocultar comparação",
+    previous: "turno anterior",
+    current: "este turno",
+    grew: "cresceu",
+    shrank: "encolheu",
+    same: "inalterado",
+    needsPrior: "Precisa de um turno anterior para comparar (este é o primeiro, ou o trace expirou).",
+    totalDelta: "variação total",
+  },
+  abstain: {
+    badge: "Ferramenta vazia — o agente absteve-se",
+    hint: "Nenhum resultado para esta sub-consulta.",
   },
   learn: {
     rootTitle: "Como este app funciona",

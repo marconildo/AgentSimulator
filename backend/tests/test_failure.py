@@ -73,11 +73,17 @@ def test_run_without_failure_has_no_simulated_error_on_any_event():
 
 @pytest.mark.openai
 def test_explicit_none_is_identical_to_omitting():
-    # AC1 — `simulate_failure="none"` is the same unchanged run.
+    # AC1 — `simulate_failure="none"` is the same unchanged run. A corpus-detail
+    # question makes the agent retrieve (026: retrieval is now a tool decision, so
+    # rag.retrieve fires only when the agent calls search_knowledge_base).
     with TestClient(app) as client:
         resp = client.post(
             "/api/chat",
-            json={"message": "What is RAG?", "mode": "batch", "simulate_failure": "none"},
+            json={
+                "message": "Why does chunk size matter in a RAG pipeline, and what is top-k?",
+                "mode": "batch",
+                "simulate_failure": "none",
+            },
         )
         body = resp.json()
         stages = {e["stage"] for e in body["events"]}
