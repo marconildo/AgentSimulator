@@ -5,6 +5,7 @@ import { useT } from "../../i18n";
 import { formatTokens, formatUsd } from "../../lib/cost";
 import type { StationRuntime, UsageTotals } from "../../lib/derive";
 import { NODE_WIDTH } from "../../lib/layout";
+import { formatLatency } from "../../lib/time";
 import type { StationId, StationMeta } from "../../lib/stations";
 import { useSimulator } from "../../store/useSimulator";
 import type { TraceEvent } from "../../types/events";
@@ -161,7 +162,7 @@ function ExpandedBody({
   // the full drill-down still lives in the Inspector.
   const rows = innerRows(meta.id, rt.events, t, usage);
   if (typeof rt.latencyMs === "number") {
-    rows.push({ k: t.node.latency, v: `${rt.latencyMs.toFixed(0)} ms` });
+    rows.push({ k: t.node.latency, v: formatLatency(rt.latencyMs) });
   }
 
   return (

@@ -5,6 +5,7 @@ import type { Strings } from "../i18n/strings";
 import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView, UsageTotals } from "../lib/derive";
+import { useHealth } from "../lib/health";
 import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
 import {
@@ -15,6 +16,7 @@ import {
   type StationId,
   type StationMeta,
 } from "../lib/stations";
+import { formatLatency } from "../lib/time";
 import type { JsonRpcFrames, Phase, RequestBody, Stage, TraceEvent } from "../types/events";
 
 type I = Strings["inspector"];
@@ -81,7 +83,7 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
 
       <div className="flex flex-wrap gap-1.5">
         {lastEnd?.metrics.latency_ms !== undefined && (
-          <Chip>{lastEnd.metrics.latency_ms.toFixed(0)} ms</Chip>
+          <Chip>{formatLatency(lastEnd.metrics.latency_ms)}</Chip>
         )}
         <Chip>{i.events(rt.events.length)}</Chip>
       </div>
@@ -95,6 +97,8 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
 function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I }) {
   const cloud = useCloud((s) => s.cloud);
   const mode = useSettings((s) => s.mode);
+  // The LLM block's model is read live (B2), never baked into stations.ts.
+  const llmModel = useHealth((s) => s.llmModel);
   const comms = useT().comms;
   const tier = tierByIdFor(lang)[meta.tier];
   const stationById = stationByIdFor(lang);
@@ -103,6 +107,7 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
 
   return (
     <Section title={i.techInfra}>
+      {meta.id === "llm" && <KeyVal k={i.model} v={llmModel ?? "—"} />}
       {meta.tech.map((row) => (
         <KeyVal key={row.k} k={row.k} v={row.v} />
       ))}
@@ -373,6 +378,15 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
                   <Scroll>{preview.system}</Scroll>
                 </Labeled>
               )}
+              {Array.isArray(preview.history) && preview.history.length > 0 && (
+                <Labeled label={i.history}>
+                  <Scroll>
+                    {preview.history
+                      .map((h) => `▸ ${h.message}\n${h.answer}`)
+                      .join("\n\n")}
+                  </Scroll>
+                </Labeled>
+              )}
               {preview.context && (
                 <Labeled label={i.retrievedContext}>
                   <Scroll>{preview.context}</Scroll>
@@ -385,6 +399,11 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
                       <Chip key={tool}>{tool}</Chip>
                     ))}
                   </div>
+                </Labeled>
+              )}
+              {Array.isArray(preview.messages) && preview.messages.length > 0 && (
+                <Labeled label={i.userMessage}>
+                  <Scroll>{preview.messages.map((m) => m.content).join("\n\n")}</Scroll>
                 </Labeled>
               )}
             </Section>
@@ -512,6 +531,10 @@ interface PromptPreview {
   system?: string;
   context?: string;
   tools?: string[];
+  // The current turn's user message(s) and the folded-in long-term history —
+  // both already carried in prompt_preview, surfaced in the inspector (B3).
+  messages?: { role: string; content: string }[];
+  history?: { message: string; answer: string }[];
 }
 
 function pick(events: TraceEvent[], stage?: Stage, phase?: Phase): TraceEvent | undefined {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatRelative, toMs } from "./time";
+import { formatClock, formatLatency, formatRelative, toMs } from "./time";
 
 describe("toMs", () => {
   it("promotes seconds-since-epoch to milliseconds", () => {
@@ -17,6 +17,23 @@ describe("formatClock", () => {
     // Assert the shape (HH:MM), not exact digits — the host timezone shifts them.
     const out = formatClock(Date.UTC(2024, 0, 1, 13, 37) / 1000, "en");
     expect(out).toMatch(/\d{1,2}[:.]\d{2}/);
+  });
+});
+
+describe("formatLatency", () => {
+  it("floors sub-millisecond durations to '<1 ms' instead of a misleading '0 ms'", () => {
+    // The backend rounds latency to one decimal, so a fast stage arrives as 0.0
+    // or 0.4 — both would render as "0 ms" with a naive toFixed(0).
+    expect(formatLatency(0)).toBe("<1 ms");
+    expect(formatLatency(0.4)).toBe("<1 ms");
+    expect(formatLatency(0.9)).toBe("<1 ms");
+  });
+
+  it("rounds to whole milliseconds at and above 1 ms", () => {
+    expect(formatLatency(1)).toBe("1 ms");
+    expect(formatLatency(12.4)).toBe("12 ms");
+    expect(formatLatency(12.6)).toBe("13 ms");
+    expect(formatLatency(3321)).toBe("3321 ms");
   });
 });
 

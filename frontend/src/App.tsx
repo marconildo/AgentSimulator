@@ -15,15 +15,9 @@ import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
 import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
+import { healthBanner, useHealth } from "./lib/health";
 import { activePhase } from "./lib/phases";
 import { useSimulator } from "./store/useSimulator";
-
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
-
-interface Health {
-  llm_provider: string;
-  llm_model: string;
-}
 
 // Thin vertical rule that separates the header into zones (brand · view ·
 // preferences · nav) so the controls read as distinct groups, not one long row.
@@ -142,13 +136,14 @@ export default function App() {
   const t = useT();
 
   const [page, setPage] = useState<"sim" | "learn">("sim");
-  const [health, setHealth] = useState<Health | null>(null);
+  const healthStatus = useHealth((s) => s.status);
+  const llmModel = useHealth((s) => s.llmModel);
+  const hasKey = useHealth((s) => s.hasKey);
+  const loadHealth = useHealth((s) => s.load);
   useEffect(() => {
-    fetch(`${API_BASE}/api/health`)
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch(() => setHealth(null));
-  }, []);
+    loadHealth();
+  }, [loadHealth]);
+  const banner = healthBanner(healthStatus, hasKey);
 
   return (
     <div className="flex h-screen flex-col bg-[var(--color-base)]">
@@ -203,13 +198,13 @@ export default function App() {
             {page === "sim" ? t.app.learn : t.app.simulator}
           </span>
         </button>
-        {health && (
+        {healthStatus === "ok" && llmModel && (
           <span
             className="hidden items-center gap-1.5 whitespace-nowrap pl-1 text-[11px] text-[var(--color-muted)] xl:inline-flex"
             title={t.app.liveTitle}
           >
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-ok)]" aria-hidden />
-            <span className="font-mono">{health.llm_model}</span>
+            <span className="font-mono">{llmModel}</span>
           </span>
         )}
         <a
@@ -223,6 +218,16 @@ export default function App() {
           <GitHubIcon className="h-4 w-4" />
         </a>
       </header>
+
+      {banner && (
+        <div
+          role="alert"
+          className="flex items-center justify-center gap-2 border-b border-[color-mix(in_srgb,var(--color-rose)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-rose)_12%,transparent)] px-4 py-2 text-center text-[12px] text-[var(--color-rose-soft)]"
+        >
+          <span aria-hidden>⚠️</span>
+          <span>{banner === "offline" ? t.app.offline : t.app.noKey}</span>
+        </div>
+      )}
 
       {page === "sim" ? (
         <>

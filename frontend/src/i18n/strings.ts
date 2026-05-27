@@ -16,6 +16,9 @@ export interface Strings {
     theme: string;
     themeDark: string;
     themeLight: string;
+    // Health banner (B9): backend unreachable, or up but missing the API key.
+    offline: string;
+    noKey: string;
   };
   chat: {
     title: string;
@@ -114,6 +117,10 @@ export interface Strings {
     system: string;
     retrievedContext: string;
     tools: string;
+    // The LLM assembled-prompt section also surfaces the USER message and the
+    // folded-in conversation history (B3).
+    userMessage: string;
+    history: string;
     generatedAnswer: string;
     // Token usage + cost (011-token-cost).
     usageCost: string;
@@ -285,6 +292,10 @@ const en: Strings = {
     theme: "Theme",
     themeDark: "Dark",
     themeLight: "Light",
+    offline:
+      "Backend offline — start it with `docker compose up backend` (it needs OPENAI_API_KEY in backend/.env).",
+    noKey:
+      "No OPENAI_API_KEY set — the backend is up but can't run a turn. Add it to backend/.env and restart.",
   },
   chat: {
     title: "Ask the agent",
@@ -393,6 +404,8 @@ const en: Strings = {
     system: "system",
     retrievedContext: "retrieved context",
     tools: "tools",
+    userMessage: "user message",
+    history: "conversation history",
     generatedAnswer: "Generated answer",
     usageCost: "Usage & cost",
     rounds: "LLM rounds",
@@ -591,6 +604,10 @@ const pt: Strings = {
     theme: "Tema",
     themeDark: "Escuro",
     themeLight: "Claro",
+    offline:
+      "Backend offline — suba com `docker compose up backend` (precisa de OPENAI_API_KEY em backend/.env).",
+    noKey:
+      "Sem OPENAI_API_KEY — o backend está no ar mas não roda um turno. Adicione em backend/.env e reinicie.",
   },
   chat: {
     title: "Pergunte ao agente",
@@ -699,6 +716,8 @@ const pt: Strings = {
     system: "sistema",
     retrievedContext: "contexto recuperado",
     tools: "ferramentas",
+    userMessage: "mensagem do usuário",
+    history: "histórico de conversas",
     generatedAnswer: "Resposta gerada",
     usageCost: "Uso e custo",
     rounds: "Rodadas da LLM",

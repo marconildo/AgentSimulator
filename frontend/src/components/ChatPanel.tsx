@@ -321,7 +321,7 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
 }
 
 function EmptyThread({ t }: { t: Strings }) {
-  const setInput = useChat((s) => s.setInput);
+  const send = useChat((s) => s.send);
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-5 py-10 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--color-sky)] to-[var(--color-accent)] text-[var(--color-on-accent)] shadow-md">
@@ -337,7 +337,7 @@ function EmptyThread({ t }: { t: Strings }) {
         {t.chat.examples.slice(0, 3).map((ex) => (
           <button
             key={ex}
-            onClick={() => setInput(ex)}
+            onClick={() => void send(ex)}
             className="truncate rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-left text-[12px] text-[var(--color-text-soft)] transition hover:border-[color-mix(in_srgb,var(--color-sky)_55%,transparent)] hover:text-[var(--color-sky-soft)]"
           >
             {ex}

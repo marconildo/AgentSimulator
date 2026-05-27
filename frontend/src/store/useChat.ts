@@ -41,7 +41,9 @@ interface ChatState {
   // Lazily persist the active conversation, creating one if we're in a draft.
   // Returns the session id, or null if creation failed.
   ensureSession: () => Promise<string | null>;
-  send: () => Promise<void>;
+  // `text` lets a one-click suggested question send itself without first filling
+  // the input box (§3.10); omitted, it sends the current input as before.
+  send: (text?: string) => Promise<void>;
   uploadPdf: (file: File) => Promise<void>;
   removeDocument: (documentId: string) => Promise<void>;
 }
@@ -172,8 +174,8 @@ export const useChat = create<ChatState>((set, get) => ({
     }
   },
 
-  send: async () => {
-    const message = get().input.trim();
+  send: async (text?: string) => {
+    const message = (text ?? get().input).trim();
     if (!message || get().sending) return;
 
     // First message of a draft persists the conversation (lazy creation).

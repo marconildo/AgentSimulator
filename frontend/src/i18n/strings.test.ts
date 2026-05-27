@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { PHASE_ORDER } from "../lib/phases";
 import { UI } from "./strings";
 
 const en = UI.en.settings.experiment;
@@ -41,6 +42,38 @@ describe("inspector i18n (007-numeric-transparency)", () => {
       expect((enI[k] as string).trim()).toBeTruthy();
       expect(typeof ptI[k]).toBe("string");
       expect((ptI[k] as string).trim()).toBeTruthy();
+    }
+  });
+
+  it("includes the LLM assembled-prompt user + history labels (B3)", () => {
+    // The LLM inspector now renders the USER message and conversation history
+    // (already in prompt_preview) — both need their own inspector-block label.
+    for (const k of ["userMessage", "history"] as const) {
+      expect(typeof enI[k]).toBe("string");
+      expect((enI[k] as string).trim()).toBeTruthy();
+      expect(typeof ptI[k]).toBe("string");
+      expect((ptI[k] as string).trim()).toBeTruthy();
+    }
+  });
+});
+
+describe("phase tooltip captions (§4.11)", () => {
+  // The phase chips reuse the tour captions as their hover tooltip, so every
+  // phase must carry a non-empty explanation in both languages (TypeScript pins
+  // completeness; this pins that none is blank).
+  it("has a non-empty hint for every phase in en and pt", () => {
+    for (const phase of PHASE_ORDER) {
+      expect(UI.en.tour.captions[phase]?.trim()).toBeTruthy();
+      expect(UI.pt.tour.captions[phase]?.trim()).toBeTruthy();
+    }
+  });
+});
+
+describe("app banner i18n (B9)", () => {
+  it("has a non-empty offline + no-key banner message in both languages", () => {
+    for (const key of ["offline", "noKey"] as const) {
+      expect(UI.en.app[key]?.trim()).toBeTruthy();
+      expect(UI.pt.app[key]?.trim()).toBeTruthy();
     }
   });
 });

@@ -2,6 +2,7 @@ import { type ReactNode, useMemo } from "react";
 
 import { useT } from "../i18n";
 import { activePhase, PHASE_ORDER, phaseMarkers } from "../lib/phases";
+import { stationForEvent } from "../lib/stations";
 import { useSimulator } from "../store/useSimulator";
 import { TourControls } from "./TourControls";
 
@@ -13,8 +14,17 @@ export function Timeline() {
   const following = useSimulator((s) => s.following);
   const status = useSimulator((s) => s.status);
   const setCursor = useSimulator((s) => s.setCursor);
+  const select = useSimulator((s) => s.select);
   const step = useSimulator((s) => s.step);
   const togglePlay = useSimulator((s) => s.togglePlay);
+
+  // Jumping to a phase moves the playhead AND opens that phase's station in the
+  // Inspector, so every chip has a consistent chip→node affinity (B5).
+  const jumpToPhase = (index: number) => {
+    setCursor(index);
+    const station = stationForEvent(events, index);
+    if (station) select(station);
+  };
 
   const total = events.length;
   const hasEvents = total > 0;
@@ -113,11 +123,12 @@ export function Timeline() {
             <PhaseChip
               key={phase}
               label={t.timeline.phases[phase]}
+              hint={t.tour.captions[phase]}
               count={marker?.count ?? 0}
               occurred={Boolean(marker)}
               passed={Boolean(marker && marker.index <= cursor)}
               active={active === phase}
-              onClick={marker ? () => setCursor(marker.index) : undefined}
+              onClick={marker ? () => jumpToPhase(marker.index) : undefined}
             />
           );
         })}
@@ -128,6 +139,7 @@ export function Timeline() {
 
 function PhaseChip({
   label,
+  hint,
   count,
   occurred,
   passed,
@@ -135,6 +147,7 @@ function PhaseChip({
   onClick,
 }: {
   label: string;
+  hint: string;
   count: number;
   occurred: boolean;
   passed: boolean;
@@ -156,7 +169,7 @@ function PhaseChip({
       type="button"
       onClick={onClick}
       disabled={!occurred}
-      title={label}
+      title={hint}
       aria-current={active ? "step" : undefined}
       className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition disabled:cursor-default ${cls}`}
     >

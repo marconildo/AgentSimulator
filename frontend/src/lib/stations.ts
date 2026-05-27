@@ -429,8 +429,9 @@ const STATIONS_SRC: StationSrc[] = [
       aws: "Amazon Bedrock",
       gcp: "Vertex AI",
     },
+    // The model is intentionally absent here: it's read live from /api/health and
+    // injected by the inspector (B2), so it can never drift from the real env.
     tech: [
-      { k: { en: "model", pt: "modelo" }, v: "gpt-4o-mini" },
       { k: { en: "api", pt: "api" }, v: "Chat Completions" },
       { k: { en: "output", pt: "saída" }, v: "streamed token-by-token" },
       { k: { en: "security", pt: "segurança" }, v: "HTTPS · TLS" },
@@ -797,6 +798,16 @@ export const STAGE_TO_STATION: Record<Stage, StationId> = STATIONS_SRC.reduce(
   },
   {} as Record<Stage, StationId>,
 );
+
+/**
+ * The station that owns the event at `index`, via its stage (B5). Lets the
+ * timeline jump the Inspector to the right node when a phase chip is clicked —
+ * the same `STAGE_TO_STATION` affinity the guided tour uses.
+ */
+export function stationForEvent(events: { stage: Stage }[], index: number): StationId | undefined {
+  const ev = events[index];
+  return ev ? STAGE_TO_STATION[ev.stage] : undefined;
+}
 
 // --- Scenario scoping (008-scenario-framework) -------------------------------
 // The visual model is scenario-aware: each element belongs to one or more rungs

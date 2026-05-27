@@ -20,6 +20,17 @@ export function formatClock(ts: number, lang: Lang): string {
   }).format(toMs(ts));
 }
 
+/**
+ * A stage's latency for a chip. The backend rounds to one decimal, so a fast
+ * stage arrives as 0.0–0.9 ms; rendering that as "0 ms" reads like a bug (B4),
+ * so anything under a millisecond floors to "<1 ms". Everything else is whole
+ * milliseconds.
+ */
+export function formatLatency(ms: number): string {
+  if (ms < 1) return "<1 ms";
+  return `${Math.round(ms)} ms`;
+}
+
 // Coarse buckets, smallest first; each `amount` is how many of `unit` fit into
 // the next bucket up. We walk up until the remaining duration fits a bucket.
 const DIVISIONS: { amount: number; unit: Intl.RelativeTimeFormatUnit }[] = [

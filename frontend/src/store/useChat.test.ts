@@ -153,6 +153,22 @@ describe("useChat — lazy session creation", () => {
     expect(call[3]).toBe("created");
   });
 
+  it("send(text) sends an explicit suggestion even with an empty input box (§3.10)", async () => {
+    vi.mocked(chatApi.createSession).mockResolvedValue(session("created"));
+    vi.mocked(chatApi.listMessages).mockResolvedValue([]);
+    vi.mocked(chatApi.listSessions).mockResolvedValue([session("created")]);
+    vi.mocked(sse.streamChat).mockImplementation(async (_m, handlers) => {
+      handlers.onDone({ trace_id: "t", answer: "", session_id: "created" });
+    });
+    // The suggested-question buttons fire send(ex) directly — the input is empty.
+    useChat.setState({ input: "", activeSessionId: null });
+
+    await useChat.getState().send("What is RAG?");
+
+    const call = vi.mocked(sse.streamChat).mock.calls[0];
+    expect(call[0]).toBe("What is RAG?");
+  });
+
   it("no longer exposes a destructive clear action on the store", () => {
     expect(
       (useChat.getState() as unknown as Record<string, unknown>).clearConversation,
