@@ -701,6 +701,135 @@ const SECTIONS_SRC: SectionSrc[] = [
       },
     ],
   },
+  {
+    id: "production",
+    title: { en: "Production & AI-Ops", pt: "Produção e AI-Ops" },
+    icon: "🪜",
+    accent: "var(--color-orange)",
+    intro: {
+      en: "What an agent needs to grow up. Climb from Simple → Intermediate → Advanced and these are the production concerns each rung adds — the AI-Ops axis that separates a teaching demo from a real pipeline. (Preview topology: declared as non-executing 'coming soon' nodes; each lands in its own spec.)",
+      pt: "O que um agente precisa para amadurecer. Suba de Simples → Intermediário → Avançado e estes são os temas de produção que cada degrau adiciona — o eixo de AI-Ops que separa uma demo didática de um pipeline real. (Topologia de prévia: declarados como nós 'em breve' que não executam; cada um chega em sua própria spec.)",
+    },
+    topics: [
+      {
+        id: "deepagents",
+        title: { en: "DeepAgents (Intermediate)", pt: "DeepAgents (Intermediário)" },
+        what: {
+          en: "An evolution of the simple ReAct loop: a planner that writes an explicit task list, sub-agents it can spawn for sub-tasks, and a virtual file system as scratch memory — so the agent can tackle longer, multi-step work without losing the thread.",
+          pt: "Uma evolução do loop ReAct simples: um planejador que escreve uma lista explícita de tarefas, subagentes que ele pode criar para subtarefas e um sistema de arquivos virtual como memória de rascunho — para o agente encarar trabalhos mais longos e com vários passos sem perder o fio.",
+        },
+        why: {
+          en: "A flat ReAct loop forgets its plan and burns context on long tasks. DeepAgents adds structure — plan, delegate, persist — so the agent stays coherent over many steps. The Intermediate rung reframes the Agent node as DeepAgents to mark this direction.",
+          pt: "Um loop ReAct plano esquece o plano e gasta contexto em tarefas longas. O DeepAgents adiciona estrutura — planejar, delegar, persistir — para o agente se manter coerente ao longo de muitos passos. O degrau Intermediário renomeia o nó do Agente como DeepAgents para marcar essa direção.",
+        },
+        where: "stations.ts · AGENT_SCENARIO_LABEL (intermediate) — label only, not yet implemented",
+      },
+      {
+        id: "multi-agent",
+        title: { en: "Multi-agent orchestration (Advanced)", pt: "Orquestração multi-agente (Avançado)" },
+        what: {
+          en: "Several specialized agents that coordinate instead of one monolithic loop: an orchestrator (or supervisor) plans and delegates to workers — e.g. a researcher, a coder, a critic — each with its own prompt and tools, then merges their results.",
+          pt: "Vários agentes especializados que se coordenam em vez de um único loop monolítico: um orquestrador (ou supervisor) planeja e delega a workers — ex.: um pesquisador, um programador, um crítico — cada um com seu próprio prompt e ferramentas, e então junta os resultados.",
+        },
+        why: {
+          en: "Specialization beats one generalist on complex work: each sub-agent has a focused prompt and toolset, they can run in parallel, and a critic can review before the answer ships. The Advanced rung reframes the Agent as DeepAgents + Multi-agents.",
+          pt: "Especialização supera um único generalista em trabalhos complexos: cada subagente tem prompt e ferramentas focados, podem rodar em paralelo e um crítico pode revisar antes de a resposta sair. O degrau Avançado renomeia o Agente como DeepAgents + Multiagentes.",
+        },
+        where: "stations.ts · AGENT_SCENARIO_LABEL (advanced) — label only, not yet implemented",
+      },
+      {
+        id: "reranker",
+        title: { en: "Reranker (cross-encoder)", pt: "Reranker (cross-encoder)" },
+        what: {
+          en: "A second-pass model that re-scores the top-k chunks the vector search returned, reading the query and each chunk together (a cross-encoder) instead of comparing pre-computed embeddings.",
+          pt: "Um modelo de segundo passo que re-pontua os top-k trechos que a busca vetorial retornou, lendo a consulta e cada trecho juntos (um cross-encoder) em vez de comparar embeddings pré-computados.",
+        },
+        why: {
+          en: "Bi-encoder vector search is fast but coarse; a reranker is slower but far more precise, so you retrieve many candidates cheaply and rerank a few accurately — a big lift in RAG quality for little extra latency.",
+          pt: "A busca vetorial por bi-encoder é rápida mas grosseira; um reranker é mais lento porém muito mais preciso, então você recupera muitos candidatos de forma barata e reordena poucos com precisão — um grande ganho de qualidade no RAG com pouca latência extra.",
+        },
+        where: "stations.ts · station 'reranker' (Intermediate preview)",
+      },
+      {
+        id: "hybrid-search",
+        title: { en: "Hybrid search (BM25 + dense + RRF)", pt: "Busca híbrida (BM25 + densa + RRF)" },
+        what: {
+          en: "Runs keyword search (BM25) and semantic vector search side by side, then fuses the two ranked lists — typically with Reciprocal Rank Fusion (RRF) — into one result set.",
+          pt: "Roda busca por palavra-chave (BM25) e busca vetorial semântica lado a lado, depois funde as duas listas ordenadas — tipicamente com Reciprocal Rank Fusion (RRF) — em um único conjunto de resultados.",
+        },
+        why: {
+          en: "Dense vectors capture meaning but miss exact terms (names, codes, acronyms); keyword search nails those but misses paraphrase. Fusing both recovers what either alone would drop. Today retrieval is dense-only; Intermediate adds the hybrid path.",
+          pt: "Vetores densos captam significado mas erram termos exatos (nomes, códigos, siglas); a busca por palavra-chave acerta esses mas erra paráfrases. Fundir as duas recupera o que cada uma sozinha deixaria passar. Hoje a recuperação é só densa; o Intermediário adiciona o caminho híbrido.",
+        },
+        where: "backend/app/rag/retriever.py (today: dense-only) · Intermediate preview",
+      },
+      {
+        id: "llm-gateway",
+        title: { en: "LLM gateway", pt: "Gateway de LLM" },
+        what: {
+          en: "A proxy every model call goes through: it handles auth and routing across providers/models, retries and fallbacks, rate limits and quotas, and centralizes cost tracking and logging.",
+          pt: "Um proxy por onde passa cada chamada ao modelo: cuida de autenticação e roteamento entre provedores/modelos, retries e fallbacks, limites de taxa e cotas, e centraliza o controle de custo e o logging.",
+        },
+        why: {
+          en: "Calling provider SDKs straight from app code scatters keys, retries and cost logic everywhere. A gateway is one control point for reliability, governance and FinOps — swap a model or add a budget cap without touching the agent.",
+          pt: "Chamar os SDKs dos provedores direto do código da app espalha chaves, retries e lógica de custo por toda parte. Um gateway é um único ponto de controle para confiabilidade, governança e FinOps — troque um modelo ou adicione um teto de orçamento sem tocar no agente.",
+        },
+        where: "stations.ts · station 'gateway' (Advanced preview)",
+      },
+      {
+        id: "guardrails",
+        title: { en: "Guardrails (input / output)", pt: "Guardrails (entrada / saída)" },
+        what: {
+          en: "Checks that wrap the model: input guardrails screen the user's message (prompt-injection, PII, off-topic, jailbreaks) before it reaches the agent; output guardrails validate the answer (toxicity, leaked secrets, schema/format) before it reaches the user.",
+          pt: "Verificações que envolvem o modelo: guardrails de entrada filtram a mensagem do usuário (injeção de prompt, PII, fora de tópico, jailbreaks) antes de chegar ao agente; guardrails de saída validam a resposta (toxicidade, segredos vazados, esquema/formato) antes de chegar ao usuário.",
+        },
+        why: {
+          en: "An LLM will happily follow a malicious instruction or emit something unsafe. Guardrails are the safety boundary that makes an agent shippable in front of real users — and they fail closed, blocking rather than guessing.",
+          pt: "Um LLM seguirá de bom grado uma instrução maliciosa ou emitirá algo inseguro. Guardrails são a fronteira de segurança que torna um agente publicável diante de usuários reais — e falham fechando, bloqueando em vez de adivinhar.",
+        },
+        where: "stations.ts · station 'guardrails' (Advanced preview)",
+      },
+      {
+        id: "semantic-cache",
+        title: { en: "Semantic cache", pt: "Cache semântico" },
+        what: {
+          en: "A cache keyed by meaning, not exact text: it embeds the incoming query and, if a past query is close enough in vector space, returns the stored answer instead of calling the model.",
+          pt: "Um cache indexado por significado, não por texto exato: gera o embedding da consulta que chega e, se uma consulta passada estiver próxima o suficiente no espaço vetorial, retorna a resposta armazenada em vez de chamar o modelo.",
+        },
+        why: {
+          en: "Many users ask the same thing in different words. A semantic cache turns those into instant, near-zero-cost hits — cutting latency and spend — where an exact-match cache would miss on any rephrase.",
+          pt: "Muitos usuários perguntam a mesma coisa com palavras diferentes. Um cache semântico transforma isso em acertos instantâneos e de custo quase zero — cortando latência e gasto — onde um cache de correspondência exata erraria a qualquer reformulação.",
+        },
+        where: "stations.ts · station 'cache' (Advanced preview)",
+      },
+      {
+        id: "eval-runner",
+        title: { en: "Eval runner", pt: "Eval runner (avaliações)" },
+        what: {
+          en: "An automated way to score agent quality: a dataset of inputs with graded outputs, run offline in CI (did this change make answers better or worse?) and online on live traffic (LLM-as-judge, faithfulness, relevance).",
+          pt: "Uma forma automatizada de pontuar a qualidade do agente: um conjunto de entradas com saídas avaliadas, rodado offline na CI (essa mudança deixou as respostas melhores ou piores?) e online no tráfego real (LLM como juiz, fidelidade, relevância).",
+        },
+        why: {
+          en: "'It looks good in the demo' isn't a quality bar. Evals turn agent quality into a regression-testable number, so you ship changes with evidence instead of vibes — the same red→green discipline this project applies to code, applied to answers.",
+          pt: "'Parece bom na demo' não é um critério de qualidade. As avaliações transformam a qualidade do agente em um número testável contra regressões, para você publicar mudanças com evidência em vez de achismo — a mesma disciplina red→green que este projeto aplica ao código, aplicada às respostas.",
+        },
+        where: "stations.ts · station 'eval' (Advanced preview)",
+      },
+      {
+        id: "observability",
+        title: { en: "Observability & tracing", pt: "Observabilidade e tracing" },
+        what: {
+          en: "LLM-native telemetry: every request emits a trace of spans (retrieval, each reasoning round, tool calls, generation) with tokens, cost, latency and the real prompts — shipped to a sink (e.g. an OpenTelemetry / LLM-observability backend) you can query and alert on.",
+          pt: "Telemetria nativa de LLM: cada requisição emite um trace de spans (recuperação, cada rodada de raciocínio, chamadas de ferramentas, geração) com tokens, custo, latência e os prompts reais — enviados a um sink (ex.: um backend de OpenTelemetry / observabilidade de LLM) onde você consulta e cria alertas.",
+        },
+        why: {
+          en: "You can't debug or improve what you can't see. In production an agent is a distributed, non-deterministic system; tracing every step is how you find the slow hop, the costly round, or the prompt that went wrong. This whole app is a teaching-grade version of exactly that.",
+          pt: "Você não depura nem melhora o que não consegue ver. Em produção um agente é um sistema distribuído e não determinístico; rastrear cada passo é como você acha o salto lento, a rodada cara ou o prompt que deu errado. Este app inteiro é uma versão didática exatamente disso.",
+        },
+        where: "stations.ts · station 'observability' (Advanced preview)",
+      },
+    ],
+  },
 ];
 
 // --- Resolvers + per-language caches -----------------------------------------

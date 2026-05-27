@@ -138,12 +138,17 @@ learner *climb* to see what each production concern adds and **why**.
 | Rung | What it shows | Status |
 |---|---|---|
 | 🟢 **Simple** | The full app, **fully live**: ReAct loop + vector RAG + MCP tools, single-turn, in-request. Send a message and watch the real pipeline. **(default)** | ✅ Live |
-| 🟡 **Intermediate** | RAG-quality + honest cost: **reranker**, **hybrid search**, real token/cost accounting. | 🔜 Preview topology |
-| 🔴 **Advanced** | "How agents live in production": **LLM gateway**, **guardrails in/out**, **semantic cache**, **eval runner**, **observability sink**. | 🔜 Preview topology |
+| 🟡 **Intermediate** | The agent grows up into **DeepAgents** (explicit planning + sub-agents + a virtual file system for longer-horizon tasks); RAG-quality + honest cost: **reranker**, **hybrid search**, real token/cost accounting. | 🔜 Preview topology |
+| 🔴 **Advanced** | **Multi-agent orchestration** — DeepAgents coordinating specialized sub-agents — plus "how agents live in production": **LLM gateway**, **guardrails in/out**, **semantic cache**, **eval runner**, **observability sink**. | 🔜 Preview topology |
 
 The upper rungs render their extra stations as **explicit, visually-distinct "coming soon" preview
 tiles** — the *target architecture* is itself a teaching artifact. Honesty first: nothing fakes a
 run, so sending is disabled on a rung until its real nodes ship (each lands in its own spec).
+
+The Agent node itself is **relabelled per rung** to mark this direction: `Agent` / `ReAct` on Simple
+becomes **`DeepAgents`** on Intermediate and **`DeepAgents + Multi-agents`** on Advanced. Today this is
+a frontend label only (same underlying station) — a visual reminder of where the ladder heads, not yet
+a different runtime.
 
 ---
 

@@ -142,13 +142,18 @@ legível, e deixa quem está aprendendo *subir* para ver o que cada preocupaçã
 | Degrau | O que mostra | Status |
 |---|---|---|
 | 🟢 **Simples** | O app completo, **totalmente ao vivo**: loop ReAct + RAG vetorial + ferramentas MCP, turno único, na requisição. Envie uma mensagem e veja o pipeline real. **(padrão)** | ✅ Ao vivo |
-| 🟡 **Intermediário** | Qualidade de RAG + custo honesto: **reranker**, **busca híbrida**, contabilidade real de token/custo. | 🔜 Topologia de prévia |
-| 🔴 **Avançado** | "Como agentes vivem em produção": **gateway de LLM**, **guardrails de entrada/saída**, **cache semântico**, **eval runner**, **sink de observabilidade**. | 🔜 Topologia de prévia |
+| 🟡 **Intermediário** | O agente amadurece e vira **DeepAgents** (planejamento explícito + subagentes + um sistema de arquivos virtual para tarefas de horizonte mais longo); qualidade de RAG + custo honesto: **reranker**, **busca híbrida**, contabilidade real de token/custo. | 🔜 Topologia de prévia |
+| 🔴 **Avançado** | **Orquestração multi-agente** — DeepAgents coordenando subagentes especializados — mais "como agentes vivem em produção": **gateway de LLM**, **guardrails de entrada/saída**, **cache semântico**, **eval runner**, **sink de observabilidade**. | 🔜 Topologia de prévia |
 
 Os degraus superiores renderizam suas estações extras como **blocos de prévia "em breve",
 explicitamente distintos visualmente** — a *arquitetura-alvo* é, em si, um artefato didático.
 Honestidade em primeiro lugar: nada finge uma execução, então o envio fica desativado num degrau até
 seus nós reais existirem (cada um chega em sua própria spec).
+
+O próprio nó do Agente é **renomeado por degrau** para marcar essa direção: `Agent` / `ReAct` no
+Simples vira **`DeepAgents`** no Intermediário e **`DeepAgents + Multiagentes`** no Avançado. Hoje isso
+é só um rótulo no frontend (a estação por baixo é a mesma) — um lembrete visual de para onde a escada
+aponta, ainda não um runtime diferente.
 
 ---
 

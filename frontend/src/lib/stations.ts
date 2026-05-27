@@ -32,7 +32,13 @@ export type StationId =
   | "guardrails"
   | "cache"
   | "eval"
-  | "observability";
+  | "observability"
+  // Advanced-rung sub-agents (multi-agent preview): the orchestrator is the
+  // relabelled `agent` node; these are the workers it delegates to. Non-executing
+  // previews (label only) until a real multi-agent runtime ships in its own spec.
+  | "researcher"
+  | "coder"
+  | "critic";
 export type TierId = "client" | "api" | "agent" | "services" | "aiops";
 export type NetworkZone = "public" | "private";
 
@@ -592,6 +598,84 @@ const STATIONS_SRC: StationSrc[] = [
     scenarios: ["advanced"],
     comingSoon: true,
   },
+  // --- Advanced-rung sub-agents (multi-agent preview) ------------------------
+  // The orchestrator is the relabelled `agent` node ("DeepAgents + Multi-agents");
+  // these are the specialized workers it delegates to. Label-only previews
+  // (`stages: []`, comingSoon) so each agent is *visible as its own node* —
+  // making clear there's a team, not one loop — without faking a run. A future
+  // spec wires a real multi-agent runtime (and per-agent activation).
+  {
+    id: "researcher",
+    tier: "agent",
+    title: { en: "Researcher", pt: "Pesquisador" },
+    subtitle: { en: "gathers context", pt: "reúne contexto" },
+    icon: "🔎",
+    accent: "var(--color-pink)",
+    tag: "research",
+    blurb: {
+      en: "A sub-agent specialized in finding information: it runs retrieval and tool lookups, then hands a digest back to the orchestrator.",
+      pt: "Um subagente especializado em achar informação: roda recuperação e consultas a ferramentas e devolve um resumo ao orquestrador.",
+    },
+    generic: { en: "Specialized retrieval sub-agent", pt: "Subagente de recuperação especializado" },
+    clouds: {
+      azure: "Azure Container Apps (internal)",
+      aws: "ECS Fargate (private)",
+      gcp: "Cloud Run (internal)",
+    },
+    tech: [{ k: { en: "role", pt: "papel" }, v: "orchestrator–worker" }],
+    stages: [],
+    position: { x: 372, y: 700 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
+  {
+    id: "coder",
+    tier: "agent",
+    title: { en: "Coder", pt: "Programador" },
+    subtitle: { en: "executes steps", pt: "executa passos" },
+    icon: "💻",
+    accent: "var(--color-pink)",
+    tag: "execute",
+    blurb: {
+      en: "A sub-agent that does the work — writing code, calling tools, transforming data — under the orchestrator's plan.",
+      pt: "Um subagente que faz o trabalho — escrever código, chamar ferramentas, transformar dados — sob o plano do orquestrador.",
+    },
+    generic: { en: "Specialized execution sub-agent", pt: "Subagente de execução especializado" },
+    clouds: {
+      azure: "Azure Container Apps (internal)",
+      aws: "ECS Fargate (private)",
+      gcp: "Cloud Run (internal)",
+    },
+    tech: [{ k: { en: "role", pt: "papel" }, v: "orchestrator–worker" }],
+    stages: [],
+    position: { x: 560, y: 700 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
+  {
+    id: "critic",
+    tier: "agent",
+    title: { en: "Critic", pt: "Crítico" },
+    subtitle: { en: "reviews output", pt: "revisa a saída" },
+    icon: "⚖️",
+    accent: "var(--color-pink)",
+    tag: "review",
+    blurb: {
+      en: "A sub-agent that reviews the draft answer for errors and gaps before it ships, sending feedback to the orchestrator.",
+      pt: "Um subagente que revisa a resposta rascunho em busca de erros e lacunas antes de sair, enviando feedback ao orquestrador.",
+    },
+    generic: { en: "Specialized review sub-agent", pt: "Subagente de revisão especializado" },
+    clouds: {
+      azure: "Azure Container Apps (internal)",
+      aws: "ECS Fargate (private)",
+      gcp: "Cloud Run (internal)",
+    },
+    tech: [{ k: { en: "role", pt: "papel" }, v: "orchestrator–worker" }],
+    stages: [],
+    position: { x: 748, y: 700 },
+    scenarios: ["advanced"],
+    comingSoon: true,
+  },
 ];
 
 // Network hops between stations. Cross-tier hops are real network calls; each
@@ -696,6 +780,30 @@ const HOPS_SRC: HopSrc[] = [
     sourceHandle: "right",
     targetHandle: "left",
   },
+  // Orchestrator → sub-agents (advanced multi-agent preview). In-process
+  // delegation, drawn as a small tree under the agent node. Advanced rung only.
+  ...(["researcher", "coder", "critic"] as StationId[]).map(
+    (target): HopSrc => ({
+      source: "agent",
+      target,
+      label: { en: "delegates", pt: "delega" },
+      protocol: {
+        en: "In-process delegation (orchestrator → sub-agent)",
+        pt: "Delegação em processo (orquestrador → subagente)",
+      },
+      detail: {
+        en: "The orchestrator spawns the sub-agent with a focused task and tools, then collects its result. (Preview — not yet executed.)",
+        pt: "O orquestrador cria o subagente com uma tarefa e ferramentas focadas e depois coleta o resultado. (Prévia — ainda não executado.)",
+      },
+      comm: "sync",
+      secure: false,
+      zone: "private",
+      controls: { en: "In-process (same runtime)", pt: "Em processo (mesmo runtime)" },
+      sourceHandle: "bottom",
+      targetHandle: "top",
+      scenarios: ["advanced"],
+    }),
+  ),
 ];
 
 // --- Resolvers + per-language caches -----------------------------------------
@@ -814,8 +922,32 @@ export function stationForEvent(events: { stage: Stage }[], index: number): Stat
 // of the maturity ladder. These builders return only the active scenario's set,
 // which the layout and the canvas render. `simple` reproduces today's set.
 
+// Frontend-only label marker — NOT implemented, a visual reminder of the planned
+// direction for the upper rungs. Intermediate reframes the agent runtime as
+// DeepAgents; Advanced as DeepAgents + multi-agents. The node stays the same
+// live `agent` station (same id, stages and identity) — only its displayed
+// title/tag change. `simple` keeps today's "Agent" / "ReAct".
+const AGENT_SCENARIO_LABEL: Partial<Record<Scenario, { title: Tr; tag: string }>> = {
+  intermediate: { title: "DeepAgents", tag: "DeepAgents" },
+  advanced: {
+    title: { en: "DeepAgents + Multi-agents", pt: "DeepAgents + Multiagentes" },
+    tag: "Multi-agent",
+  },
+};
+
+// Apply the scenario-specific display label to the agent node (see
+// AGENT_SCENARIO_LABEL). A no-op for every other station and for `simple`; never
+// mutates the cached meta (returns a fresh object only when it overrides).
+function relabelAgentForScenario(s: StationMeta, lang: Lang, scenario: Scenario): StationMeta {
+  if (s.id !== "agent") return s;
+  const override = AGENT_SCENARIO_LABEL[scenario];
+  return override ? { ...s, title: r(override.title, lang), tag: override.tag } : s;
+}
+
 export function visibleStationsFor(lang: Lang, scenario: Scenario): StationMeta[] {
-  return stationsFor(lang).filter((s) => s.scenarios.includes(scenario));
+  return stationsFor(lang)
+    .filter((s) => s.scenarios.includes(scenario))
+    .map((s) => relabelAgentForScenario(s, lang, scenario));
 }
 
 export function visibleHopsFor(lang: Lang, scenario: Scenario): HopMeta[] {

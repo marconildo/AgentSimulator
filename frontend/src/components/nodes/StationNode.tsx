@@ -18,6 +18,7 @@ export interface StationNodeData {
   isSelected: boolean;
   expanded: boolean;
   height: number;
+  width?: number; // narrower for advanced-rung sub-agent nodes; defaults to NODE_WIDTH
   comingSoon: boolean; // 008 preview node — non-executing, rendered dashed/dimmed
   usage?: UsageTotals; // 011-token-cost — set on the LLM node only
   [key: string]: unknown;
@@ -27,7 +28,7 @@ export interface StationNodeData {
 const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
 
 export function StationNode(props: NodeProps) {
-  const { meta, runtime, isActive, readout, isSelected, expanded, height, comingSoon, usage } =
+  const { meta, runtime, isActive, readout, isSelected, expanded, height, width, comingSoon, usage } =
     props.data as StationNodeData;
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
@@ -47,7 +48,7 @@ export function StationNode(props: NodeProps) {
       animate={{ scale: spotlit ? 1.03 : 1 }}
       transition={{ type: "spring", stiffness: 280, damping: 18 }}
       className={spotlit ? "station-pulse" : ""}
-      style={{ color: accent, width: NODE_WIDTH, height }}
+      style={{ color: accent, width: width ?? NODE_WIDTH, height }}
     >
       <div
         className="flex h-full flex-col rounded-2xl px-4 py-3 backdrop-blur transition-colors"
@@ -271,6 +272,9 @@ function innerRows(
     case "cache":
     case "eval":
     case "observability":
+    case "researcher":
+    case "coder":
+    case "critic":
       return [];
   }
 }

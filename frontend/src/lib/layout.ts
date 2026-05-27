@@ -33,7 +33,23 @@ const EXPANDED_H: Record<StationId, number> = {
   cache: COLLAPSED_H,
   eval: COLLAPSED_H,
   observability: COLLAPSED_H,
+  researcher: COLLAPSED_H,
+  coder: COLLAPSED_H,
+  critic: COLLAPSED_H,
 };
+
+// Advanced-rung sub-agents render as a small row of narrower nodes under the
+// orchestrator (the `agent` node), inside the Agent tier — so each agent is its
+// own box. They live outside COLUMNS and are positioned by hand below.
+const SUBAGENTS: StationId[] = ["researcher", "coder", "critic"];
+const SUBAGENT_W = 176; // narrower than NODE_WIDTH to signal "sub" and fit the row
+const SUBAGENT_GAP_X = 16; // horizontal gap between sub-agents
+const SUBAGENT_GAP_Y = 60; // vertical drop below the orchestrator (room for the tree edges)
+
+/** Render width of a node — sub-agents are narrower than the standard station. */
+export function widthOf(id: StationId): number {
+  return SUBAGENTS.includes(id) ? SUBAGENT_W : NODE_WIDTH;
+}
 
 interface Column {
   x: number;
@@ -70,6 +86,9 @@ const TIER_OF: Record<StationId, TierId> = {
   cache: "aiops",
   eval: "aiops",
   observability: "aiops",
+  researcher: "agent",
+  coder: "agent",
+  critic: "agent",
 };
 
 const PAD = 16; // padding between a tier box and its stations
@@ -87,6 +106,7 @@ export interface Box {
 export interface LayoutResult {
   positions: Record<StationId, { x: number; y: number }>;
   heights: Record<StationId, number>;
+  widths: Record<StationId, number>;
   tierBoxes: Record<TierId, Box>;
   boundary: Box;
 }
@@ -114,6 +134,23 @@ export function computeLayout(
     }
   }
 
+  // Multi-agent preview (advanced): lay the sub-agents in a row directly under
+  // the orchestrator (`agent`), left-aligned with it. They sit in the Agent tier,
+  // so the tier box below auto-grows to wrap the whole team.
+  if (positions.agent) {
+    let x = positions.agent.x;
+    const rowY = positions.agent.y + heights.agent + SUBAGENT_GAP_Y;
+    for (const id of SUBAGENTS) {
+      if (!visible.has(id)) continue;
+      positions[id] = { x, y: rowY };
+      heights[id] = COLLAPSED_H;
+      x += SUBAGENT_W + SUBAGENT_GAP_X;
+    }
+  }
+
+  const widths = {} as Record<StationId, number>;
+  for (const id of Object.keys(positions) as StationId[]) widths[id] = widthOf(id);
+
   const tierMembers: Record<TierId, StationId[]> = {
     client: [],
     api: [],
@@ -129,7 +166,7 @@ export function computeLayout(
     if (ids.length === 0) continue; // tier absent from this rung (e.g. aiops in simple)
     const minX = Math.min(...ids.map((i) => positions[i].x));
     const minY = Math.min(...ids.map((i) => positions[i].y));
-    const maxX = Math.max(...ids.map((i) => positions[i].x + NODE_WIDTH));
+    const maxX = Math.max(...ids.map((i) => positions[i].x + widths[i]));
     const maxY = Math.max(...ids.map((i) => positions[i].y + heights[i]));
     tierBoxes[tid] = {
       x: minX - PAD,
@@ -153,5 +190,5 @@ export function computeLayout(
     h: bMaxY - by + BOUND_LABEL + BOUND_PAD,
   };
 
-  return { positions, heights, tierBoxes, boundary };
+  return { positions, heights, widths, tierBoxes, boundary };
 }

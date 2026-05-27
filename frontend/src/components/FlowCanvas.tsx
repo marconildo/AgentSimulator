@@ -100,6 +100,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
         isSelected: selected === meta.id,
         expanded: expandedSet.has(meta.id),
         height: layout.heights[meta.id],
+        width: layout.widths[meta.id],
         comingSoon: meta.comingSoon ?? false,
         // 011-token-cost: the LLM block totals rounds/tokens/cost across the run's
         // LLM calls — the aggregate spans agent.think + llm.generate, so thread it
@@ -272,6 +273,9 @@ function readoutFor(
     case "cache":
     case "eval":
     case "observability":
+    case "researcher":
+    case "coder":
+    case "critic":
       return "";
   }
 }

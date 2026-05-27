@@ -459,6 +459,10 @@ const en: Strings = {
     "TLS 1.3": "TLS 1.3 — the encryption that secures HTTPS between the browser and the server.",
     ASGI: "ASGI — the asynchronous Python web-server interface FastAPI runs on.",
     ReAct: "ReAct — the reason → act → observe loop the agent repeats until it can answer.",
+    DeepAgents:
+      "DeepAgents — a LangGraph agent pattern adding planning, sub-agents, and a virtual file system for longer-horizon tasks. (Planned — not yet implemented.)",
+    "Multi-agent":
+      "Multi-agent — several specialized agents that coordinate (e.g. an orchestrator delegating to sub-agents) instead of one monolithic loop. (Planned — not yet implemented.)",
     SQL: "SQL — the query language of the relational database that stores the conversation.",
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
@@ -771,6 +775,10 @@ const pt: Strings = {
     "TLS 1.3": "TLS 1.3 — a criptografia que protege o HTTPS entre o navegador e o servidor.",
     ASGI: "ASGI — a interface assíncrona de servidor web Python sobre a qual o FastAPI roda.",
     ReAct: "ReAct — o loop raciocinar → agir → observar que o agente repete até poder responder.",
+    DeepAgents:
+      "DeepAgents — um padrão de agente LangGraph que adiciona planejamento, subagentes e um sistema de arquivos virtual para tarefas de horizonte mais longo. (Planejado — ainda não implementado.)",
+    "Multi-agent":
+      "Multi-agente — vários agentes especializados que se coordenam (ex.: um orquestrador delegando a subagentes) em vez de um único loop monolítico. (Planejado — ainda não implementado.)",
     SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
