@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../i18n";
 import { CloudToggle } from "./CloudToggle";
-import { getConfig, type AppConfig } from "../lib/chatApi";
+import { getConfig, type AppConfig, type ClearResult } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { type DeliveryMode, useSettings } from "../lib/settings";
 import { useChat } from "../store/useChat";
@@ -32,6 +32,26 @@ export function SettingsPanel() {
     getConfig().then(setConfig).catch(() => {});
   }, [open, config]);
 
+  // 025-clear-databases — the "Clear databases" reset, gated by an inline confirm
+  // step so it can't be triggered with one stray click.
+  const [confirming, setConfirming] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [cleared, setCleared] = useState<ClearResult | null>(null);
+  // Closing the panel discards any pending confirm / last-result line.
+  useEffect(() => {
+    if (!open) {
+      setConfirming(false);
+      setCleared(null);
+    }
+  }, [open]);
+  const doClear = async () => {
+    setClearing(true);
+    const result = await useChat.getState().clearAll();
+    setClearing(false);
+    setConfirming(false);
+    if (result) setCleared(result);
+  };
+
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -57,8 +77,13 @@ export function SettingsPanel() {
   const enabled = exp.enabledTools ?? allTools; // null ⇒ all on
   const topK = exp.topK ?? config?.default_top_k ?? 4;
   const promptValue = exp.systemPrompt ?? config?.default_system_prompt ?? "";
+  const failureModes = config?.failure_modes ?? ["none"];
+  const simulateFailure = exp.simulateFailure ?? "none";
   const dirty =
-    exp.systemPrompt !== null || exp.enabledTools !== null || exp.topK !== null;
+    exp.systemPrompt !== null ||
+    exp.enabledTools !== null ||
+    exp.topK !== null ||
+    simulateFailure !== "none";
 
   return (
     <div className="relative" ref={ref}>
@@ -218,6 +243,100 @@ export function SettingsPanel() {
             onChange={(e) => exp_.setTopK(conv, Number(e.target.value))}
             className="w-full accent-[var(--color-accent)]"
           />
+
+          {/* Simulate failure (017) — force a failure on the next run and watch
+              the agent degrade. Options come from /api/config (no hardcoding). */}
+          <div className="mt-3 mb-1 text-[10.5px] font-semibold text-[var(--color-ink)]">
+            {ex.failure.label}
+          </div>
+          <p className="mb-1.5 text-[10px] leading-snug text-[var(--color-muted)]">
+            {ex.failure.hint}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {failureModes.map((m) => {
+              const active = simulateFailure === m;
+              return (
+                <button
+                  key={m}
+                  onClick={() => exp_.setSimulateFailure(conv, m)}
+                  aria-pressed={active}
+                  disabled={!config}
+                  className="rounded-lg border px-2.5 py-1.5 font-mono text-[10.5px] transition"
+                  style={{
+                    borderColor: active ? "var(--color-accent)" : "var(--color-line)",
+                    background: active ? "var(--color-panel-2)" : "transparent",
+                    color: active ? "var(--color-indigo-soft)" : "var(--color-ink)",
+                  }}
+                >
+                  {ex.failure.modes[m] ?? m}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="my-2.5 border-t border-[var(--color-line)]" />
+
+          {/* --- Data / reset (025-clear-databases) ----------------------- */}
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--color-ink)]">
+            <span aria-hidden>🗑️</span>
+            {s.data.title}
+          </div>
+          <p className="mb-2 text-[10px] leading-snug text-[var(--color-muted)]">
+            {s.data.clearHint}
+          </p>
+
+          {!confirming ? (
+            <button
+              onClick={() => {
+                setConfirming(true);
+                setCleared(null);
+              }}
+              className="w-full rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold transition"
+              style={{ borderColor: "var(--color-line)", color: "var(--color-rose-soft)" }}
+            >
+              {s.data.clear}
+            </button>
+          ) : (
+            <div
+              className="rounded-lg border p-2.5"
+              style={{
+                borderColor: "var(--color-rose-soft)",
+                background: "var(--color-panel-2)",
+              }}
+            >
+              <div className="mb-1 text-[10.5px] font-semibold text-[var(--color-ink)]">
+                {s.data.confirm}
+              </div>
+              <p className="mb-2 text-[10px] leading-snug text-[var(--color-muted)]">
+                {s.data.confirmHint}
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={doClear}
+                  disabled={clearing}
+                  className="rounded-lg border px-2.5 py-1.5 text-[10.5px] font-semibold transition disabled:opacity-60"
+                  style={{ borderColor: "var(--color-rose-soft)", color: "var(--color-rose-soft)" }}
+                >
+                  {clearing ? s.data.clearing : s.data.confirmYes}
+                </button>
+                <button
+                  onClick={() => setConfirming(false)}
+                  disabled={clearing}
+                  className="rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-[10.5px] text-[var(--color-muted)] transition disabled:opacity-60"
+                >
+                  {s.data.cancel}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {cleared && (
+            <p className="mt-1.5 text-[10px] font-medium text-[var(--color-ok-soft)]">
+              {s.data.cleared
+                .replace("{sessions}", String(cleared.sessions_deleted))
+                .replace("{chunks}", String(cleared.vectors_removed))}
+            </p>
+          )}
         </div>
       )}
     </div>

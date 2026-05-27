@@ -96,6 +96,9 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
         runtime: view.stations[meta.id],
         // Spotlight: only the current station is highlighted; others deactivate.
         isActive: view.activeStation === meta.id,
+        // 014-tour-scripted: the station the guided tour is currently narrating —
+        // a distinct, attention-leading highlight (independent of the spotlight).
+        isEmphasized: view.emphasizedStation === meta.id,
         readout: readoutFor(meta.id, view.stations[meta.id], ro, view.usage),
         isSelected: selected === meta.id,
         expanded: expandedSet.has(meta.id),
@@ -249,6 +252,9 @@ function readoutFor(
     }
     case "mcp": {
       const call = lastWith(rt.events, (e) => e.stage === "mcp.call" && e.phase === "end");
+      // 017-failure-injection: a simulated tool error is badged so the learner
+      // sees where the failure was injected.
+      if (call?.data.simulated) return `${ro.simulatedError} · ${call.data.tool}`;
       if (call) return `${call.data.tool} → ${truncate(String(call.data.result), 14)}`;
       const disc = lastWith(rt.events, (e) => e.stage === "mcp.discover" && e.phase === "end");
       if (disc) return ro.toolsReady((disc.data.tools as unknown[] | undefined)?.length ?? 0);
@@ -256,6 +262,10 @@ function readoutFor(
     }
     case "llm": {
       if (rt.status === "idle") return "";
+      // 017-failure-injection: a simulated model timeout is recorded on the
+      // llm.prompt END; surface the badge over the usual readout.
+      const prompt = lastWith(rt.events, (e) => e.stage === "llm.prompt" && e.phase === "end");
+      if (prompt?.data.simulated) return ro.simulatedError;
       const tokens = rt.events.filter((e) => e.stage === "llm.generate" && e.phase === "progress").length;
       if (rt.status === "active" && tokens) return ro.streaming(tokens);
       // Real tokens + cost once a round has reported usage (011-token-cost).

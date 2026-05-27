@@ -12,9 +12,10 @@ import {
   tourStep,
   type TourState,
 } from "../lib/tour";
+import { tourTrace } from "../lib/tourTrace";
 import type { TraceEvent } from "../types/events";
 
-export type Status = "idle" | "streaming" | "done" | "error";
+export type Status = "idle" | "streaming" | "done" | "error" | "cancelled";
 
 interface SimulatorState {
   status: Status;
@@ -48,7 +49,15 @@ interface SimulatorState {
   pushTrace: (event: TraceEvent) => void;
   endRun: () => void;
   failRun: (message: string) => void;
+  // 016-cancel-stream: interrupt an in-flight run. Aborts the request signal,
+  // stops the live ticker and marks the run `cancelled` — but keeps events/cursor
+  // so the partial trace stays on the canvas, replayable/step-able (AC3).
+  cancelRun: () => void;
   playBatch: (events: TraceEvent[]) => void; // load a finished trace and replay it
+  // 022-message-trace-link: statically load a finished (past) turn's trace onto
+  // the canvas — settled at the tail, no auto-replay (the user can press play).
+  // A no-op while a live run is streaming, so revisiting can't corrupt it (AC3).
+  loadTrace: (events: TraceEvent[]) => void;
 
   reset: () => void;
   setCursor: (index: number) => void;
@@ -207,12 +216,47 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
 
   failRun: (message) => set({ status: "error", error: message }),
 
+  // 016-cancel-stream: terminal-but-non-destructive interrupt. Only acts on a
+  // live run; aborts its signal (so the SSE fetch unwinds with AbortError and the
+  // backend's producer is cancelled before db.write), stops the playhead ticker,
+  // and freezes the partial trace in place (events/cursor untouched → replay/step
+  // still work). `following: false` hands off the (now dead) live tail.
+  cancelRun: () => {
+    if (get().status !== "streaming") return;
+    abort?.abort();
+    stopLiveTimer();
+    stopTimer();
+    stopTourTimer();
+    set({ status: "cancelled", following: false, playing: false });
+  },
+
   playBatch: (events) => {
     // One blocking round-trip already finished; replay it from the top so the
     // journey still animates (just not live).
     stopTourTimer();
     set({ events, status: "done", cursor: -1, following: false, playing: false, tour: IDLE_TOUR });
     get().togglePlay();
+  },
+
+  // 022-message-trace-link: load a past turn's trace as a static, settled frame —
+  // events in, cursor at the tail, `done`, with every timer (live/replay/tour)
+  // stopped so nothing animates until the user presses play. Guarded against an
+  // active run so revisiting a past turn never corrupts or resumes a live stream
+  // (AC3); `deriveView` then renders it and step/replay operate over it (AC1).
+  loadTrace: (events) => {
+    if (get().status === "streaming") return;
+    stopTimer();
+    stopTourTimer();
+    stopLiveTimer();
+    set({
+      events,
+      cursor: events.length - 1,
+      status: "done",
+      following: false,
+      playing: false,
+      error: null,
+      tour: IDLE_TOUR,
+    });
   },
 
   reset: () => {
@@ -278,8 +322,16 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   },
 
   startTour: () => {
-    const tour = beginTour(get().events);
-    if (tour.status !== "playing") return; // AC5: no replayable trace → no-op
+    // 014-tour-scripted (AC6): from an empty state, load the bundled canned
+    // trace — a captured real run — so the tour can preview the full journey
+    // with no backend call. Supersedes 005 AC5's empty-state gating.
+    let events = get().events;
+    if (events.length === 0) {
+      events = tourTrace;
+      set({ events, status: "done", cursor: -1, following: false });
+    }
+    const tour = beginTour(events);
+    if (tour.status !== "playing") return; // still nothing replayable → no-op
     // Take over from any replay / live ticker.
     stopTimer();
     stopLiveTimer();

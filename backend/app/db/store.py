@@ -126,6 +126,33 @@ class ConversationStore:
         # are removed here.
         return {"deleted": cur.rowcount > 0, "session_id": session_id}
 
+    def _clear_all_sync(self) -> dict[str, Any]:
+        """Wipe the entire relational store (025-clear-databases).
+
+        The global "reset" companion to ``delete_session``: every session,
+        message and document row is removed. Counts the rows first, then clears
+        all three tables and reports how many of each were deleted. The
+        ``DELETE FROM sessions`` alone would cascade (FK ``ON DELETE CASCADE``,
+        enabled per connection), but the dependent tables are cleared explicitly
+        too so the wipe is total even if that cascade is ever disabled.
+        """
+        with self._connect() as conn:
+            counts = {
+                "sessions_deleted": conn.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()[
+                    "n"
+                ],
+                "messages_deleted": conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()[
+                    "n"
+                ],
+                "documents_deleted": conn.execute("SELECT COUNT(*) AS n FROM documents").fetchone()[
+                    "n"
+                ],
+            }
+            conn.execute("DELETE FROM documents")
+            conn.execute("DELETE FROM messages")
+            conn.execute("DELETE FROM sessions")
+        return {k: int(v) for k, v in counts.items()}
+
     # --- messages ------------------------------------------------------------
 
     def _write_message_sync(
@@ -263,6 +290,9 @@ class ConversationStore:
 
     async def delete_session(self, session_id: str) -> dict[str, Any]:
         return await asyncio.to_thread(self._delete_session_sync, session_id)
+
+    async def clear_all(self) -> dict[str, Any]:
+        return await asyncio.to_thread(self._clear_all_sync)
 
     async def write_message(
         self,

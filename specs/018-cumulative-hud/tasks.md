@@ -9,44 +9,44 @@
 
 ## Phase 1 — Pure usage tally + fold (AC1)
 
-- [ ] **T1 — test first**: `frontend/src/lib/usage.test.ts` — `cumulativeUsage` folds a
+- [x] **T1 — test first**: `frontend/src/lib/usage.test.ts` — `cumulativeUsage` folds a
   list of `TurnUsage` into correct `turns`/token/cost/toolCalls/ragHits totals; and
   `tallyUsage(events)` equals `deriveView`'s usage (parity) and counts `mcp.call` ENDs +
   retrieved chunks.
-- [ ] **T2 — implement**: `frontend/src/lib/usage.ts` (`TurnUsage`, `tallyUsage`,
+- [x] **T2 — implement**: `frontend/src/lib/usage.ts` (`TurnUsage`, `tallyUsage`,
   `cumulativeUsage`); refactor `derive.ts` to reuse `tallyUsage` (no behavior change).
 
 ## Phase 2 — Eviction-tolerant aggregation (AC2)
 
-- [ ] **T3 — test first**: folding a record list with a missing (evicted) turn yields a
+- [x] **T3 — test first**: folding a record list with a missing (evicted) turn yields a
   `partial` result and never throws.
-- [ ] **T4 — implement**: per-conversation HUD state (`useHud` or a `useChat` slice) that
+- [x] **T4 — implement**: per-conversation HUD state (`useHud` or a `useChat` slice) that
   loads each message's trace via 022, tallies, folds, sets `partial` on a 404; recompute
   on turn-complete and conversation switch (reflect only the active conversation).
 
 ## Phase 3 — Pre-send estimate (AC3)
 
-- [ ] **T5 — test first**: `frontend/src/lib/tokenize.test.ts` — `estimateTokens(text)`
+- [x] **T5 — test first**: `frontend/src/lib/tokenize.test.ts` — `estimateTokens(text)`
   returns a plausible approximate count (lazy tokenizer resolves).
-- [ ] **T6 — implement**: `frontend/src/lib/tokenize.ts` — lazy `import()` of
+- [x] **T6 — implement**: `frontend/src/lib/tokenize.ts` — lazy `import()` of
   `js-tiktoken` (`o200k_base`) + `estimateTokens` + a cost estimate from the 011 rate.
 
 ## Phase 4 — i18n + UI (AC4, AC5)
 
-- [ ] **T7 — test first**: i18n parity — all `hud.*` strings exist in en **and** pt.
-- [ ] **T8 — implement**: add the strings; `ConversationHud.tsx` (totals via
+- [x] **T7 — test first**: i18n parity — all `hud.*` strings exist in en **and** pt.
+- [x] **T8 — implement**: add the strings; `ConversationHud.tsx` (totals via
   `formatTokens`/`formatUsd`, tokenizer label, `partial` note) near the header; the
   composer pre-send hint (≈ tokens · ≈ cost, marked estimate) in `ChatPanel.tsx`.
 
 ## Phase 5 — Verify & refactor
 
-- [ ] **T9 — gates**: `npm test` (Vitest) · `npm run build` — green. `js-tiktoken` stays
+- [x] **T9 — gates**: `npm test` (Vitest) · `npm run build` — green. `js-tiktoken` stays
   out of the initial bundle (lazy). No protocol change.
 
 ## Definition of done
 
-- [ ] Every acceptance criterion in `spec.md` maps to a passing test (AC1–AC5)
-- [ ] HUD reflects only the active conversation; evicted traces → `partial`, no crash
-- [ ] Tokens/cost render via `formatTokens`/`formatUsd`; tokenizer label shown honestly
-- [ ] All HUD strings exist in en **and** pt
-- [ ] `spec.md` status updated to `done` (after 022 lands)
+- [x] Every acceptance criterion in `spec.md` maps to a passing test (AC1–AC5)
+- [x] HUD reflects only the active conversation; evicted traces → `partial`, no crash
+- [x] Tokens/cost render via `formatTokens`/`formatUsd`; tokenizer label shown honestly
+- [x] All HUD strings exist in en **and** pt
+- [x] `spec.md` status updated to `done` (after 022 lands)

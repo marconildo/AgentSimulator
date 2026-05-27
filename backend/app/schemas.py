@@ -68,6 +68,21 @@ class Scenario(StrEnum):
     ADVANCED = "advanced"
 
 
+class SimulateFailure(StrEnum):
+    """Opt-in failure injection (017-failure-injection).
+
+    A **request-only** input (like the 006 overrides / 008 ``Scenario``) — *not*
+    a ``TraceEvent`` field — that forces a chosen failure on the next run so the
+    learner can watch the agent degrade. ``none`` (the default) reproduces today's
+    behavior byte-for-byte. The failure surfaces as an ``error`` key on the
+    existing END-event ``data`` (``{error, simulated: true}``); no new ``Stage``.
+    """
+
+    NONE = "none"
+    TOOL_ERROR = "tool_error"
+    LLM_TIMEOUT = "llm_timeout"
+
+
 class TraceEvent(BaseModel):
     """A single observable moment in the lifecycle of one request."""
 
@@ -108,6 +123,11 @@ class ChatRequest(BaseModel):
     # Which rung of the maturity ladder this run targets. Request-only, carried
     # through to state but not yet branched on (only ``simple`` executes today).
     scenario: Scenario = Scenario.SIMPLE
+
+    # --- Failure injection (017-failure-injection) ---------------------------
+    # Forces a chosen failure on this run so the learner can watch the agent
+    # degrade. Request-only, bounded enum; ``none`` (default) is unchanged.
+    simulate_failure: SimulateFailure = SimulateFailure.NONE
 
 
 class TraceSummary(BaseModel):

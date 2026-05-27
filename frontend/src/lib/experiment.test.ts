@@ -75,4 +75,30 @@ describe("useExperiment", () => {
     expect(getFor("a")).toEqual(DEFAULT_EXPERIMENT);
     expect(overridesFor("a")).toEqual({});
   });
+
+  // 017-failure-injection — the per-conversation failure selector.
+  describe("simulateFailure", () => {
+    it("defaults to none and omits the field from overrides (AC1)", () => {
+      expect(useExperiment.getState().getFor("a").simulateFailure).toBe("none");
+      expect(overridesFor("a").simulate_failure).toBeUndefined();
+    });
+
+    it("emits simulate_failure only when set away from none (AC1)", () => {
+      const { setSimulateFailure } = useExperiment.getState();
+      setSimulateFailure("a", "tool_error");
+      expect(overridesFor("a").simulate_failure).toBe("tool_error");
+      setSimulateFailure("a", "llm_timeout");
+      expect(overridesFor("a").simulate_failure).toBe("llm_timeout");
+      // Back to none ⇒ field omitted again (today's behavior).
+      setSimulateFailure("a", "none");
+      expect(overridesFor("a").simulate_failure).toBeUndefined();
+    });
+
+    it("persists until toggled back and stays per-conversation (AC4)", () => {
+      const { setSimulateFailure, getFor } = useExperiment.getState();
+      setSimulateFailure("a", "llm_timeout");
+      expect(getFor("a").simulateFailure).toBe("llm_timeout"); // persists
+      expect(getFor("b").simulateFailure).toBe("none"); // isolated
+    });
+  });
 });

@@ -59,6 +59,17 @@ export interface RequestBody {
   mode: string;
   system_prompt?: string;
   enabled_tools?: string[];
+  // 017-failure-injection — present only when a failure was forced (≠ none).
+  simulate_failure?: string;
+}
+
+// 017-failure-injection — an injected (simulated) failure, carried as an `error`
+// key on the open `data` record of an existing END event (mcp.call / llm.prompt).
+// No new Stage/Phase or TraceEvent type change; this shape lets the inspector
+// read it safely (à la 007's JsonRpcFrames).
+export interface SimulatedError {
+  error: string;
+  simulated: boolean;
 }
 
 export interface TraceSummary {

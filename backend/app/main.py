@@ -9,6 +9,7 @@ REST surface that backs the interactive chat (002-interactive-chat).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 from contextlib import asynccontextmanager
@@ -24,9 +25,9 @@ from .config import get_settings
 from .db.store import get_store
 from .mcp.client import get_registry
 from .rag.ingest import build_index
-from .rag.ingestion import delete_document_vectors, ingest_pdf
+from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_pdf
 from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
-from .schemas import ChatRequest, Phase, Stage
+from .schemas import ChatRequest, Phase, SimulateFailure, Stage
 from .trace import TraceEmitter, trace_store
 
 
@@ -135,6 +136,9 @@ async def config() -> dict:
         "top_k_max": 8,
         "tools": [{"name": s.name, "description": s.description} for s in registry.specs()],
         "scenarios": SCENARIOS,
+        # 017-failure-injection: the allowed values for the "Simulate failure"
+        # selector, so the frontend never hardcodes them (AC4).
+        "failure_modes": [m.value for m in SimulateFailure],
     }
 
 
@@ -167,6 +171,10 @@ async def chat(req: ChatRequest):
         request_body["system_prompt"] = req.system_prompt
     if req.enabled_tools is not None:
         request_body["enabled_tools"] = req.enabled_tools
+    # Include the forced failure only when set (017) — a `none` run echoes nothing
+    # extra, so the body still reflects exactly what executed (AC1).
+    if req.simulate_failure != SimulateFailure.NONE:
+        request_body["simulate_failure"] = req.simulate_failure.value
 
     async def producer() -> None:
         try:
@@ -200,6 +208,7 @@ async def chat(req: ChatRequest):
                     system_prompt=req.system_prompt,
                     enabled_tools=req.enabled_tools,
                     scenario=req.scenario,
+                    simulate_failure=req.simulate_failure,
                 )
 
                 # Persist the finished message + the chunks retrieved for it
@@ -234,14 +243,31 @@ async def chat(req: ChatRequest):
     # Streaming delivery: fan trace events out over SSE as they happen.
     async def event_stream():
         task = asyncio.create_task(producer())
+        done_seen = False
         try:
             while True:
                 event = await emitter.queue.get()
                 if event is emitter.DONE:
+                    done_seen = True
                     break
                 yield {"event": "trace", "data": event.model_dump_json()}
         finally:
-            await task
+            if done_seen:
+                await task
+            else:
+                # The consumer was torn down before the producer finished — the
+                # client disconnected (016-cancel-stream). Cancel the producer so
+                # the in-flight agent run is genuinely interrupted *before*
+                # db.write, discarding the turn. CancelledError is a
+                # BaseException, so the producer's `except Exception` does not
+                # swallow it; its `finally` still saves the partial trace and
+                # closes the emitter (the queue is unbounded → the final put can't
+                # deadlock with no reader).
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        # Reached only on normal completion; on disconnect the GeneratorExit
+        # propagates out of the finally above and skips this farewell event.
         yield {
             "event": "done",
             "data": json.dumps(
@@ -258,6 +284,18 @@ async def get_trace(trace_id: str):
     if summary is None:
         raise HTTPException(status_code=404, detail="trace not found")
     return summary
+
+
+@app.post("/api/data/clear")
+async def clear_data():
+    """Reset both stores (025-clear-databases): remove every user-imported chunk
+    from the vector store (the built-in corpus is kept, so retrieval still works
+    with no rebuild) and wipe all relational history. Returns the counts removed:
+    ``sessions_deleted`` / ``messages_deleted`` / ``documents_deleted`` /
+    ``vectors_removed``. Idempotent — a second call returns all zeros."""
+    vectors_removed = await asyncio.to_thread(delete_uploaded_vectors)
+    counts = await get_store().clear_all()
+    return {**counts, "vectors_removed": vectors_removed}
 
 
 # --- Sessions / messages / documents (002-interactive-chat) -----------------

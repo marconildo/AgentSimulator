@@ -5,6 +5,7 @@
 import type { TraceEvent } from "../types/events";
 import type { StationId } from "./stations";
 import { HOP_PAIRS, STAGE_TO_STATION, STATION_IDS } from "./stations";
+import { tallyUsage } from "./usage";
 
 export type StationStatus = "idle" | "active" | "done";
 
@@ -45,6 +46,11 @@ export interface DerivedView {
   answer: string;
   iterations: number; // agent reasoning turns so far
   usage: UsageTotals; // real tokens + cost across the run's LLM calls (011)
+  // 014-tour-scripted: the station the guided tour is currently narrating, so
+  // the canvas can lead the eye to it. Exactly one while a tour stop is active;
+  // null when idle/done (no `tourStation` passed). Independent of `activeStation`
+  // (the spotlight follows the cursor; the emphasis follows the narration).
+  emphasizedStation: StationId | null;
 }
 
 function hopId(source: StationId, target: StationId): string {
@@ -107,7 +113,11 @@ function legsFor(path: StationId[]): ActiveHop[] {
   return legs;
 }
 
-export function deriveView(events: TraceEvent[], upto: number): DerivedView {
+export function deriveView(
+  events: TraceEvent[],
+  upto: number,
+  tourStation: StationId | null = null,
+): DerivedView {
   const stations = {} as Record<StationId, StationRuntime>;
   for (const id of STATION_IDS) stations[id] = { status: "idle", events: [] };
 
@@ -117,14 +127,10 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   let respondAnswer = "";
   let generateAnswer = ""; // batch mode: the whole answer arrives on the END event
   let iterations = 0;
-  const usage: UsageTotals = {
-    rounds: 0,
-    promptTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0,
-    costUsd: 0,
-  };
-  const num = (v: unknown): number => (typeof v === "number" ? v : 0);
+  // 011-token-cost: real tokens + cost across the run's LLM calls. Shared with the
+  // 018 HUD via tallyUsage so the two can never drift (UsageTotals is the subset
+  // the LLM block reads; the tally also carries toolCalls/ragHits for the HUD).
+  const usage: UsageTotals = tallyUsage(visible);
 
   for (const ev of visible) {
     const stationId = STAGE_TO_STATION[ev.stage];
@@ -138,16 +144,6 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
     }
 
     if (distinct[distinct.length - 1] !== stationId) distinct.push(stationId);
-
-    // Every decide round (agent.think) and the generation (llm.generate) is a real
-    // LLM call — total rounds, tokens and cost across them (011-token-cost).
-    if (ev.phase === "end" && (ev.stage === "agent.think" || ev.stage === "llm.generate")) {
-      usage.rounds += 1;
-      usage.promptTokens += num(ev.metrics.prompt_tokens);
-      usage.completionTokens += num(ev.metrics.completion_tokens);
-      usage.totalTokens += num(ev.metrics.total_tokens);
-      usage.costUsd += num(ev.metrics.cost_usd);
-    }
 
     if (ev.stage === "agent.think" && ev.phase === "end") iterations += 1;
     if (ev.stage === "llm.generate" && ev.phase === "progress" && typeof ev.data.token === "string") {
@@ -195,5 +191,6 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
     answer: tokens.length ? tokens.join("") : respondAnswer || generateAnswer,
     iterations,
     usage,
+    emphasizedStation: tourStation,
   };
 }

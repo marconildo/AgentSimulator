@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import {
+  clearData,
   createSession,
   deleteDocument,
   listDocuments,
@@ -8,6 +9,7 @@ import {
   listSessions,
   uploadDocument,
   type ChatMessage,
+  type ClearResult,
   type DocumentMeta,
   type SessionMeta,
 } from "../lib/chatApi";
@@ -15,6 +17,7 @@ import { isFlowSettled } from "../lib/chatStatus";
 import { overridesFor, useExperiment } from "../lib/experiment";
 import { useSettings } from "../lib/settings";
 import { batchChat, streamChat } from "../lib/sse";
+import { loadTrace as loadCachedTrace } from "../lib/traceCache";
 import { useSimulator } from "./useSimulator";
 
 export type ChatView = "list" | "thread";
@@ -31,12 +34,23 @@ interface ChatState {
   loading: boolean; // loading a thread's messages/documents
   sending: boolean; // a chat round-trip is in flight
   uploading: boolean; // a PDF is being ingested
+  // 016-cancel-stream: transient flag — the last run was cancelled by the user.
+  // Cleared on the next send / conversation switch; drives the "run cancelled" note.
+  cancelled: boolean;
+  // 022-message-trace-link: the message whose trace is currently on the canvas
+  // (null = none / a fresh draft), and whether the last load hit an evicted trace
+  // (drives the "trace expired" / click-to-load affordance). Both per conversation.
+  loadedTraceId: string | null;
+  traceExpired: boolean;
   error: string | null;
 
   setInput: (value: string) => void;
   showList: () => Promise<void>;
   init: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
+  // 022-message-trace-link: load a past turn's trace onto the canvas (memoized
+  // fetch → simulator). An evicted trace flips `traceExpired` instead of crashing.
+  selectMessage: (messageId: string) => Promise<void>;
   newChat: () => Promise<void>;
   // Lazily persist the active conversation, creating one if we're in a draft.
   // Returns the session id, or null if creation failed.
@@ -44,8 +58,14 @@ interface ChatState {
   // `text` lets a one-click suggested question send itself without first filling
   // the input box (§3.10); omitted, it sends the current input as before.
   send: (text?: string) => Promise<void>;
+  // 016-cancel-stream: interrupt the in-flight run. No-op when nothing is sending.
+  cancel: () => void;
   uploadPdf: (file: File) => Promise<void>;
   removeDocument: (documentId: string) => Promise<void>;
+  // 025-clear-databases: wipe all relational history + imported vectors (keeps
+  // the built-in corpus), then reset the UI to a fresh draft. Returns the counts
+  // removed, or null if the request failed.
+  clearAll: () => Promise<ClearResult | null>;
 }
 
 const isAbort = (err: unknown) => err instanceof Error && err.name === "AbortError";
@@ -91,6 +111,9 @@ export const useChat = create<ChatState>((set, get) => ({
   loading: false,
   sending: false,
   uploading: false,
+  cancelled: false,
+  loadedTraceId: null,
+  traceExpired: false,
   error: null,
 
   setInput: (value) => set({ input: value }),
@@ -127,15 +150,41 @@ export const useChat = create<ChatState>((set, get) => ({
     // A different conversation — wipe the visualizer so it doesn't keep
     // animating the previous run's trace under the newly-opened thread.
     useSimulator.getState().reset();
-    set({ activeSessionId: id, view: "thread", loading: true, pending: null });
+    set({
+      activeSessionId: id,
+      view: "thread",
+      loading: true,
+      pending: null,
+      cancelled: false,
+      loadedTraceId: null,
+      traceExpired: false,
+    });
     try {
       const [messages, documents] = await Promise.all([listMessages(id), listDocuments(id)]);
       set({ messages, documents });
+      // 022: never leave the canvas dead — auto-load the latest turn's trace
+      // (messages are oldest-first, so the newest is last). An evicted latest
+      // trace falls back to the click-to-load hint via `traceExpired`.
+      const latest = messages[messages.length - 1];
+      if (latest) await get().selectMessage(latest.id);
     } catch (err) {
       set({ error: (err as Error).message });
     } finally {
       set({ loading: false });
     }
+  },
+
+  selectMessage: async (messageId) => {
+    // message.id === trace_id (the backend persists the message under its trace
+    // id), so the message id is the trace key. The loader is memoized and never
+    // throws — an evicted trace resolves to `expired`.
+    const result = await loadCachedTrace(messageId);
+    if (!result.ok) {
+      set({ traceExpired: true });
+      return;
+    }
+    useSimulator.getState().loadTrace(result.events);
+    set({ traceExpired: false, loadedTraceId: messageId });
   },
 
   newChat: async () => {
@@ -154,6 +203,9 @@ export const useChat = create<ChatState>((set, get) => ({
       documents: [],
       pending: null,
       input: "",
+      cancelled: false,
+      loadedTraceId: null,
+      traceExpired: false,
       error: null,
     });
   },
@@ -187,7 +239,7 @@ export const useChat = create<ChatState>((set, get) => ({
     const overrides = overridesFor(sessionId);
     const sim = useSimulator.getState();
     const signal = sim.beginRun();
-    set({ sending: true, pending: message, input: "", error: null });
+    set({ sending: true, pending: message, input: "", error: null, cancelled: false });
 
     try {
       if (mode === "batch") {
@@ -212,7 +264,10 @@ export const useChat = create<ChatState>((set, get) => ({
       // finishes draining, so the chat never jumps ahead of the flow (012).
       await waitForFlowSettled(signal);
       if (signal.aborted) return; // a newer run took over — don't clobber its state
-      set({ messages, sessions, pending: null });
+      // The canvas is showing this just-finished turn's live trace; mark it as
+      // the loaded turn so the revisit affordance (022) stays coherent.
+      const newest = messages[messages.length - 1];
+      set({ messages, sessions, pending: null, loadedTraceId: newest?.id ?? null });
     } catch (err) {
       if (isAbort(err)) return;
       useSimulator.getState().failRun((err as Error).message);
@@ -220,6 +275,19 @@ export const useChat = create<ChatState>((set, get) => ({
     } finally {
       set({ sending: false });
     }
+  },
+
+  // 016-cancel-stream: interrupt the active run. Delegates the abort + the
+  // partial-trace-preserving "cancelled" transition to the simulator (which owns
+  // the AbortController and the playhead), then settles the chat into a clean,
+  // non-error terminal state: drop the optimistic bubble, stop "sending", raise
+  // the transient `cancelled` note. The in-flight send() catches the resulting
+  // AbortError (isAbort → return), so the discarded turn is never reloaded. No-op
+  // when nothing is sending (AC1).
+  cancel: () => {
+    if (!get().sending) return;
+    useSimulator.getState().cancelRun();
+    set({ sending: false, cancelled: true, pending: null });
   },
 
   uploadPdf: async (file) => {
@@ -260,6 +328,21 @@ export const useChat = create<ChatState>((set, get) => ({
       set({ documents: await listDocuments(sessionId) });
     } catch (err) {
       set({ error: (err as Error).message });
+    }
+  },
+
+  clearAll: async () => {
+    try {
+      const result = await clearData();
+      // Everything is gone server-side — drop the (now-empty) sidebar list and
+      // open a fresh draft. newChat() clears the active thread and resets the
+      // visualizer, so the app lands on a clean slate.
+      set({ sessions: [] });
+      await get().newChat();
+      return result;
+    } catch (err) {
+      set({ error: (err as Error).message });
+      return null;
     }
   },
 }));

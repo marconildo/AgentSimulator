@@ -178,6 +178,29 @@ body {
   animation: station-pulse 1.4s ease-in-out infinite;
 }
 
+/* Guided-tour emphasis (014-tour-scripted) — the station the tour is narrating.
+   A distinct violet ring that breathes, independent of the accent spotlight, so
+   attention is led to the narrated node. Drawn on the node's outer box (rounded
+   to match the card) so it never collides with the card's own selected/spotlit
+   shadow. */
+@keyframes tour-emphasis {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--color-violet),
+      0 0 0 0 color-mix(in srgb, var(--color-violet) 50%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--color-violet),
+      0 0 24px 5px color-mix(in srgb, var(--color-violet) 50%, transparent);
+  }
+}
+.tour-emphasis {
+  border-radius: 1rem;
+  animation: tour-emphasis 1.6s ease-in-out infinite;
+}
+
 @keyframes blink {
   0%,
   100% {

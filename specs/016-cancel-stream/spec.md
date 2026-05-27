@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 016-cancel-stream |
-| **Status** | planned |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |
 

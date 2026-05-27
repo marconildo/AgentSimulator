@@ -1,5 +1,6 @@
 import { useT } from "../i18n";
 import { CLOUDS, useCloud } from "../lib/cloud";
+import { CLOUD_ICONS } from "../lib/cloudIcons";
 
 // Compact provider switch (Generic · Azure · AWS · GCP). The architecture is
 // cloud-agnostic; this overlay swaps the concrete example service names shown on
@@ -19,8 +20,9 @@ export function CloudToggle({ alwaysLabels = false }: { alwaysLabels?: boolean }
       aria-label={t.app.cloud}
       title={t.app.cloud}
     >
-      {CLOUDS.map(({ code, label, icon }) => {
+      {CLOUDS.map(({ code, label }) => {
         const active = cloud === code;
+        const Icon = CLOUD_ICONS[code];
         return (
           <button
             key={code}
@@ -34,7 +36,7 @@ export function CloudToggle({ alwaysLabels = false }: { alwaysLabels?: boolean }
                 : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
             }`}
           >
-            <span aria-hidden>{icon}</span>
+            <Icon className="text-sm" />
             <span className={alwaysLabels ? "inline" : "hidden xl:inline"}>{label}</span>
           </button>
         );

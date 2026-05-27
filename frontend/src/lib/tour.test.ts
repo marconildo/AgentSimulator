@@ -17,6 +17,7 @@ import {
   stopTour,
   tourCaptionsFor,
   tourLabelsFor,
+  tourNarrationFor,
   tourStep,
   tourSteps,
   type TourStep,
@@ -98,6 +99,40 @@ describe("tourSteps (AC1)", () => {
       state = tourStep(state);
     }
     expect(seen).toEqual(tourSteps(events).map((s) => s.phase));
+  });
+});
+
+// 014-tour-scripted (AC1) — the scripted tour reuses 005's reducer; pin that each
+// stop exposes BOTH the cursor (the phase's first event) and the station that owns
+// it, since the canvas now leads the eye to that station.
+describe("tourSteps station exposure (014 AC1)", () => {
+  it("every stop exposes cursor + the station owning the phase's first event", () => {
+    const events = plainRun();
+    const steps = tourSteps(events);
+    expect(steps.length).toBeGreaterThan(0);
+    for (const s of steps) {
+      expect(typeof s.cursor).toBe("number");
+      expect(s.station).toBe(STAGE_TO_STATION[events[s.cursor].stage]);
+    }
+  });
+});
+
+// 014-tour-scripted (AC4) — the balloon shows new, longer scripted narration (one
+// "👉 …" line per phase) and the empty-state CTA, both fully bilingual.
+describe("tour narration is scripted + bilingual (014 AC4)", () => {
+  it("every timeline phase has non-empty narration in every language", () => {
+    for (const { code } of LANGS) {
+      const narration = tourNarrationFor(code);
+      for (const phase of PHASE_ORDER) {
+        expect(narration[phase], `${code}/${phase}`).toBeTruthy();
+      }
+    }
+  });
+
+  it("the empty-state CTA exists in every language", () => {
+    for (const { code } of LANGS) {
+      expect(tourLabelsFor(code).ctaEmpty, code).toBeTruthy();
+    }
   });
 });
 

@@ -55,6 +55,26 @@ export interface Strings {
     now: string;
     attachDoc: string;
     enterToSend: string;
+    // 016-cancel-stream: the in-flight cancel control + the cancelled-state note.
+    cancel: string;
+    cancelled: string;
+  };
+  // 022-message-trace-link: revisit a past turn's trace on the canvas.
+  trace: {
+    clickToLoad: string;
+    loaded: string;
+    expired: string;
+  };
+  // 018-cumulative-hud: the per-conversation running totals + pre-send estimate.
+  hud: {
+    turns: string;
+    tokens: string;
+    cost: string;
+    toolCalls: string;
+    ragHits: string;
+    partial: string;
+    estimate: string;
+    tokenizer: string;
   };
   inspector: {
     overviewTitle: string;
@@ -104,6 +124,8 @@ export interface Strings {
     tool: string;
     args: string;
     result: string;
+    // 017-failure-injection — label for an injected (simulated) failure block.
+    simulatedError: string;
     // Raw protocol/data transparency (007-numeric-transparency).
     jsonrpc: string;
     request: string;
@@ -164,6 +186,25 @@ export interface Strings {
       topKHint: string;
       // Friendly per-tool labels, keyed by MCP tool name.
       toolLabels: Record<string, string>;
+      // 017-failure-injection — the "Simulate failure" selector + its options,
+      // keyed by SimulateFailure value (none / tool_error / llm_timeout).
+      failure: {
+        label: string;
+        hint: string;
+        modes: Record<string, string>;
+      };
+    };
+    // 025-clear-databases — the "Clear databases" reset control + inline confirm.
+    data: {
+      title: string;
+      clear: string;
+      clearHint: string;
+      confirm: string;
+      confirmHint: string;
+      confirmYes: string;
+      cancel: string;
+      clearing: string;
+      cleared: string;
     };
   };
   // One-line plain-language hints for the dense tech tags on each station node,
@@ -179,14 +220,28 @@ export interface Strings {
     idle: string;
     // Named phase markers on the scrubber (004-timeline-phases).
     phases: Record<TimelinePhase, string>;
+    // Per-phase latency waterfall (015-latency-waterfall). Phase bar names reuse
+    // `phases`; only this chrome is new.
+    timing: {
+      title: string;
+      total: string;
+      overhead: string;
+      empty: string;
+    };
   };
-  // Guided tour — storytelling playback (005-guided-tour).
+  // Guided tour — storytelling playback (005-guided-tour, 014-tour-scripted).
   tour: {
     start: string;
     pause: string;
     resume: string;
     stop: string;
+    // Empty-state call to action — ▶ Tour loads a bundled canned trace so a
+    // first-time visitor can preview the journey before sending (014 AC6).
+    ctaEmpty: string;
+    // Terse per-phase captions — used as the phase-chip hover hint (004).
     captions: Record<TimelinePhase, string>;
+    // Longer, scripted balloon narration anchored to the active station (014).
+    narration: Record<TimelinePhase, string>;
   };
   readout: {
     answerReceived: string;
@@ -208,6 +263,9 @@ export interface Strings {
     ingestChunking: (n: number) => string;
     ingestEmbedding: (n: number) => string;
     ingestStored: (n: number) => string;
+    // 017-failure-injection — badge shown on the MCP/LLM readout when a run
+    // carries an injected (simulated) failure.
+    simulatedError: string;
   };
   node: {
     expand: string;
@@ -273,6 +331,11 @@ export interface Strings {
     whatItIs: string;
     whyUsed: string;
     inProject: string;
+    howItWorks: string;
+    otherOptions: string;
+    studyLinks: string;
+    onCloud: (label: string) => string;
+    cloudGuideHint: (label: string) => string;
     moreIn: (title: string) => string;
     topicsCount: (n: number) => string;
     learnStackTitle: string;
@@ -343,6 +406,23 @@ const en: Strings = {
     now: "now",
     attachDoc: "Attach a PDF",
     enterToSend: "Enter to send",
+    cancel: "Cancel",
+    cancelled: "Run cancelled",
+  },
+  trace: {
+    clickToLoad: "Click a message to load its trace",
+    loaded: "Showing this turn's trace",
+    expired: "Trace expired — no longer available",
+  },
+  hud: {
+    turns: "turns",
+    tokens: "tokens",
+    cost: "cost",
+    toolCalls: "tool calls",
+    ragHits: "RAG hits",
+    partial: "partial · some traces expired",
+    estimate: "≈ estimate · not billed",
+    tokenizer: "tiktoken · o200k_base",
   },
   inspector: {
     overviewTitle: "Inspector",
@@ -392,6 +472,7 @@ const en: Strings = {
     tool: "tool",
     args: "args",
     result: "result",
+    simulatedError: "⚠️ Simulated failure (injected)",
     jsonrpc: "JSON-RPC frames",
     request: "Request",
     response: "Response",
@@ -453,6 +534,27 @@ const en: Strings = {
         current_time: "Current time",
         kb_lookup: "Glossary lookup",
       },
+      failure: {
+        label: "Simulate failure",
+        hint: "Force a failure on the next run and watch the agent degrade.",
+        modes: {
+          none: "Off",
+          tool_error: "Tool error",
+          llm_timeout: "LLM timeout",
+        },
+      },
+    },
+    data: {
+      title: "Data",
+      clear: "Clear databases",
+      clearHint:
+        "Wipe all saved conversations and imported document chunks. The built-in knowledge base is kept.",
+      confirm: "Clear all data?",
+      confirmHint: "Deletes every conversation and every uploaded chunk. This can't be undone.",
+      confirmYes: "Yes, clear",
+      cancel: "Cancel",
+      clearing: "Clearing…",
+      cleared: "Cleared {sessions} conversations · {chunks} chunks",
     },
   },
   glossary: {
@@ -487,12 +589,19 @@ const en: Strings = {
       respond: "Respond",
       persist: "Persist",
     },
+    timing: {
+      title: "Timing breakdown",
+      total: "Total",
+      overhead: "overhead / transit",
+      empty: "Run a turn to see where the time went.",
+    },
   },
   tour: {
     start: "▶ Tour",
     pause: "Pause tour",
     resume: "Resume tour",
     stop: "Stop tour",
+    ctaEmpty: "▶ Preview the journey",
     captions: {
       request: "The browser sends your message to the API over HTTPS.",
       memory: "The backend loads recent conversation history — long-term memory.",
@@ -503,6 +612,21 @@ const en: Strings = {
       generate: "The model writes the answer, token by token.",
       respond: "The finished answer is streamed back to the client.",
       persist: "The conversation is saved to the database for next time.",
+    },
+    narration: {
+      request:
+        "👉 Your message leaves the browser and travels to the API over HTTPS — the request begins here.",
+      memory:
+        "👉 The backend reads recent turns from the database — the agent's long-term memory.",
+      route: "👉 The agent reads the request and plans its route before doing any work.",
+      retrieve:
+        "👉 RAG turns your question into a vector and pulls the most relevant chunks from the index.",
+      reason:
+        "👉 The model reasons over the assembled context and decides whether it needs a tool.",
+      tools: "👉 A tool runs over MCP and hands an observation back to the agent to reason on.",
+      generate: "👉 With everything in hand, the model writes the answer one token at a time.",
+      respond: "👉 The finished answer streams back across the network to your browser.",
+      persist: "👉 The turn is written to the database so the next message remembers this one.",
     },
   },
   readout: {
@@ -524,6 +648,7 @@ const en: Strings = {
     ingestChunking: (n) => `chunking · ${n}`,
     ingestEmbedding: (n) => `embedding ${n} vec`,
     ingestStored: (n) => `stored ${n} ✓`,
+    simulatedError: "⚠️ simulated failure",
   },
   node: {
     expand: "Expand",
@@ -588,6 +713,11 @@ const en: Strings = {
     whatItIs: "What it is",
     whyUsed: "Why it's used here",
     inProject: "In the project",
+    howItWorks: "How it works",
+    otherOptions: "Other options",
+    studyLinks: "Study links",
+    onCloud: (label) => `On ${label}`,
+    cloudGuideHint: (label) => `Managed services to build this on ${label}`,
     moreIn: (title) => `More in ${title}`,
     topicsCount: (n) => `${n} topics`,
     learnStackTitle: "Learn the stack",
@@ -659,6 +789,23 @@ const pt: Strings = {
     now: "agora",
     attachDoc: "Anexar um PDF",
     enterToSend: "Enter para enviar",
+    cancel: "Cancelar",
+    cancelled: "Execução cancelada",
+  },
+  trace: {
+    clickToLoad: "Clique numa mensagem para carregar seu trace",
+    loaded: "Mostrando o trace deste turno",
+    expired: "Trace expirado — não está mais disponível",
+  },
+  hud: {
+    turns: "turnos",
+    tokens: "tokens",
+    cost: "custo",
+    toolCalls: "chamadas de ferramenta",
+    ragHits: "acertos de RAG",
+    partial: "parcial · alguns traces expiraram",
+    estimate: "≈ estimativa · não cobrado",
+    tokenizer: "tiktoken · o200k_base",
   },
   inspector: {
     overviewTitle: "Inspetor",
@@ -708,6 +855,7 @@ const pt: Strings = {
     tool: "ferramenta",
     args: "args",
     result: "resultado",
+    simulatedError: "⚠️ Falha simulada (injetada)",
     jsonrpc: "Frames JSON-RPC",
     request: "Requisição",
     response: "Resposta",
@@ -769,6 +917,27 @@ const pt: Strings = {
         current_time: "Hora atual",
         kb_lookup: "Consulta ao glossário",
       },
+      failure: {
+        label: "Simular falha",
+        hint: "Force uma falha na próxima execução e veja o agente degradar.",
+        modes: {
+          none: "Desligado",
+          tool_error: "Erro de ferramenta",
+          llm_timeout: "Timeout do modelo",
+        },
+      },
+    },
+    data: {
+      title: "Dados",
+      clear: "Limpar bancos de dados",
+      clearHint:
+        "Apaga todas as conversas salvas e os chunks de documentos importados. A base de conhecimento embutida é mantida.",
+      confirm: "Limpar todos os dados?",
+      confirmHint: "Apaga todas as conversas e todos os chunks enviados. Isto não pode ser desfeito.",
+      confirmYes: "Sim, limpar",
+      cancel: "Cancelar",
+      clearing: "Limpando…",
+      cleared: "Limpou {sessions} conversas · {chunks} chunks",
     },
   },
   glossary: {
@@ -803,12 +972,19 @@ const pt: Strings = {
       respond: "Resposta",
       persist: "Persistência",
     },
+    timing: {
+      title: "Quebra de tempo",
+      total: "Total",
+      overhead: "sobrecarga / trânsito",
+      empty: "Rode um turno para ver para onde foi o tempo.",
+    },
   },
   tour: {
     start: "▶ Tour",
     pause: "Pausar tour",
     resume: "Retomar tour",
     stop: "Encerrar tour",
+    ctaEmpty: "▶ Pré-visualizar a jornada",
     captions: {
       request: "O navegador envia sua mensagem à API por HTTPS.",
       memory: "O backend carrega o histórico recente da conversa — memória de longo prazo.",
@@ -819,6 +995,21 @@ const pt: Strings = {
       generate: "O modelo escreve a resposta, token a token.",
       respond: "A resposta pronta é transmitida de volta ao cliente.",
       persist: "A conversa é salva no banco para a próxima vez.",
+    },
+    narration: {
+      request:
+        "👉 Sua mensagem sai do navegador e viaja até a API por HTTPS — a requisição começa aqui.",
+      memory:
+        "👉 O backend lê os turnos recentes do banco — a memória de longo prazo do agente.",
+      route: "👉 O agente lê a requisição e planeja sua rota antes de qualquer trabalho.",
+      retrieve:
+        "👉 O RAG transforma sua pergunta em vetor e busca os trechos mais relevantes no índice.",
+      reason:
+        "👉 O modelo raciocina sobre o contexto montado e decide se precisa de uma ferramenta.",
+      tools: "👉 Uma ferramenta roda via MCP e devolve uma observação para o agente raciocinar.",
+      generate: "👉 Com tudo em mãos, o modelo escreve a resposta um token por vez.",
+      respond: "👉 A resposta pronta volta pela rede, em streaming, até o seu navegador.",
+      persist: "👉 O turno é salvo no banco para que a próxima mensagem lembre desta.",
     },
   },
   readout: {
@@ -840,6 +1031,7 @@ const pt: Strings = {
     ingestChunking: (n) => `dividindo · ${n}`,
     ingestEmbedding: (n) => `incorporando ${n} vec`,
     ingestStored: (n) => `${n} armazenados ✓`,
+    simulatedError: "⚠️ falha simulada",
   },
   node: {
     expand: "Expandir",
@@ -904,6 +1096,11 @@ const pt: Strings = {
     whatItIs: "O que é",
     whyUsed: "Por que é usado aqui",
     inProject: "No projeto",
+    howItWorks: "Como funciona",
+    otherOptions: "Outras opções",
+    studyLinks: "Para estudar",
+    onCloud: (label) => `Em ${label}`,
+    cloudGuideHint: (label) => `Serviços gerenciados para construir isto em ${label}`,
     moreIn: (title) => `Mais em ${title}`,
     topicsCount: (n) => `${n} tópicos`,
     learnStackTitle: "Aprenda a stack",

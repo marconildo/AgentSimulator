@@ -1,14 +1,20 @@
 import { motion } from "framer-motion";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
+import { CancelButton } from "./CancelButton";
+import { ConversationHud } from "./ConversationHud";
 import type { ChatChunk, ChatMessage, DocumentMeta, SessionMeta } from "../lib/chatApi";
 import type { PendingBubble } from "../lib/chatStatus";
+import { formatTokens, formatUsd } from "../lib/cost";
+import { useHealth } from "../lib/health";
 import type { TimelinePhase } from "../lib/phases";
 import { canSend as scenarioCanSend, useScenario } from "../lib/scenario";
 import { formatClock, formatRelative } from "../lib/time";
+import { estimateInputCostUsd, estimateTokens } from "../lib/tokenize";
 import { useChat } from "../store/useChat";
+import { useHud } from "../store/useHud";
 
 interface ChatPanelProps {
   // What the in-flight agent bubble shows, projected from the paced playhead (012):
@@ -232,6 +238,11 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
   const pending = useChat((s) => s.pending);
   const input = useChat((s) => s.input);
   const sending = useChat((s) => s.sending);
+  const cancelled = useChat((s) => s.cancelled);
+  // 022-message-trace-link: revisit a past turn's trace on the canvas.
+  const selectMessage = useChat((s) => s.selectMessage);
+  const loadedTraceId = useChat((s) => s.loadedTraceId);
+  const traceExpired = useChat((s) => s.traceExpired);
   const error = useChat((s) => s.error);
   const setInput = useChat((s) => s.setInput);
   const send = useChat((s) => s.send);
@@ -248,6 +259,14 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, pending, bubbleKey]);
+
+  // 018-cumulative-hud: re-derive the running totals whenever the active
+  // conversation's turns change — a turn completed (messages reloaded) or we
+  // switched conversations (a different message set). Scoped to these messages,
+  // so the HUD always reflects only the active conversation.
+  useEffect(() => {
+    void useHud.getState().recompute(messages);
+  }, [messages]);
 
   const empty = messages.length === 0 && !pending;
 
@@ -275,13 +294,22 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
         </button>
       </header>
 
+      <ConversationHud />
+
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {empty ? (
           <EmptyThread t={t} />
         ) : (
           <div className="space-y-4 px-3 py-4">
             {messages.map((m) => (
-              <Exchange key={m.id} message={m} t={t} lang={lang} />
+              <Exchange
+                key={m.id}
+                message={m}
+                t={t}
+                lang={lang}
+                onSelect={() => void selectMessage(m.id)}
+                active={m.id === loadedTraceId}
+              />
             ))}
             {pending && (
               <div className="space-y-3">
@@ -305,6 +333,24 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
       {error && (
         <p className="mx-3 mb-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-rose)_14%,transparent)] px-2.5 py-1.5 text-[11px] text-[var(--color-rose-soft)]">
           ⚠ {error}
+        </p>
+      )}
+
+      {/* 016-cancel-stream: a non-error note after the user stops a run. The
+          partial trace stays on the canvas (replayable); this just says why the
+          answer never arrived. Transient — cleared on the next send / switch. */}
+      {cancelled && !sending && (
+        <p className="mx-3 mb-1.5 rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 text-[11px] text-[var(--color-muted)]">
+          ⏹ {t.chat.cancelled}
+        </p>
+      )}
+
+      {/* 022-message-trace-link: the latest/selected turn's trace was evicted from
+          the bounded in-memory store — explain it, no crash; the message stays
+          clickable so a still-cached turn can be loaded instead. */}
+      {traceExpired && !sending && (
+        <p className="mx-3 mb-1.5 rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 text-[11px] text-[var(--color-muted)]">
+          ⏳ {t.trace.expired}
         </p>
       )}
 
@@ -348,7 +394,21 @@ function EmptyThread({ t }: { t: Strings }) {
   );
 }
 
-function Exchange({ message, t, lang }: { message: ChatMessage; t: Strings; lang: Lang }) {
+function Exchange({
+  message,
+  t,
+  lang,
+  onSelect,
+  active,
+}: {
+  message: ChatMessage;
+  t: Strings;
+  lang: Lang;
+  // 022-message-trace-link: clicking the agent bubble loads this turn's trace
+  // onto the canvas; `active` marks the turn currently shown there.
+  onSelect: () => void;
+  active: boolean;
+}) {
   return (
     <div className="space-y-3">
       <UserMessage text={message.message} t={t} lang={lang} ts={message.created_at} />
@@ -357,6 +417,9 @@ function Exchange({ message, t, lang }: { message: ChatMessage; t: Strings; lang
         lang={lang}
         ts={message.created_at}
         below={message.chunks.length > 0 ? <Sources chunks={message.chunks} t={t} /> : null}
+        onClick={onSelect}
+        title={active ? t.trace.loaded : t.trace.clickToLoad}
+        active={active}
       >
         {message.answer}
       </AgentMessage>
@@ -406,13 +469,22 @@ function AgentMessage({
   ts,
   children,
   below,
+  onClick,
+  title,
+  active = false,
 }: {
   t: Strings;
   lang: Lang;
   ts: number | null;
   children: ReactNode;
   below?: ReactNode;
+  // 022-message-trace-link: when set, the bubble loads this turn's trace on click;
+  // `active` highlights the turn currently shown on the canvas.
+  onClick?: () => void;
+  title?: string;
+  active?: boolean;
 }) {
+  const clickable = Boolean(onClick);
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -427,7 +499,20 @@ function AgentMessage({
           <span className="text-[11px] font-semibold text-[var(--color-ink)]">{t.chat.agent}</span>
           <Stamp ts={ts} lang={lang} t={t} />
         </div>
-        <div className="max-w-full whitespace-pre-wrap break-words rounded-2xl rounded-tl-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-[13px] leading-relaxed text-[var(--color-ink)]">
+        <div
+          onClick={onClick}
+          title={title}
+          role={clickable ? "button" : undefined}
+          className={`max-w-full whitespace-pre-wrap break-words rounded-2xl rounded-tl-md border bg-[var(--color-panel-2)] px-3 py-2 text-[13px] leading-relaxed text-[var(--color-ink)] ${
+            clickable
+              ? "cursor-pointer transition hover:border-[color-mix(in_srgb,var(--color-sky)_55%,transparent)]"
+              : ""
+          } ${
+            active
+              ? "border-[color-mix(in_srgb,var(--color-sky)_70%,transparent)] ring-1 ring-[color-mix(in_srgb,var(--color-sky)_28%,transparent)]"
+              : "border-[var(--color-line)]"
+          }`}
+        >
           {children}
         </div>
         {below}
@@ -600,8 +685,19 @@ function Composer({
             className="min-w-0 flex-1 truncate text-[10.5px]"
             style={{ color: locked ? "var(--color-warn)" : "var(--color-faint)" }}
           >
-            {locked ? `⌛ ${t.scenario.sendDisabled}` : uploading ? t.chat.uploading : t.chat.enterToSend}
+            {locked ? (
+              `⌛ ${t.scenario.sendDisabled}`
+            ) : uploading ? (
+              t.chat.uploading
+            ) : input.trim() ? (
+              <PreSendHint text={input} t={t} />
+            ) : (
+              t.chat.enterToSend
+            )}
           </span>
+
+          {/* 016-cancel-stream: stop control, present only while a run streams. */}
+          <CancelButton />
 
           {/* Send button with a one-shot "ping" ring while the request is in
               flight, so the start of the journey (button → Frontend node) is
@@ -626,6 +722,33 @@ function Composer({
         </div>
       </form>
     </div>
+  );
+}
+
+// 018-cumulative-hud: the pre-send estimate of the next turn's input size. It
+// encodes the composed input with the REAL tokenizer (js-tiktoken, loaded lazily
+// on first keystroke) and prices it at the active model's input rate. Explicitly
+// an ESTIMATE — the real, billed prompt is assembled server-side and reported in
+// the trace; the tokenizer in play is surfaced on hover.
+function PreSendHint({ text, t }: { text: string; t: Strings }) {
+  const model = useHealth((s) => s.llmModel);
+  const [tokens, setTokens] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    void estimateTokens(text).then((n) => {
+      if (alive) setTokens(n);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [text]);
+
+  const cost = estimateInputCostUsd(tokens, model);
+  return (
+    <span title={t.hud.tokenizer}>
+      ≈ {formatTokens(tokens)} {t.hud.tokens} · ≈ {formatUsd(cost)} · {t.hud.estimate}
+    </span>
   );
 }
 

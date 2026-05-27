@@ -21,6 +21,11 @@ class AgentState(TypedDict):
     # Maturity-ladder rung (008-scenario-framework), request-only. Carried for
     # later specs to branch on; node logic does not read it yet.
     scenario: str
+    # Forced failure for this run (017-failure-injection), request-only:
+    #   "none" (default, unchanged) | "tool_error" | "llm_timeout".
+    # The nodes branch on it to inject a *simulated* error so the learner can
+    # watch the agent degrade; surfaced as an `error` key on the END `data`.
+    simulate_failure: str
     context: str
     chunks: list[dict[str, Any]]
     # Long-term memory: prior {message, answer} turns from the application DB.

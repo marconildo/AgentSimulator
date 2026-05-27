@@ -1,3 +1,4 @@
+import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AgentDetail } from "./components/AgentDetail";
@@ -17,6 +18,7 @@ import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
 import { healthBanner, useHealth } from "./lib/health";
 import { activePhase } from "./lib/phases";
+import { currentStep, isTouring } from "./lib/tour";
 import { useSimulator } from "./store/useSimulator";
 
 // Thin vertical rule that separates the header into zones (brand · view ·
@@ -128,8 +130,16 @@ export default function App() {
   const inspectorCollapsed = useSimulator((s) => s.inspectorCollapsed);
   const toggleChat = useSimulator((s) => s.toggleChat);
   const toggleInspector = useSimulator((s) => s.toggleInspector);
+  const tour = useSimulator((s) => s.tour);
 
-  const view = useMemo(() => deriveView(events, cursor), [events, cursor]);
+  // 014-tour-scripted: the guided tour emphasizes the station it narrates. Feed
+  // its current station into the projection so the canvas leads the eye to it;
+  // null when no tour is running (deriveView then emphasizes nothing).
+  const tourStation = isTouring(tour) ? (currentStep(tour)?.station ?? null) : null;
+  const view = useMemo(
+    () => deriveView(events, cursor, tourStation),
+    [events, cursor, tourStation],
+  );
   // What the live chat bubble shows, projected from the same paced cursor as the
   // canvas: a stage status until the answer exists, then the answer itself (012).
   const bubble = useMemo(() => pendingBubble(view, activePhase(events, cursor)), [view, events, cursor]);
@@ -245,8 +255,12 @@ export default function App() {
             </SidePanel>
 
             <main className="relative min-w-0 flex-1">
-              <FlowCanvas view={view} selected={selected} onSelect={select} />
-              <TourCaption />
+              {/* Shared React Flow context so the tour balloon can read the live
+                  viewport transform (pan/zoom) to anchor next to a node (014). */}
+              <ReactFlowProvider>
+                <FlowCanvas view={view} selected={selected} onSelect={select} />
+                <TourCaption />
+              </ReactFlowProvider>
               {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
             </main>
 

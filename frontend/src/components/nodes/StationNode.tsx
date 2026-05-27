@@ -14,6 +14,7 @@ export interface StationNodeData {
   meta: StationMeta;
   runtime: StationRuntime;
   isActive: boolean; // the current station in the flow — the only one highlighted
+  isEmphasized?: boolean; // 014 — the station the guided tour is narrating
   readout: string;
   isSelected: boolean;
   expanded: boolean;
@@ -28,7 +29,7 @@ export interface StationNodeData {
 const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
 
 export function StationNode(props: NodeProps) {
-  const { meta, runtime, isActive, readout, isSelected, expanded, height, width, comingSoon, usage } =
+  const { meta, runtime, isActive, isEmphasized, readout, isSelected, expanded, height, width, comingSoon, usage } =
     props.data as StationNodeData;
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
@@ -39,15 +40,17 @@ export function StationNode(props: NodeProps) {
   // timeline to step back and re-light an earlier stage. A coming-soon preview
   // node never lights up — it is a non-executing placeholder.
   const spotlit = isActive && !comingSoon;
+  // 014: a coming-soon preview never runs, so it is never emphasized either.
+  const emphasized = Boolean(isEmphasized) && !comingSoon;
   const accent = meta.accent;
   const borderColor = spotlit ? accent : "var(--color-line)";
   const dotColor = spotlit ? accent : "var(--color-faint)";
 
   return (
     <motion.div
-      animate={{ scale: spotlit ? 1.03 : 1 }}
+      animate={{ scale: spotlit || emphasized ? 1.03 : 1 }}
       transition={{ type: "spring", stiffness: 280, damping: 18 }}
-      className={spotlit ? "station-pulse" : ""}
+      className={`${spotlit ? "station-pulse" : ""} ${emphasized ? "tour-emphasis" : ""}`.trim()}
       style={{ color: accent, width: width ?? NODE_WIDTH, height }}
     >
       <div
@@ -60,7 +63,9 @@ export function StationNode(props: NodeProps) {
             : spotlit
               ? `0 8px 30px -12px ${accent}`
               : "none",
-          opacity: comingSoon ? 0.5 : spotlit ? 1 : 0.66,
+          // The narrated node stays at full opacity so it lifts out of the
+          // dimmed neighbours even when it is not the live spotlight (014).
+          opacity: comingSoon ? 0.5 : spotlit || emphasized ? 1 : 0.66,
         }}
       >
         <Handle id="left" type="target" position={Position.Left} style={{ opacity: 0, border: "none" }} />

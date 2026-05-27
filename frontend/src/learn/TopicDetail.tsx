@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 import { useLang, useT } from "../i18n";
-import { allTopicsFor, sectionsFor } from "./content";
+import { CLOUDS, useCloud } from "../lib/cloud";
+import { allTopicsFor, cloudContentFor, sectionsFor } from "./content";
 
 interface TopicDetailProps {
   selected: string | null;
@@ -10,12 +11,15 @@ interface TopicDetailProps {
 
 export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
   const lang = useLang((s) => s.lang);
+  const cloud = useCloud((s) => s.cloud);
   const t = useT();
   const topicEntry = selected ? allTopicsFor(lang)[selected] : undefined;
   const section = selected ? sectionsFor(lang).find((s) => s.id === selected) : undefined;
 
   if (topicEntry) {
     const { topic, section: sec } = topicEntry;
+    const cloudContent = cloudContentFor(topic, cloud, lang);
+    const cloudLabel = CLOUDS.find((c) => c.code === cloud)?.label ?? cloud;
     return (
       <div className="flex h-full flex-col gap-3 overflow-y-auto p-5">
         <button
@@ -33,12 +37,53 @@ export function TopicDetail({ selected, onSelect }: TopicDetailProps) {
         <Block label={t.learn.whyUsed} accent={sec.accent}>
           {topic.why}
         </Block>
+        <Block label={t.learn.howItWorks} accent={sec.accent}>
+          {topic.how}
+        </Block>
+        <Block label={t.learn.otherOptions} accent={sec.accent}>
+          {topic.options}
+        </Block>
+        {cloudContent && (
+          <div>
+            <Label accent={sec.accent}>{t.learn.onCloud(cloudLabel)}</Label>
+            {cloudContent.service && (
+              <code className="mt-1 block break-all rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 font-mono text-[11.5px] text-[var(--color-text-soft)]">
+                {cloudContent.service}
+              </code>
+            )}
+            {cloudContent.note && (
+              <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-prose)]">
+                {cloudContent.note}
+              </p>
+            )}
+          </div>
+        )}
         {topic.where && (
           <div>
             <Label accent={sec.accent}>{t.learn.inProject}</Label>
             <code className="mt-1 block break-all rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 font-mono text-[11.5px] text-[var(--color-text-soft)]">
               {topic.where}
             </code>
+          </div>
+        )}
+        {topic.links && topic.links.length > 0 && (
+          <div>
+            <Label accent={sec.accent}>{t.learn.studyLinks}</Label>
+            <ul className="mt-1.5 space-y-1">
+              {topic.links.map((l) => (
+                <li key={l.url}>
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[12.5px] underline decoration-dotted underline-offset-2 transition hover:opacity-80"
+                    style={{ color: sec.accent }}
+                  >
+                    {l.label} ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

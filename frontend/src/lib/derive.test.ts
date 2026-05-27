@@ -69,6 +69,36 @@ describe("deriveView — settled end state", () => {
   });
 });
 
+// 014-tour-scripted (AC2/AC3) — the guided tour emphasizes the station it is
+// narrating. Emphasis is a pure projection: `deriveView` takes the tour's current
+// station and echoes it as `emphasizedStation` (exactly one while touring, null
+// when idle/done or no station is passed). No timers, no React.
+describe("deriveView — tour emphasis (014 AC2/AC3)", () => {
+  it("emphasizes exactly the passed tour station while a stop is active", () => {
+    const events = fullRun();
+    const at = events.findIndex((e) => e.stage === "agent.route");
+    const view = deriveView(events, at, "agent");
+
+    expect(view.emphasizedStation).toBe("agent");
+  });
+
+  it("emphasizes the tour station regardless of which station is otherwise active", () => {
+    const events = fullRun();
+    // Cursor parked on the RAG stage, but the tour is narrating the LLM.
+    const at = events.findIndex((e) => e.stage === "rag.embed");
+    const view = deriveView(events, at, "llm");
+
+    expect(view.emphasizedStation).toBe("llm");
+    expect(view.activeStation).toBe("rag"); // the spotlight is independent
+  });
+
+  it("emphasizes no station when no tour station is passed (idle/done)", () => {
+    const events = fullRun();
+    expect(deriveView(events, events.length - 1).emphasizedStation).toBeNull();
+    expect(deriveView(events, 3, null).emphasizedStation).toBeNull();
+  });
+});
+
 // 010-llm-as-brain (AC2) — the reasoning round-trip: the agent calls the model to
 // decide, so `llm.prompt` is now a START/END span. The LLM station must light up
 // *during* that span and the Agent ⇄ LLM hop must animate both ways.

@@ -51,6 +51,17 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const listSessions = () => api<SessionMeta[]>("/api/sessions");
 export const createSession = () => api<SessionMeta>("/api/sessions", { method: "POST" });
+
+// 025-clear-databases: the global reset. Counts of what was removed from both
+// stores — relational rows + user-imported vectors (the built-in corpus is kept).
+export interface ClearResult {
+  sessions_deleted: number;
+  messages_deleted: number;
+  documents_deleted: number;
+  vectors_removed: number;
+}
+/** Wipe all relational history + imported vectors (keeps the built-in corpus). */
+export const clearData = () => api<ClearResult>("/api/data/clear", { method: "POST" });
 export const deleteSession = (id: string) =>
   api<unknown>(`/api/sessions/${id}`, { method: "DELETE" });
 export const listMessages = (id: string) => api<ChatMessage[]>(`/api/sessions/${id}/messages`);
@@ -75,6 +86,9 @@ export interface AppConfig {
   tools: { name: string; description: string }[];
   // 008-scenario-framework: the maturity ladder, so the switcher prefills here.
   scenarios: ScenarioInfo[];
+  // 017-failure-injection: allowed values for the "Simulate failure" selector,
+  // so the frontend never hardcodes them (AC4). e.g. ["none","tool_error",…].
+  failure_modes: string[];
 }
 
 let _configPromise: Promise<AppConfig> | null = null;

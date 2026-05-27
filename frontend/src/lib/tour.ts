@@ -86,6 +86,7 @@ export function isTouring(state: TourState): boolean {
 // --- i18n (cached per language) ----------------------------------------------
 
 const captionsCache: Partial<Record<Lang, Record<TimelinePhase, string>>> = {};
+const narrationCache: Partial<Record<Lang, Record<TimelinePhase, string>>> = {};
 const labelsCache: Partial<Record<Lang, Strings_tour>> = {};
 
 type Strings_tour = (typeof UI)[Lang]["tour"];
@@ -93,6 +94,14 @@ type Strings_tour = (typeof UI)[Lang]["tour"];
 /** Per-phase narration captions for a language (stable reference per language). */
 export function tourCaptionsFor(lang: Lang): Record<TimelinePhase, string> {
   return (captionsCache[lang] ??= UI[lang].tour.captions);
+}
+
+/**
+ * Longer, scripted balloon narration per phase (014-tour-scripted) — the prose
+ * anchored next to the station each tour stop emphasizes. Stable per language.
+ */
+export function tourNarrationFor(lang: Lang): Record<TimelinePhase, string> {
+  return (narrationCache[lang] ??= UI[lang].tour.narration);
 }
 
 /** Tour control labels (start / pause / resume / stop) for a language. */

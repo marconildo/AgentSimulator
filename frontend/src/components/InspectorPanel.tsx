@@ -18,6 +18,7 @@ import {
 } from "../lib/stations";
 import { formatLatency } from "../lib/time";
 import type { JsonRpcFrames, Phase, RequestBody, Stage, TraceEvent } from "../types/events";
+import { TimingPanel } from "./TimingPanel";
 
 type I = Strings["inspector"];
 
@@ -354,6 +355,8 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
           )}
           {calls.map((call, idx) => (
             <Section key={idx} title={i.toolCall}>
+              {/* 017-failure-injection: a forced tool error, badged. */}
+              {Boolean(call.data.simulated) && <SimulatedBadge label={i.simulatedError} />}
               <KeyVal k={i.tool} v={String(call.data.tool)} />
               <KeyVal k={i.args} v={JSON.stringify(call.data.args)} />
               <KeyVal k={i.result} v={String(call.data.result)} />
@@ -373,6 +376,8 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
         <>
           {prompt && (
             <Section title={i.assembledPrompt}>
+              {/* 017-failure-injection: a forced model timeout, badged. */}
+              {Boolean(prompt.data.simulated) && <SimulatedBadge label={i.simulatedError} />}
               {preview.system && (
                 <Labeled label={i.system}>
                   <Scroll>{preview.system}</Scroll>
@@ -567,6 +572,19 @@ function KeyVal({ k, v }: { k: string; v: string }) {
   );
 }
 
+// 017-failure-injection — a dashed warning strip flagging an injected (simulated)
+// failure on a tool call / model reasoning block.
+function SimulatedBadge({ label }: { label: string }) {
+  return (
+    <p
+      className="mb-1.5 rounded-lg border border-dashed px-2 py-1 text-[11px] font-medium"
+      style={{ borderColor: "var(--color-warn)", color: "var(--color-warn)" }}
+    >
+      {label}
+    </p>
+  );
+}
+
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-2 first:mt-0">
@@ -668,6 +686,9 @@ function Overview({
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
       <h2 className="text-sm font-semibold text-[var(--color-ink)]">{i.overviewTitle}</h2>
       <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{i.overviewBody}</p>
+      {/* Whole-run latency waterfall (015) — the run-level summary belongs with
+          the overview, not in the per-station detail or the full-width scrubber. */}
+      <TimingPanel />
       <div className="space-y-1.5">
         {stations.map((s) => (
           <button

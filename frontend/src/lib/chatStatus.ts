@@ -38,6 +38,10 @@ export function isFlowSettled(s: {
   status: string;
   playing: boolean;
 }): boolean {
+  // A cancelled run is terminal: settle immediately so any flow-settled waiter
+  // releases instead of hanging on a playhead that will never reach the tail
+  // (016-cancel-stream).
+  if (s.status === "cancelled") return true;
   if (s.events.length === 0) return false;
   if (s.status === "streaming") return false;
   if (s.playing) return false;

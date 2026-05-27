@@ -10,11 +10,12 @@ export type CloudId = "generic" | "azure" | "aws" | "gcp";
 /** Provider-specific values keyed by cloud (proper nouns — never translated). */
 export type CloudMap = { azure: string; aws: string; gcp: string };
 
-export const CLOUDS: { code: CloudId; label: string; icon: string }[] = [
-  { code: "generic", label: "Generic", icon: "☁️" },
-  { code: "azure", label: "Azure", icon: "🔷" },
-  { code: "aws", label: "AWS", icon: "🟧" },
-  { code: "gcp", label: "GCP", icon: "🟢" },
+// Provider brand marks live in `cloudIcons.tsx` (`CLOUD_ICONS`), keyed by `code`.
+export const CLOUDS: { code: CloudId; label: string }[] = [
+  { code: "generic", label: "Generic" },
+  { code: "azure", label: "Azure" },
+  { code: "aws", label: "AWS" },
+  { code: "gcp", label: "GCP" },
 ];
 
 /** Resolve a value for the active cloud, falling back to the agnostic role. */

@@ -31,6 +31,17 @@ from .state import AgentState
 
 MAX_ITERATIONS = 3
 
+# 017-failure-injection — deterministic, clearly-labelled *simulated* failures.
+# The observation fed back to the model uses the MCP error convention
+# (``error:`` prefix, like a real failed call) so the agent reasons over it and
+# degrades/abstains. Labelled ``simulated: true`` on the event so it is honest.
+SIMULATED_TOOL_ERROR = "error: simulated tool failure (injected by the failure simulator)"
+SIMULATED_TIMEOUT = "simulated LLM timeout (injected by the failure simulator)"
+# The degraded answer when the model "times out": a system fallback (the model
+# produced nothing), surfaced on the trace + persisted. The bilingual badge the
+# UI shows around it lives in the frontend i18n (constitution §4).
+DEGRADED_TIMEOUT_ANSWER = "The model timed out — no answer this turn."
+
 
 def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegistry]:
     c = config["configurable"]  # type: ignore[index]
@@ -105,16 +116,42 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         # an llm.prompt span so the LLM station is observably active while it thinks
         # and the Agent → LLM round-trip animates (010-llm-as-brain). The span's END
         # still carries the assembled prompt preview the inspector shows.
-        async with emitter.stage(Stage.LLM_PROMPT, "Reasoning with the model") as prompt_rec:
-            decision = await provider.decide(
-                system=_effective_system(state),
-                messages=messages,
-                context=state["context"],
-                tools=registry.specs(state["enabled_tools"]),
-                used_tools=used,
-                history=state["history"],
-            )
-            prompt_rec.data = decision.prompt_preview
+        try:
+            async with emitter.stage(Stage.LLM_PROMPT, "Reasoning with the model") as prompt_rec:
+                # 017-failure-injection: a deterministic, *simulated* model timeout.
+                # We record it on the llm.prompt END (so the LLM station shows it),
+                # then raise a TimeoutError the node catches below. It never really
+                # hangs — the run short-circuits to a clean degraded state (AC3).
+                if state.get("simulate_failure") == "llm_timeout":
+                    prompt_rec.data = {"error": SIMULATED_TIMEOUT, "simulated": True}
+                    raise TimeoutError(SIMULATED_TIMEOUT)
+                decision = await provider.decide(
+                    system=_effective_system(state),
+                    messages=messages,
+                    context=state["context"],
+                    tools=registry.specs(state["enabled_tools"]),
+                    used_tools=used,
+                    history=state["history"],
+                )
+                prompt_rec.data = decision.prompt_preview
+        except TimeoutError as exc:
+            # Only the *injected* timeout degrades here; a real model timeout
+            # propagates unchanged to main.py's handler (preserves prior behavior).
+            if state.get("simulate_failure") != "llm_timeout":
+                raise
+            rec.data = {
+                "model": provider.model_name,
+                "decision": "error",
+                "error": str(exc),
+                "simulated": True,
+            }
+            # Degrade cleanly: set the fallback answer and route straight to
+            # respond (_should_continue), skipping tools + a real generation.
+            return {
+                "pending_tool_calls": [],
+                "iterations": state["iterations"] + 1,
+                "answer": DEGRADED_TIMEOUT_ANSWER,
+            }
         rec.data = {
             "model": provider.model_name,
             "decision": "call_tools" if decision.tool_calls else "answer",
@@ -134,13 +171,23 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     results = list(state["tool_results"])
     used = list(state["used_tools"])
 
+    # 017-failure-injection: with tool_error, short-circuit the real call to a
+    # simulated error observation (no real `registry.call`). The error is recorded
+    # on the event AND fed back as the tool's result, so the model reasons over the
+    # failure and degrades/abstains — the run stays alive to a terminal state.
+    fail_tool = state.get("simulate_failure") == "tool_error"
+
     for tc in state["pending_tool_calls"]:
         async with emitter.stage(
             Stage.MCP_CALL,
             f"Calling tool: {tc['name']}",
             start_data={"tool": tc["name"], "args": tc["args"]},
         ) as rec:
-            output = await registry.call(tc["name"], tc["args"], enabled=state["enabled_tools"])
+            if fail_tool:
+                output = SIMULATED_TOOL_ERROR
+            else:
+                output = await registry.call(tc["name"], tc["args"], enabled=state["enabled_tools"])
+            is_error = str(output).startswith("error:")
             rec.data = {
                 "tool": tc["name"],
                 "args": tc["args"],
@@ -152,11 +199,16 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                     {"name": tc["name"], "arguments": tc["args"]},
                     {
                         "content": [{"type": "text", "text": output}],
-                        "isError": str(output).startswith("error:"),
+                        "isError": is_error,
                     },
                     reconstructed=registry.transport == "local-fallback",
                 ),
             }
+            if fail_tool:
+                # Surface the injected failure on the open `data` record (no new
+                # Stage/type) so the inspector can badge it "simulated" (AC2).
+                rec.data["error"] = SIMULATED_TOOL_ERROR
+                rec.data["simulated"] = True
         results.append({"tool": tc["name"], "args": tc["args"], "result": output})
         used.append(tc["name"])
 
@@ -203,6 +255,10 @@ async def respond_node(state: AgentState, config: RunnableConfig) -> dict[str, A
 
 
 def _should_continue(state: AgentState) -> str:
+    # 017-failure-injection: a simulated LLM timeout in think_node degrades the run
+    # — skip tools + generation and go straight to respond with the fallback answer.
+    if state.get("simulate_failure") == "llm_timeout":
+        return "respond"
     if state["pending_tool_calls"] and state["iterations"] <= MAX_ITERATIONS:
         return "tools"
     return "generate"
@@ -222,7 +278,11 @@ def get_compiled_graph():
     builder.add_edge("route", "retrieve")
     builder.add_edge("retrieve", "think")
     builder.add_conditional_edges(
-        "think", _should_continue, {"tools": "tools", "generate": "generate"}
+        "think",
+        _should_continue,
+        # "respond" is the 017 degraded path (simulated llm_timeout): skip tools +
+        # generation and return the fallback answer set in think_node.
+        {"tools": "tools", "generate": "generate", "respond": "respond"},
     )
     builder.add_edge("tools", "think")
     builder.add_edge("generate", "respond")
@@ -240,6 +300,7 @@ async def run_agent(
     system_prompt: str | None = None,
     enabled_tools: list[str] | None = None,
     scenario: str = "simple",
+    simulate_failure: str = "none",
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -266,6 +327,7 @@ async def run_agent(
         "system_prompt": system_prompt,
         "enabled_tools": enabled_tools,
         "scenario": scenario,
+        "simulate_failure": simulate_failure,
         "context": "",
         "chunks": [],
         "history": history or [],

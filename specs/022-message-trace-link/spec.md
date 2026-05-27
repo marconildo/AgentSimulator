@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 022-message-trace-link |
-| **Status** | planned |
+| **Status** | done |
 | **Enables** | 018-cumulative-hud, 020-turn-diff (per-message trace source) |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |

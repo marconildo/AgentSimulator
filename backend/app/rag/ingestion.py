@@ -66,6 +66,20 @@ def delete_document_vectors(document_id: str) -> int:
     return len(ids)
 
 
+def delete_uploaded_vectors() -> int:
+    """Delete every user-imported chunk (``corpus=False``); returns the count removed.
+
+    The global companion to ``delete_document_vectors`` (025-clear-databases):
+    it clears all uploaded-document vectors at once while leaving the built-in
+    corpus (``corpus=True``) intact, so retrieval keeps working with no rebuild.
+    """
+    store = get_vectorstore()
+    ids = store.get(where={"corpus": False}).get("ids", [])
+    if ids:
+        store.delete(ids=ids)
+    return len(ids)
+
+
 async def ingest_pdf(
     data: bytes,
     filename: str,

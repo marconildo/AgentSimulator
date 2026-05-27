@@ -1,6 +1,8 @@
-// Guided-tour transport (005-guided-tour). Lives in the Timeline next to the
-// replay controls (Q4). Idle → a single "▶ Tour" call-to-action; while touring →
-// pause/resume + stop. Disabled when there is no replayable trace (AC5).
+// Guided-tour transport (005-guided-tour → 014-tour-scripted). Lives in the
+// Timeline next to the replay controls (Q4). Idle → a single call-to-action;
+// while touring → pause/resume + stop. 014 supersedes 005's empty-state gating:
+// with no run yet, ▶ Tour loads a bundled canned trace and previews the journey,
+// so the control is always enabled (the label reads "preview" in that state).
 
 import { useT } from "../i18n";
 import { isTouring } from "../lib/tour";
@@ -16,14 +18,20 @@ export function TourControls() {
   const stopTour = useSimulator((s) => s.stopTour);
 
   if (!isTouring(tour)) {
+    // Empty state → louder "preview the journey" CTA (filled); with a run → the
+    // quieter ▶ Tour affordance that walks the run you just saw.
+    const label = hasEvents ? t.tour.start : t.tour.ctaEmpty;
     return (
       <button
         onClick={startTour}
-        disabled={!hasEvents}
-        title={t.tour.start}
-        className="flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--color-violet)_55%,transparent)] bg-[color-mix(in_srgb,var(--color-violet)_14%,transparent)] px-3 py-1 text-[11px] font-semibold text-[var(--color-violet-soft)] transition enabled:hover:bg-[color-mix(in_srgb,var(--color-violet)_26%,transparent)] disabled:opacity-30"
+        title={label}
+        className={
+          hasEvents
+            ? "flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--color-violet)_55%,transparent)] bg-[color-mix(in_srgb,var(--color-violet)_14%,transparent)] px-3 py-1 text-[11px] font-semibold text-[var(--color-violet-soft)] transition hover:bg-[color-mix(in_srgb,var(--color-violet)_26%,transparent)]"
+            : "flex items-center gap-1 rounded-full bg-[var(--color-violet)] px-3.5 py-1 text-[11px] font-semibold text-[var(--color-on-accent)] shadow-sm shadow-[color-mix(in_srgb,var(--color-violet)_35%,transparent)] transition hover:opacity-90"
+        }
       >
-        {t.tour.start}
+        {label}
       </button>
     );
   }

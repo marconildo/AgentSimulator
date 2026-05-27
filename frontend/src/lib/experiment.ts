@@ -14,12 +14,16 @@ export interface ConvExperiment {
   systemPrompt: string | null; // null = backend default prompt
   enabledTools: string[] | null; // null = all tools; [] = none; list = only those
   topK: number | null; // null = backend default top-k
+  // 017-failure-injection — force a failure on the next run; "none" = unchanged.
+  // Persists until toggled back to "none" (scoped per conversation, like above).
+  simulateFailure: string; // "none" | "tool_error" | "llm_timeout"
 }
 
 export const DEFAULT_EXPERIMENT: ConvExperiment = {
   systemPrompt: null,
   enabledTools: null,
   topK: null,
+  simulateFailure: "none",
 };
 
 // Draft conversations (not yet persisted) park their settings here until
@@ -36,6 +40,7 @@ interface ExperimentState {
   setSystemPrompt: (conv: string | null, value: string | null) => void;
   toggleTool: (conv: string | null, name: string, allNames: string[]) => void;
   setTopK: (conv: string | null, value: number | null) => void;
+  setSimulateFailure: (conv: string | null, value: string) => void;
   reset: (conv: string | null) => void;
   adopt: (from: string | null, to: string) => void;
 }
@@ -75,6 +80,13 @@ export const useExperiment = create<ExperimentState>((set, get) => ({
       return { byConv: { ...s.byConv, [key]: { ...cur, topK: value } } };
     }),
 
+  setSimulateFailure: (conv, value) =>
+    set((s) => {
+      const key = keyOf(conv);
+      const cur = s.byConv[key] ?? DEFAULT_EXPERIMENT;
+      return { byConv: { ...s.byConv, [key]: { ...cur, simulateFailure: value } } };
+    }),
+
   reset: (conv) =>
     set((s) => {
       const next = { ...s.byConv };
@@ -99,6 +111,7 @@ export interface ChatOverrides {
   system_prompt?: string;
   enabled_tools?: string[];
   top_k?: number;
+  simulate_failure?: string; // 017 — omitted when "none" (today's behavior)
 }
 
 export function overridesFor(conv: string | null): ChatOverrides {
@@ -107,5 +120,8 @@ export function overridesFor(conv: string | null): ChatOverrides {
   if (e.systemPrompt && e.systemPrompt.trim()) out.system_prompt = e.systemPrompt;
   if (e.enabledTools !== null) out.enabled_tools = e.enabledTools; // [] is a real override
   if (e.topK !== null) out.top_k = e.topK;
+  // Send the forced failure only when set — "none" omits it, so an untouched
+  // conversation reproduces today's run exactly (AC1).
+  if (e.simulateFailure && e.simulateFailure !== "none") out.simulate_failure = e.simulateFailure;
   return out;
 }

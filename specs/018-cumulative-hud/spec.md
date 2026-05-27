@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 018-cumulative-hud |
-| **Status** | planned |
+| **Status** | done |
 | **Depends on** | 022-message-trace-link (re-derive aggregation source) |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |
