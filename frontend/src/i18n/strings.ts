@@ -25,6 +25,10 @@ export interface Strings {
     send: string;
     answer: string;
     thinking: string;
+    // 012-chat-flow-sync: running-status label per pipeline stage, shown in the
+    // live chat bubble in step with the paced playhead (gerund form, parallel to
+    // timeline.phases). `thinking` is the fallback before the first stage.
+    stage: Record<TimelinePhase, string>;
     answerHint: string;
     examples: string[];
     // Conversation list ↔ thread (002-interactive-chat).
@@ -132,6 +136,7 @@ export interface Strings {
   };
   settings: {
     open: string;
+    label: string;
     title: string;
     delivery: string;
     deliveryHint: string;
@@ -202,6 +207,7 @@ export interface Strings {
     collapse: string;
     openFull: string;
     memory: string;
+    latency: string;
     tip: string;
     comingSoon: string;
   };
@@ -288,6 +294,17 @@ const en: Strings = {
     send: "Send message",
     answer: "Answer",
     thinking: "Thinking…",
+    stage: {
+      request: "Sending…",
+      memory: "Recalling memory…",
+      route: "Routing…",
+      retrieve: "Retrieving…",
+      reason: "Reasoning…",
+      tools: "Calling tools…",
+      generate: "Generating…",
+      respond: "Responding…",
+      persist: "Saving…",
+    },
     answerHint: "The agent's answer will stream here.",
     examples: [
       "What is RAG and how does retrieval work?",
@@ -401,6 +418,7 @@ const en: Strings = {
   },
   settings: {
     open: "Architecture options",
+    label: "Config",
     title: "Architecture options",
     delivery: "Response delivery",
     deliveryHint: "How the backend returns the result to the browser.",
@@ -495,6 +513,7 @@ const en: Strings = {
     collapse: "Collapse",
     openFull: "Open full view",
     memory: "memory",
+    latency: "latency",
     tip: "Click a station to inspect · ⊕ to expand",
     comingSoon: "Coming soon",
   },
@@ -581,6 +600,17 @@ const pt: Strings = {
     send: "Enviar mensagem",
     answer: "Resposta",
     thinking: "Pensando…",
+    stage: {
+      request: "Enviando…",
+      memory: "Lendo memória…",
+      route: "Roteando…",
+      retrieve: "Recuperando…",
+      reason: "Raciocinando…",
+      tools: "Chamando ferramentas…",
+      generate: "Gerando…",
+      respond: "Respondendo…",
+      persist: "Salvando…",
+    },
     answerHint: "A resposta do agente aparecerá aqui.",
     examples: [
       "O que é RAG e como funciona a recuperação?",
@@ -694,6 +724,7 @@ const pt: Strings = {
   },
   settings: {
     open: "Opções de arquitetura",
+    label: "Config",
     title: "Opções de arquitetura",
     delivery: "Entrega da resposta",
     deliveryHint: "Como o backend devolve o resultado ao navegador.",
@@ -788,6 +819,7 @@ const pt: Strings = {
     collapse: "Recolher",
     openFull: "Abrir visão completa",
     memory: "memória",
+    latency: "latência",
     tip: "Clique numa estação para inspecionar · ⊕ para expandir",
     comingSoon: "Em breve",
   },

@@ -156,7 +156,13 @@ function ExpandedBody({
 }) {
   const t = useT();
   const i = t.inspector;
+  // Node-specific summary rows + a shared latency reading (013) when the stage
+  // reported one, so every executing station carries a useful at-a-glance metric;
+  // the full drill-down still lives in the Inspector.
   const rows = innerRows(meta.id, rt.events, t, usage);
+  if (typeof rt.latencyMs === "number") {
+    rows.push({ k: t.node.latency, v: `${rt.latencyMs.toFixed(0)} ms` });
+  }
 
   return (
     <div className="space-y-1.5 overflow-hidden">

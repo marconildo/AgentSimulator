@@ -1,45 +1,25 @@
 import { LANGS, useLang, useT } from "../i18n";
 
-// Compact EN/PT switch shown in the top-right corner of the header. Lets the
-// visitor pick the language they want to study the simulator in; the choice is
-// persisted to localStorage by the language store.
+// Single button showing the current language (flag + code); clicking flips
+// EN ↔ PT. Was a two-pill group — collapsed to keep the header preferences
+// compact and visually distinct from the segmented "view" controls.
 export function LanguageToggle() {
   const lang = useLang((s) => s.lang);
   const setLang = useLang((s) => s.setLang);
   const t = useT();
 
+  const current = LANGS.find((l) => l.code === lang) ?? LANGS[0];
+  const next = lang === "en" ? "pt" : "en";
+
   return (
-    <div
-      className="flex items-center gap-0.5 rounded-full border border-[var(--color-line)] p-0.5"
-      role="group"
+    <button
+      onClick={() => setLang(next)}
       aria-label={t.app.language}
       title={t.app.language}
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--color-line)] px-2.5 text-[12px] font-semibold text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
     >
-      <span className="pl-1.5 pr-0.5 text-[11px] leading-none" aria-hidden>
-        🌐
-      </span>
-      {LANGS.map(({ code, label, flag }) => {
-        const active = lang === code;
-        return (
-          <button
-            key={code}
-            onClick={() => setLang(code)}
-            aria-pressed={active}
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold transition"
-            style={{
-              background: active ? "var(--color-panel-2)" : "transparent",
-              borderColor: active ? "var(--color-sky)" : "transparent",
-              border: `1px solid ${active ? "var(--color-sky)" : "transparent"}`,
-              color: active ? "var(--color-sky-soft)" : "var(--color-muted)",
-            }}
-          >
-            <span className="mr-1" aria-hidden>
-              {flag}
-            </span>
-            {label}
-          </button>
-        );
-      })}
-    </div>
+      <span aria-hidden>{current.flag}</span>
+      {current.label}
+    </button>
   );
 }

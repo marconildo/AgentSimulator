@@ -430,7 +430,7 @@ const STATIONS_SRC: StationSrc[] = [
       gcp: "Vertex AI",
     },
     tech: [
-      { k: { en: "model", pt: "modelo" }, v: "gpt-4o-mini / mock" },
+      { k: { en: "model", pt: "modelo" }, v: "gpt-4o-mini" },
       { k: { en: "api", pt: "api" }, v: "Chat Completions" },
       { k: { en: "output", pt: "saída" }, v: "streamed token-by-token" },
       { k: { en: "security", pt: "segurança" }, v: "HTTPS · TLS" },

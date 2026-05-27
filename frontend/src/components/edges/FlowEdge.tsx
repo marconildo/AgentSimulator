@@ -1,4 +1,4 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, useViewport, type EdgeProps } from "@xyflow/react";
 import { useState } from "react";
 
 import { useT } from "../../i18n";
@@ -21,6 +21,8 @@ interface FlowEdgeData {
 
 const STREAM_COLOR = "var(--color-sky-soft)";
 const SYNC_COLOR = "var(--color-sync)";
+// Px of headroom the tooltip needs above the edge; below this it flips downward.
+const TOOLTIP_CLEARANCE = 180;
 
 export function FlowEdge(props: EdgeProps) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd } = props;
@@ -28,6 +30,7 @@ export function FlowEdge(props: EdgeProps) {
   const t = useT();
   const i = t.inspector;
   const [hovered, setHovered] = useState(false);
+  const { y: viewportY, zoom } = useViewport();
 
   const accent = data.accent ?? "var(--color-sky)";
   const active = Boolean(data.active);
@@ -46,6 +49,12 @@ export function FlowEdge(props: EdgeProps) {
   });
 
   const strokeColor = stream ? STREAM_COLOR : active ? accent : "var(--color-line)";
+
+  // The tooltip normally sits above the edge; if the label is too close to the
+  // top of the pane (e.g. the Backend↔App Database hop), "up" gets clipped by
+  // the toolbar — flip it below in that case. screenY is the label's on-screen Y.
+  const screenY = labelY * zoom + viewportY;
+  const flipBelow = screenY < TOOLTIP_CLEARANCE;
 
   return (
     <>
@@ -109,10 +118,12 @@ export function FlowEdge(props: EdgeProps) {
 
           {hovered && (
             <div
-              className="nodrag nopan pointer-events-none absolute z-50 w-56 -translate-x-1/2 -translate-y-full rounded-lg border border-[var(--color-line)] p-2 shadow-xl"
+              className={`nodrag nopan pointer-events-none absolute z-50 w-56 -translate-x-1/2 rounded-lg border border-[var(--color-line)] p-2 shadow-xl ${
+                flipBelow ? "" : "-translate-y-full"
+              }`}
               style={{
                 left: labelX,
-                top: labelY - 12,
+                top: flipBelow ? labelY + 16 : labelY - 12,
                 background: "color-mix(in srgb, var(--color-panel) 96%, transparent)",
               }}
             >

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../i18n";
+import { CloudToggle } from "./CloudToggle";
 import { getConfig, type AppConfig } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { type DeliveryMode, useSettings } from "../lib/settings";
@@ -66,17 +67,15 @@ export function SettingsPanel() {
         aria-haspopup="true"
         aria-expanded={open}
         title={s.open}
-        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] transition"
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition"
         style={{
           borderColor: open ? "var(--color-accent)" : "var(--color-line)",
           color: open ? "var(--color-indigo-soft)" : "var(--color-muted)",
         }}
       >
         <span aria-hidden>⚙️</span>
-        {/* Surface the current delivery mode right on the button, so it's
-            discoverable that this is where SSE ↔ Batch is switched. */}
         <span className="font-mono text-[11px] font-semibold uppercase tracking-wide">
-          {mode === "stream" ? "SSE" : "Batch"}
+          {s.label}
         </span>
       </button>
 
@@ -89,6 +88,15 @@ export function SettingsPanel() {
             <span aria-hidden>⚙️</span>
             {s.title}
           </div>
+
+          {/* Cloud overlay — reachable here when the header hides it on narrow
+              screens (it's inline only at lg+). */}
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--color-ink)]">
+            {t.app.cloud}
+          </div>
+          <CloudToggle alwaysLabels />
+
+          <div className="my-2.5 border-t border-[var(--color-line)]" />
 
           <div className="mb-1 text-[11px] font-semibold text-[var(--color-ink)]">{s.delivery}</div>
           <p className="mb-2 text-[10.5px] leading-snug text-[var(--color-muted)]">

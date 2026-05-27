@@ -137,7 +137,10 @@ describe("useChat — lazy session creation", () => {
     vi.mocked(chatApi.createSession).mockResolvedValue(session("created"));
     vi.mocked(chatApi.listMessages).mockResolvedValue([]);
     vi.mocked(chatApi.listSessions).mockResolvedValue([session("created")]);
-    vi.mocked(sse.streamChat).mockResolvedValue(undefined);
+    // Realistic stream: signal completion so the run settles and send() finishes.
+    vi.mocked(sse.streamChat).mockImplementation(async (_m, handlers) => {
+      handlers.onDone({ trace_id: "t", answer: "", session_id: "created" });
+    });
     useChat.setState({ input: "hello", activeSessionId: null });
 
     await useChat.getState().send();
@@ -182,5 +185,57 @@ describe("useChat — resets the canvas on context switch", () => {
     expect(sim.events).toEqual([]);
     expect(sim.cursor).toBe(-1);
     expect(sim.status).toBe("idle");
+  });
+});
+
+// 012-chat-flow-sync: the persisted answer must not replace the live bubble while
+// the paced playhead is still walking the stations. send() fetches the persisted
+// thread as soon as the network finishes, but holds the swap until the flow has
+// SETTLED (run over + playhead drained to the tail).
+describe("useChat — chat stays in lockstep with the paced flow", () => {
+  const trace = (stage: TraceEvent["stage"], phase: TraceEvent["phase"]): TraceEvent => ({
+    trace_id: "t",
+    seq: 0,
+    ts: 0,
+    stage,
+    phase,
+    label: "",
+    data: {},
+    metrics: {},
+  });
+
+  it("holds the persisted swap until the flow settles", async () => {
+    vi.mocked(chatApi.listMessages).mockResolvedValue([
+      { id: "m", message: "hi", answer: "Hello.", chunks: [], created_at: 1 },
+    ]);
+    vi.mocked(chatApi.listSessions).mockResolvedValue([session("s")]);
+    // The stream resolves on the network WITHOUT calling onDone, so the run is
+    // still "streaming" (not settled) when send() reaches the swap gate.
+    vi.mocked(sse.streamChat).mockImplementation(async (_m, handlers) => {
+      handlers.onTrace(trace("frontend", "end"));
+      handlers.onTrace(trace("backend", "start"));
+    });
+    useChat.setState({ input: "hi", activeSessionId: "s" });
+
+    const p = useChat.getState().send();
+    // Wait until the network round-trip + persisted fetch have happened.
+    await vi.waitFor(() => expect(chatApi.listMessages).toHaveBeenCalled());
+
+    // Flow not settled yet → the live bubble stays, persisted messages unapplied.
+    expect(useChat.getState().pending).toBe("hi");
+    expect(useChat.getState().messages).toEqual([]);
+
+    // Drain the flow: run finished and the playhead reaches the tail.
+    const evs = useSimulator.getState().events;
+    useSimulator.setState({
+      status: "done",
+      playing: false,
+      following: true,
+      cursor: evs.length - 1,
+    });
+
+    await p;
+    expect(useChat.getState().pending).toBeNull();
+    expect(useChat.getState().messages).toHaveLength(1);
   });
 });

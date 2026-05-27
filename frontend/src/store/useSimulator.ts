@@ -26,6 +26,10 @@ interface SimulatorState {
   expanded: StationId[]; // stations expanded inline on the canvas
   detail: StationId | null; // station opened in the focused drill-in overlay
   error: string | null;
+  // Side-panel collapse (013-canvas-space-disclosure) — layout state kept here
+  // (not local) so `select` can re-open the Inspector when a station is clicked.
+  chatCollapsed: boolean;
+  inspectorCollapsed: boolean;
   // Guided tour (005-guided-tour) — narrated phase-by-phase playback. The pure
   // reducer is in lib/tour.ts; the store drives cursor/selected from it and the
   // current phase carries the caption. Mutually exclusive with raw replay.
@@ -35,6 +39,8 @@ interface SimulatorState {
   toggleExpand: (id: StationId) => void;
   openDetail: (id: StationId) => void;
   closeDetail: () => void;
+  toggleChat: () => void;
+  toggleInspector: () => void;
 
   // Run lifecycle — chat send + PDF upload both drive these so the canvas
   // animates either flow from the one shared event log.
@@ -154,9 +160,16 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   expanded: [],
   detail: null,
   error: null,
+  chatCollapsed: false,
+  inspectorCollapsed: false,
   tour: IDLE_TOUR,
 
-  select: (id) => set({ selected: id }),
+  // Selecting a station (non-null) re-opens the Inspector if it was collapsed, so
+  // a click always reveals the data (AC3); deselecting leaves the panel as-is (AC4).
+  select: (id) =>
+    set((s) => ({ selected: id, inspectorCollapsed: id !== null ? false : s.inspectorCollapsed })),
+  toggleChat: () => set((s) => ({ chatCollapsed: !s.chatCollapsed })),
+  toggleInspector: () => set((s) => ({ inspectorCollapsed: !s.inspectorCollapsed })),
   toggleExpand: (id) =>
     set((state) => ({
       expanded: state.expanded.includes(id)

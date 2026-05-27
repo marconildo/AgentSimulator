@@ -4,17 +4,19 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import type { ChatChunk, ChatMessage, DocumentMeta, SessionMeta } from "../lib/chatApi";
+import type { PendingBubble } from "../lib/chatStatus";
+import type { TimelinePhase } from "../lib/phases";
 import { canSend as scenarioCanSend, useScenario } from "../lib/scenario";
 import { formatClock, formatRelative } from "../lib/time";
 import { useChat } from "../store/useChat";
-import { useSimulator } from "../store/useSimulator";
 
 interface ChatPanelProps {
-  // The answer streaming back from the active run (derived from the trace log).
-  liveAnswer: string;
+  // What the in-flight agent bubble shows, projected from the paced playhead (012):
+  // a live stage status until the answer exists, then the streaming/whole answer.
+  bubble: PendingBubble;
 }
 
-export function ChatPanel({ liveAnswer }: ChatPanelProps) {
+export function ChatPanel({ bubble }: ChatPanelProps) {
   const view = useChat((s) => s.view);
 
   // Load sessions (and open the most recent, or create one) on first mount.
@@ -22,7 +24,7 @@ export function ChatPanel({ liveAnswer }: ChatPanelProps) {
     void useChat.getState().init();
   }, []);
 
-  return view === "list" ? <ConversationList /> : <Thread liveAnswer={liveAnswer} />;
+  return view === "list" ? <ConversationList /> : <Thread bubble={bubble} />;
 }
 
 // --- icons (inline SVG keeps it crisp + dependency-free) --------------------
@@ -222,7 +224,7 @@ function ConversationRow({
 
 // --- open thread ------------------------------------------------------------
 
-function Thread({ liveAnswer }: { liveAnswer: string }) {
+function Thread({ bubble }: { bubble: PendingBubble }) {
   const t = useT();
   const lang = useLang((s) => s.lang);
   const messages = useChat((s) => s.messages);
@@ -237,15 +239,15 @@ function Thread({ liveAnswer }: { liveAnswer: string }) {
   const newChat = useChat((s) => s.newChat);
   const activeId = useChat((s) => s.activeSessionId);
   const sessions = useChat((s) => s.sessions);
-  const status = useSimulator((s) => s.status);
-  const streaming = status === "streaming";
 
   const activeTitle = sessions.find((s) => s.id === activeId)?.title;
 
+  // Re-scroll on any meaningful change to the live bubble (stage label or answer).
+  const bubbleKey = bubble.kind === "answer" ? bubble.text : `status:${bubble.phase}`;
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, pending, liveAnswer]);
+  }, [messages, pending, bubbleKey]);
 
   const empty = messages.length === 0 && !pending;
 
@@ -285,13 +287,13 @@ function Thread({ liveAnswer }: { liveAnswer: string }) {
               <div className="space-y-3">
                 <UserMessage text={pending} t={t} lang={lang} ts={null} />
                 <AgentMessage t={t} lang={lang} ts={null}>
-                  {liveAnswer ? (
+                  {bubble.kind === "answer" ? (
                     <>
-                      {liveAnswer}
-                      {streaming && <span className="caret">▍</span>}
+                      {bubble.text}
+                      {bubble.streaming && <span className="caret">▍</span>}
                     </>
                   ) : (
-                    <TypingDots />
+                    <StageStatus phase={bubble.phase} t={t} />
                   )}
                 </AgentMessage>
               </div>
@@ -445,6 +447,19 @@ function TypingDots() {
           style={{ animation: "blink 1.2s ease-in-out infinite", animationDelay: `${i * 0.18}s` }}
         />
       ))}
+    </span>
+  );
+}
+
+// 012-chat-flow-sync: while the flow runs (before the answer exists), the bubble
+// names the current pipeline stage, in step with the lit station on the canvas —
+// the typing dots plus the stage label (or the generic "Thinking…" fallback).
+function StageStatus({ phase, t }: { phase: TimelinePhase | null; t: Strings }) {
+  const label = phase ? t.chat.stage[phase] : t.chat.thinking;
+  return (
+    <span className="inline-flex items-center gap-2 text-[var(--color-muted)]">
+      <TypingDots />
+      <span className="text-[12.5px]">{label}</span>
     </span>
   );
 }

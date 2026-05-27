@@ -8,8 +8,9 @@ import { SCENARIO_ORDER, useScenario } from "../lib/scenario";
 // mode like the cloud/language toggles. The rung names/blurbs come from
 // /api/config (nothing hardcoded — AC2); selecting an upper rung shows its
 // preview topology, but only `simple` can send (gated in ChatPanel). Rungs that
-// don't execute yet are marked with a dashed "coming soon" style but stay
-// selectable so the learner can read the future architecture.
+// don't execute yet are marked with an ⌛ but stay selectable so the learner can
+// read the future architecture. Rendered as a tight segmented control (filled
+// track + raised active thumb) so it stays compact in the header.
 export function ScenarioToggle() {
   const scenario = useScenario((s) => s.scenario);
   const setScenario = useScenario((s) => s.setScenario);
@@ -35,7 +36,7 @@ export function ScenarioToggle() {
 
   return (
     <div
-      className="flex items-center gap-0.5 rounded-full border border-[var(--color-line)] p-0.5"
+      className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-0.5"
       role="group"
       aria-label={t.scenario.label}
       title={t.scenario.label}
@@ -48,21 +49,14 @@ export function ScenarioToggle() {
             onClick={() => setScenario(rung.id)}
             aria-pressed={active}
             title={rung.blurb[lang] || undefined}
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold transition"
-            style={{
-              background: active ? "var(--color-panel-2)" : "transparent",
-              border: `1px ${rung.available ? "solid" : "dashed"} ${
-                active ? "var(--color-accent)" : "transparent"
-              }`,
-              color: active ? "var(--color-indigo-soft)" : "var(--color-muted)",
-            }}
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-[11px] font-medium leading-none transition ${
+              active
+                ? "bg-[var(--color-panel)] text-[var(--color-indigo-soft)] shadow-sm"
+                : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            } ${rung.available ? "" : "opacity-55"}`}
           >
             {rung.name[lang]}
-            {!rung.available && (
-              <span className="ml-1 opacity-60" aria-hidden>
-                ⌛
-              </span>
-            )}
+            {!rung.available && <span aria-hidden>⌛</span>}
           </button>
         );
       })}

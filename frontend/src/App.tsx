@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
@@ -13,7 +13,9 @@ import { Timeline } from "./components/Timeline";
 import { TourCaption } from "./components/TourCaption";
 import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
+import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
+import { activePhase } from "./lib/phases";
 import { useSimulator } from "./store/useSimulator";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -23,6 +25,104 @@ interface Health {
   llm_model: string;
 }
 
+// Thin vertical rule that separates the header into zones (brand · view ·
+// preferences · nav) so the controls read as distinct groups, not one long row.
+function Divider() {
+  return <span className="h-5 w-px shrink-0 bg-[var(--color-line)]" aria-hidden />;
+}
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.52.1.71-.23.71-.5v-1.76c-2.92.64-3.54-1.4-3.54-1.4-.48-1.22-1.16-1.54-1.16-1.54-.95-.65.07-.64.07-.64 1.05.07 1.6 1.08 1.6 1.08.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.66-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.81-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.88 1.07a9.96 9.96 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.45.21 2.52.1 2.79.67.73 1.08 1.66 1.08 2.81 0 4.02-2.45 4.9-4.79 5.16.38.33.71.97.71 1.96v2.9c0 .28.19.61.72.5A10.5 10.5 0 0 0 12 1.5z" />
+    </svg>
+  );
+}
+
+function Chevron({ left, className }: { left: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      style={{ transform: left ? undefined : "rotate(180deg)" }}
+    >
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+// A side panel that collapses to a ~44px rail (013-canvas-space-disclosure). The
+// children stay MOUNTED when collapsed (hidden via CSS) — unmounting ChatPanel
+// would re-run its init() → openSession() → useSimulator.reset(), wiping the live
+// canvas trace. The rail shows the panel icon + an inward chevron to re-open;
+// when expanded, an edge handle (overhanging the inner border) collapses it.
+function SidePanel({
+  side,
+  collapsed,
+  onToggle,
+  icon,
+  collapseLabel,
+  expandLabel,
+  width,
+  children,
+}: {
+  side: "left" | "right";
+  collapsed: boolean;
+  onToggle: () => void;
+  icon: string;
+  collapseLabel: string;
+  expandLabel: string;
+  width: number;
+  children: ReactNode;
+}) {
+  const borderClass = side === "left" ? "border-r" : "border-l";
+  return (
+    <aside
+      className={`relative shrink-0 ${borderClass} border-[var(--color-line)] bg-[var(--color-panel)]`}
+      style={{ width: collapsed ? 44 : width }}
+    >
+      <div className={collapsed ? "hidden" : "h-full"}>{children}</div>
+
+      {collapsed ? (
+        <div className="flex h-full flex-col items-center gap-1.5 py-3">
+          <button
+            onClick={onToggle}
+            title={expandLabel}
+            aria-label={expandLabel}
+            className="grid h-8 w-8 place-items-center rounded-lg text-[16px] leading-none text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-ink)]"
+          >
+            <span aria-hidden>{icon}</span>
+          </button>
+          <button
+            onClick={onToggle}
+            aria-label={expandLabel}
+            className="grid h-7 w-7 place-items-center rounded-lg text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-sky-soft)]"
+          >
+            <Chevron left={side === "right"} className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={onToggle}
+          title={collapseLabel}
+          aria-label={collapseLabel}
+          className={`absolute top-1/2 z-10 grid h-12 w-5 -translate-y-1/2 place-items-center rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] text-[var(--color-muted)] shadow-sm transition hover:text-[var(--color-sky-soft)] ${
+            side === "left" ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2"
+          }`}
+        >
+          <Chevron left={side === "left"} className="h-4 w-4" />
+        </button>
+      )}
+    </aside>
+  );
+}
+
 export default function App() {
   const events = useSimulator((s) => s.events);
   const cursor = useSimulator((s) => s.cursor);
@@ -30,8 +130,15 @@ export default function App() {
   const select = useSimulator((s) => s.select);
   const detail = useSimulator((s) => s.detail);
   const closeDetail = useSimulator((s) => s.closeDetail);
+  const chatCollapsed = useSimulator((s) => s.chatCollapsed);
+  const inspectorCollapsed = useSimulator((s) => s.inspectorCollapsed);
+  const toggleChat = useSimulator((s) => s.toggleChat);
+  const toggleInspector = useSimulator((s) => s.toggleInspector);
 
   const view = useMemo(() => deriveView(events, cursor), [events, cursor]);
+  // What the live chat bubble shows, projected from the same paced cursor as the
+  // canvas: a stage status until the answer exists, then the answer itself (012).
+  const bubble = useMemo(() => pendingBubble(view, activePhase(events, cursor)), [view, events, cursor]);
   const t = useT();
 
   const [page, setPage] = useState<"sim" | "learn">("sim");
@@ -45,54 +152,92 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-[var(--color-base)]">
-      <header className="flex items-center gap-3 border-b border-[var(--color-line)] px-5 py-3">
-        <span className="text-xl">🧭</span>
-        <div className="flex-1">
-          <h1 className="text-[15px] font-semibold tracking-wide text-[var(--color-ink)]">
-            AI Agent Simulator
-          </h1>
-          <p className="text-[11px] text-[var(--color-muted)]">{t.app.tagline}</p>
+      <header className="flex items-center gap-2 border-b border-[var(--color-line)] px-4 py-2.5">
+        {/* Brand — the group shrinks tagline-first (it truncates) so a longer PT
+            string never pushes the right-hand controls off-screen; the title
+            itself never truncates (whitespace-nowrap defines the min width). */}
+        <div className="flex min-w-0 shrink items-center gap-2.5">
+          <span className="shrink-0 text-xl" aria-hidden>
+            🧭
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-[14px] font-semibold leading-tight tracking-wide text-[var(--color-ink)]">
+              AI Agent Simulator
+            </h1>
+            <p className="hidden truncate text-[11px] leading-tight text-[var(--color-muted)] 2xl:block">
+              {t.app.tagline}
+            </p>
+          </div>
         </div>
+
+        <Divider />
+
+        {/* View controls — change what the diagram shows. Cloud is wide, so on
+            narrow screens it's hidden here and relocated into the ⚙ menu. */}
         <ScenarioToggle />
-        <CloudToggle />
-        <LanguageToggle />
+        <div className="hidden shrink-0 xl:flex">
+          <CloudToggle />
+        </div>
+
+        {/* Push preferences + nav to the right; collapses to nothing when tight. */}
+        <div className="min-w-1 flex-1" />
+
+        {/* Preferences + architecture options. */}
         <ThemeToggle />
+        <LanguageToggle />
         <SettingsPanel />
+
+        <Divider />
+
+        {/* Navigation + status. */}
         <button
           onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}
-          className="rounded-full border px-3 py-1 text-[12px] font-medium transition"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[12px] font-medium transition"
           style={{
             borderColor: page === "learn" ? "var(--color-sky)" : "var(--color-line)",
             color: page === "learn" ? "var(--color-sky-soft)" : "var(--color-text-soft)",
           }}
         >
-          {page === "sim" ? `📚 ${t.app.learn}` : `← ${t.app.simulator}`}
+          <span aria-hidden>{page === "sim" ? "📚" : "←"}</span>
+          <span className="hidden lg:inline">
+            {page === "sim" ? t.app.learn : t.app.simulator}
+          </span>
         </button>
         {health && (
           <span
-            className="rounded-full border px-2.5 py-1 font-mono text-[11px]"
-            style={{ borderColor: "var(--color-ok)", color: "var(--color-ok-soft)" }}
+            className="hidden items-center gap-1.5 whitespace-nowrap pl-1 text-[11px] text-[var(--color-muted)] xl:inline-flex"
             title={t.app.liveTitle}
           >
-            {`openai · ${health.llm_model}`}
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-ok)]" aria-hidden />
+            <span className="font-mono">{health.llm_model}</span>
           </span>
         )}
         <a
           href="https://github.com/reginaldosilva27/AgentSimulator"
           target="_blank"
           rel="noreferrer"
-          className="rounded-full border border-[var(--color-line)] px-3 py-1 text-[12px] text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
+          aria-label="GitHub"
+          title="GitHub"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[var(--color-line)] text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
         >
-          GitHub ↗
+          <GitHubIcon className="h-4 w-4" />
         </a>
       </header>
 
       {page === "sim" ? (
         <>
           <div className="flex min-h-0 flex-1">
-            <aside className="w-[340px] shrink-0 border-r border-[var(--color-line)] bg-[var(--color-panel)]">
-              <ChatPanel liveAnswer={view.answer} />
-            </aside>
+            <SidePanel
+              side="left"
+              collapsed={chatCollapsed}
+              onToggle={toggleChat}
+              icon="💬"
+              collapseLabel={t.node.collapse}
+              expandLabel={t.node.expand}
+              width={340}
+            >
+              <ChatPanel bubble={bubble} />
+            </SidePanel>
 
             <main className="relative min-w-0 flex-1">
               <FlowCanvas view={view} selected={selected} onSelect={select} />
@@ -100,9 +245,17 @@ export default function App() {
               {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
             </main>
 
-            <aside className="w-[372px] shrink-0 border-l border-[var(--color-line)] bg-[var(--color-panel)]">
+            <SidePanel
+              side="right"
+              collapsed={inspectorCollapsed}
+              onToggle={toggleInspector}
+              icon="🔍"
+              collapseLabel={t.node.collapse}
+              expandLabel={t.node.expand}
+              width={372}
+            >
               <InspectorPanel selected={selected} view={view} onSelect={select} />
-            </aside>
+            </SidePanel>
           </div>
 
           <Timeline />

@@ -1,18 +1,20 @@
 import { useT } from "../i18n";
 import { CLOUDS, useCloud } from "../lib/cloud";
 
-// Compact provider switch in the header (Generic · Azure · AWS · GCP). The
-// architecture is cloud-agnostic; this overlay swaps the concrete example
-// service names shown on tiers, stations and the network boundary. Mirrors the
-// LanguageToggle; the choice is persisted to localStorage by the cloud store.
-export function CloudToggle() {
+// Compact provider switch (Generic · Azure · AWS · GCP). The architecture is
+// cloud-agnostic; this overlay swaps the concrete example service names shown on
+// tiers, stations and the network boundary. Rendered as a tight segmented
+// control. In the header the provider *labels* collapse to icon-only below `xl`
+// to stay responsive; inside the ⚙ menu (`alwaysLabels`) they always show, since
+// the header hides this control entirely on narrow screens and relocates it here.
+export function CloudToggle({ alwaysLabels = false }: { alwaysLabels?: boolean }) {
   const cloud = useCloud((s) => s.cloud);
   const setCloud = useCloud((s) => s.setCloud);
   const t = useT();
 
   return (
     <div
-      className="flex items-center gap-0.5 rounded-full border border-[var(--color-line)] p-0.5"
+      className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-0.5"
       role="group"
       aria-label={t.app.cloud}
       title={t.app.cloud}
@@ -24,17 +26,16 @@ export function CloudToggle() {
             key={code}
             onClick={() => setCloud(code)}
             aria-pressed={active}
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold transition"
-            style={{
-              background: active ? "var(--color-panel-2)" : "transparent",
-              border: `1px solid ${active ? "var(--color-accent)" : "transparent"}`,
-              color: active ? "var(--color-indigo-soft)" : "var(--color-muted)",
-            }}
+            aria-label={label}
+            title={label}
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium leading-none transition ${
+              active
+                ? "bg-[var(--color-panel)] text-[var(--color-indigo-soft)] shadow-sm"
+                : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
           >
-            <span className="mr-1" aria-hidden>
-              {icon}
-            </span>
-            {label}
+            <span aria-hidden>{icon}</span>
+            <span className={alwaysLabels ? "inline" : "hidden xl:inline"}>{label}</span>
           </button>
         );
       })}

@@ -11,6 +11,7 @@ import {
   type DocumentMeta,
   type SessionMeta,
 } from "../lib/chatApi";
+import { isFlowSettled } from "../lib/chatStatus";
 import { overridesFor, useExperiment } from "../lib/experiment";
 import { useSettings } from "../lib/settings";
 import { batchChat, streamChat } from "../lib/sse";
@@ -46,6 +47,36 @@ interface ChatState {
 }
 
 const isAbort = (err: unknown) => err instanceof Error && err.name === "AbortError";
+
+// 012-chat-flow-sync: the network round-trip finishes in well under a second, but
+// the canvas plays the journey back at a paced cadence (009). Resolve only once the
+// paced playhead has *settled* (run over, drained to the tail) — or the run was
+// aborted — so the persisted answer never replaces the live bubble ahead of the
+// flow. Checks the current state first, then watches for the settling transition.
+function settledOrAborted(
+  signal: AbortSignal,
+  state: ReturnType<typeof useSimulator.getState>,
+): boolean {
+  if (signal.aborted) return true;
+  if (isFlowSettled(state)) return true;
+  // Nothing to animate (no trace events) and the run is over → don't wait.
+  return state.events.length === 0 && state.status !== "streaming";
+}
+
+function waitForFlowSettled(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (settledOrAborted(signal, useSimulator.getState())) {
+      resolve();
+      return;
+    }
+    const unsubscribe = useSimulator.subscribe((state) => {
+      if (settledOrAborted(signal, state)) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+}
 
 export const useChat = create<ChatState>((set, get) => ({
   view: "thread",
@@ -175,6 +206,10 @@ export const useChat = create<ChatState>((set, get) => ({
       // Reload from the system of record so the thread shows the persisted
       // message + its retrieved chunks, and the list reflects the new title.
       const [messages, sessions] = await Promise.all([listMessages(sessionId), listSessions()]);
+      // Hold the live bubble (status → streaming answer) until the paced playhead
+      // finishes draining, so the chat never jumps ahead of the flow (012).
+      await waitForFlowSettled(signal);
+      if (signal.aborted) return; // a newer run took over — don't clobber its state
       set({ messages, sessions, pending: null });
     } catch (err) {
       if (isAbort(err)) return;
