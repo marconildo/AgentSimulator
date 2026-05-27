@@ -34,17 +34,48 @@ class ToolCall:
 
 
 @dataclass
+class TokenUsage:
+    """Real token usage reported by the provider for one model call.
+
+    011-token-cost: every LLM call (each reasoning round's ``decide`` + the final
+    ``stream_answer``) reports this; the agent records it on the trace so the LLM
+    block can show real tokens and cost.
+    """
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+    @classmethod
+    def from_metadata(cls, md: dict[str, Any] | None) -> TokenUsage | None:
+        """Build from LangChain ``usage_metadata`` (input/output/total tokens)."""
+        if not md:
+            return None
+        return cls(
+            prompt_tokens=int(md.get("input_tokens", 0)),
+            completion_tokens=int(md.get("output_tokens", 0)),
+            total_tokens=int(md.get("total_tokens", 0)),
+        )
+
+
+@dataclass
 class Decision:
     """The model's choice: call tools, or (when empty) produce the answer."""
 
     tool_calls: list[ToolCall]
     # Everything we sent the model, surfaced in the UI inspector.
     prompt_preview: dict[str, Any]
+    # Real token usage for this decide call (011); None if the provider omits it.
+    usage: TokenUsage | None = None
 
 
 class LLMProvider(ABC):
     name: str = "base"
     model_name: str = "base"
+    # Usage of the most recent `stream_answer` call. A token generator can't also
+    # return a value, so the streaming usage is surfaced here as a side-channel
+    # the agent reads after the stream completes (011-token-cost).
+    last_stream_usage: TokenUsage | None = None
 
     @abstractmethod
     async def decide(

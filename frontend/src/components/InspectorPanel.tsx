@@ -3,7 +3,8 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
-import type { DerivedView } from "../lib/derive";
+import { formatTokens, formatUsd } from "../lib/cost";
+import type { DerivedView, UsageTotals } from "../lib/derive";
 import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
 import {
@@ -86,7 +87,7 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
       </div>
 
       <TechSection meta={meta} lang={lang} i={i} />
-      {renderDetail(selected, rt.events, i)}
+      {renderDetail(selected, rt.events, i, view.usage)}
     </div>
   );
 }
@@ -158,7 +159,7 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
   );
 }
 
-function renderDetail(id: StationId, events: TraceEvent[], i: I) {
+function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTotals) {
   switch (id) {
     case "frontend": {
       const sent = pick(events, "frontend", "end");
@@ -392,6 +393,15 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I) {
             <Section title={i.generatedAnswer}>
               <KeyVal k={i.model} v={String(gen.data.model ?? "—")} />
               <Mono>{String(gen.data.answer)}</Mono>
+            </Section>
+          )}
+          {usage.rounds > 0 && (
+            <Section title={i.usageCost}>
+              <KeyVal k={i.rounds} v={String(usage.rounds)} />
+              <KeyVal k={i.promptTokens} v={formatTokens(usage.promptTokens)} />
+              <KeyVal k={i.completionTokens} v={formatTokens(usage.completionTokens)} />
+              <KeyVal k={i.totalTokens} v={formatTokens(usage.totalTokens)} />
+              <KeyVal k={i.cost} v={formatUsd(usage.costUsd)} />
             </Section>
           )}
         </>

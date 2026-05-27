@@ -20,6 +20,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
+from ..llm.pricing import usage_metrics
 from ..llm.provider import LLMProvider, get_provider
 from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
 from ..rag.retriever import retrieve as rag_retrieve
@@ -99,27 +100,30 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     used = set(state["used_tools"])
 
     async with emitter.stage(Stage.AGENT_THINK, "Agent reasoning") as rec:
-        decision = await provider.decide(
-            system=_effective_system(state),
-            messages=messages,
-            context=state["context"],
-            tools=registry.specs(state["enabled_tools"]),
-            used_tools=used,
-            history=state["history"],
-        )
+        # The agent reasons by *calling the model* — the LLM is its brain, used on
+        # every round, not just to write the final answer. Wrap the decide call in
+        # an llm.prompt span so the LLM station is observably active while it thinks
+        # and the Agent → LLM round-trip animates (010-llm-as-brain). The span's END
+        # still carries the assembled prompt preview the inspector shows.
+        async with emitter.stage(Stage.LLM_PROMPT, "Reasoning with the model") as prompt_rec:
+            decision = await provider.decide(
+                system=_effective_system(state),
+                messages=messages,
+                context=state["context"],
+                tools=registry.specs(state["enabled_tools"]),
+                used_tools=used,
+                history=state["history"],
+            )
+            prompt_rec.data = decision.prompt_preview
         rec.data = {
             "model": provider.model_name,
             "decision": "call_tools" if decision.tool_calls else "answer",
             "tool_calls": [{"name": tc.name, "args": tc.args} for tc in decision.tool_calls],
         }
-
-    # Surface exactly what was assembled and sent to the model.
-    await emitter.emit(
-        Stage.LLM_PROMPT,
-        Phase.END,
-        "Prompt assembled",
-        data=decision.prompt_preview,
-    )
+        # This reasoning round is a real LLM call — record its token usage + cost
+        # so the LLM block can total rounds, tokens and US$ (011-token-cost).
+        if decision.usage:
+            rec.metrics.update(usage_metrics(provider.model_name, decision.usage))
 
     pending = [{"id": tc.id, "name": tc.name, "args": tc.args} for tc in decision.tool_calls]
     return {"pending_tool_calls": pending, "iterations": state["iterations"] + 1}
@@ -183,6 +187,9 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
         answer = "".join(tokens)
         rec.data = {"answer": answer, "model": provider.model_name, "delivery": state["mode"]}
         rec.metrics["tokens"] = float(len(tokens))
+        # Real generation usage + cost (011), captured from the streamed final chunk.
+        if provider.last_stream_usage:
+            rec.metrics.update(usage_metrics(provider.model_name, provider.last_stream_usage))
 
     return {"answer": answer}
 

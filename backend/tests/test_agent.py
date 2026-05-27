@@ -93,6 +93,33 @@ async def test_llm_generate_streams_tokens():
     assert all("token" in e.data for e in progress)
 
 
+async def test_llm_calls_carry_token_usage_and_cost():
+    # 011-token-cost (AC2) — each real model call (every reasoning round's decide
+    # + the final generation) records real tokens and a priced cost in `metrics`.
+    _answer, events = await _run("What is 2 + 2?")
+    think_ends = [e for e in events if e.stage == "agent.think" and e.phase == "end"]
+    gen_end = next(e for e in events if e.stage == "llm.generate" and e.phase == "end")
+    assert think_ends, "expected at least one reasoning round"
+    for ev in [*think_ends, gen_end]:
+        assert ev.metrics.get("prompt_tokens", 0) > 0, f"no prompt_tokens on {ev.stage}"
+        assert ev.metrics.get("total_tokens", 0) > 0, f"no total_tokens on {ev.stage}"
+        assert ev.metrics.get("cost_usd", -1) >= 0, f"no cost_usd on {ev.stage}"
+
+
+async def test_reasoning_uses_the_llm_as_an_observable_span():
+    # 010-llm-as-brain (AC1) — the agent reasons by *calling the model*: the decide
+    # call is an `llm.prompt` START/END span (not an end-only marker), so the LLM is
+    # observably active while deciding, and that span starts before any tool call.
+    _answer, events = await _run("What is 2 + 2?")
+    prompt_phases = {e.phase for e in events if e.stage == "llm.prompt"}
+    assert "start" in prompt_phases and "end" in prompt_phases
+    first_prompt_start = next(
+        i for i, e in enumerate(events) if e.stage == "llm.prompt" and e.phase == "start"
+    )
+    first_mcp_call = next((i for i, e in enumerate(events) if e.stage == "mcp.call"), None)
+    assert first_mcp_call is None or first_prompt_start < first_mcp_call
+
+
 async def test_history_is_carried_into_the_prompt():
     history = [{"message": "What is RAG?", "answer": "RAG grounds an LLM in retrieved docs."}]
     _answer, events = await _run("And what about embeddings?", history=history)

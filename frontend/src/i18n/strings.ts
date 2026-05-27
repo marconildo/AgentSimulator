@@ -111,6 +111,13 @@ export interface Strings {
     retrievedContext: string;
     tools: string;
     generatedAnswer: string;
+    // Token usage + cost (011-token-cost).
+    usageCost: string;
+    rounds: string;
+    promptTokens: string;
+    completionTokens: string;
+    totalTokens: string;
+    cost: string;
     status: { active: string; done: string; idle: string };
   };
   comms: {
@@ -180,6 +187,7 @@ export interface Strings {
     promptAssembled: string;
     streaming: (n: number) => string;
     tokens: (n: number) => string;
+    tokensCost: (tok: string, usd: string) => string; // 011-token-cost
     score: string;
     dbQuerying: string;
     dbHistory: (n: number) => string;
@@ -231,6 +239,20 @@ export interface Strings {
     history: string;
     tools: string;
     approxTokens: (n: number) => string;
+    // 010-llm-as-brain — anatomy framing + real usage labels.
+    brain: string;
+    brainHint: string;
+    senses: string;
+    hands: string;
+    speech: string;
+    noAnswerYet: string;
+    rounds: string;
+    model: string;
+    promptTokens: string;
+    completionTokens: string;
+    totalTokens: string;
+    cost: string;
+    approxProportion: string;
   };
   learn: {
     rootTitle: string;
@@ -355,6 +377,12 @@ const en: Strings = {
     retrievedContext: "retrieved context",
     tools: "tools",
     generatedAnswer: "Generated answer",
+    usageCost: "Usage & cost",
+    rounds: "LLM rounds",
+    promptTokens: "prompt tokens",
+    completionTokens: "completion tokens",
+    totalTokens: "total tokens",
+    cost: "cost",
     status: { active: "active", done: "done", idle: "idle" },
   },
   comms: {
@@ -453,6 +481,7 @@ const en: Strings = {
     promptAssembled: "prompt assembled",
     streaming: (n) => `streaming · ${n} tok`,
     tokens: (n) => `${n} tokens`,
+    tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
     dbQuerying: "querying…",
     dbHistory: (n) => `history: ${n} rows`,
@@ -474,8 +503,8 @@ const en: Strings = {
     sendDisabled: "This scenario is a preview — switch to Simple to send a message.",
   },
   agentDetail: {
-    title: "Agent — inside the loop",
-    subtitle: "How an AI agent reasons, remembers and acts",
+    title: "Agent — anatomy",
+    subtitle: "The anatomy of an AI agent: a brain (the LLM), memory, and tools",
     back: "Back to canvas",
     waiting: "Send a message to watch the agent reason, remember and act.",
     reactLoop: "ReAct loop",
@@ -503,6 +532,19 @@ const en: Strings = {
     history: "history",
     tools: "available tools",
     approxTokens: (n) => `~${n} tokens`,
+    brain: "Brain · the LLM",
+    brainHint: "every reasoning round is a call to the model",
+    senses: "Input · the message",
+    hands: "Tools · the agent's hands",
+    speech: "Answer · what it says",
+    noAnswerYet: "no answer yet",
+    rounds: "LLM rounds",
+    model: "model",
+    promptTokens: "prompt tokens",
+    completionTokens: "completion tokens",
+    totalTokens: "total tokens",
+    cost: "cost (USD)",
+    approxProportion: "approx. proportion of the context",
   },
   learn: {
     rootTitle: "How this app works",
@@ -628,6 +670,12 @@ const pt: Strings = {
     retrievedContext: "contexto recuperado",
     tools: "ferramentas",
     generatedAnswer: "Resposta gerada",
+    usageCost: "Uso e custo",
+    rounds: "Rodadas da LLM",
+    promptTokens: "tokens de prompt",
+    completionTokens: "tokens de resposta",
+    totalTokens: "tokens totais",
+    cost: "custo",
     status: { active: "ativo", done: "concluído", idle: "ocioso" },
   },
   comms: {
@@ -726,6 +774,7 @@ const pt: Strings = {
     promptAssembled: "prompt montado",
     streaming: (n) => `transmitindo · ${n} tok`,
     tokens: (n) => `${n} tokens`,
+    tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
     dbQuerying: "consultando…",
     dbHistory: (n) => `histórico: ${n} linhas`,
@@ -747,8 +796,8 @@ const pt: Strings = {
     sendDisabled: "Este cenário é um preview — troque para Simples para enviar uma mensagem.",
   },
   agentDetail: {
-    title: "Agente — dentro do loop",
-    subtitle: "Como um agente de IA raciocina, lembra e age",
+    title: "Agente — anatomia",
+    subtitle: "A anatomia de um agente de IA: um cérebro (a LLM), memória e ferramentas",
     back: "Voltar ao canvas",
     waiting: "Envie uma mensagem para ver o agente raciocinar, lembrar e agir.",
     reactLoop: "Loop ReAct",
@@ -776,6 +825,19 @@ const pt: Strings = {
     history: "histórico",
     tools: "ferramentas disponíveis",
     approxTokens: (n) => `~${n} tokens`,
+    brain: "Cérebro · a LLM",
+    brainHint: "cada rodada de raciocínio é uma chamada ao modelo",
+    senses: "Entrada · a mensagem",
+    hands: "Ferramentas · as mãos do agente",
+    speech: "Resposta · o que ele diz",
+    noAnswerYet: "ainda sem resposta",
+    rounds: "Rodadas da LLM",
+    model: "modelo",
+    promptTokens: "tokens de prompt",
+    completionTokens: "tokens de resposta",
+    totalTokens: "tokens totais",
+    cost: "custo (US$)",
+    approxProportion: "proporção aprox. do contexto",
   },
   learn: {
     rootTitle: "Como este app funciona",

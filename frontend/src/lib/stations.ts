@@ -342,6 +342,7 @@ const STATIONS_SRC: StationSrc[] = [
     },
     tech: [
       { k: { en: "engine", pt: "engine" }, v: "SQLite (dev) / managed SQL" },
+      { k: { en: "protocol", pt: "protocolo" }, v: "in-process driver / SQL wire · TLS" },
       { k: { en: "access", pt: "acesso" }, v: "backend · private network" },
       { k: { en: "data", pt: "dados" }, v: "conversations, history" },
       { k: { en: "isolation", pt: "isolamento" }, v: "per-request connection" },
@@ -630,11 +631,14 @@ const HOPS_SRC: HopSrc[] = [
   {
     source: "backend",
     target: "database",
-    label: "SQL",
-    protocol: { en: "TCP · SQL (TLS)", pt: "TCP · SQL (TLS)" },
+    label: "SQL · TLS",
+    protocol: {
+      en: "Database connection — here a SQLite driver call (in-process, no socket); in production a SQL wire protocol (e.g. TDS for SQL Server, the PostgreSQL protocol) over TLS, through a connection pool",
+      pt: "Conexão de banco — aqui uma chamada de driver SQLite (in-process, sem socket); em produção um protocolo de fio SQL (ex.: TDS no SQL Server, o protocolo do PostgreSQL) sobre TLS, via um pool de conexões",
+    },
     detail: {
-      en: "Reads recent history and persists each conversation over a private connection",
-      pt: "Lê o histórico recente e persiste cada conversa por uma conexão privada",
+      en: "The backend reads recent history and persists each conversation. \"SQL\" is the query language; the transport differs by environment — an in-process file driver here, a pooled TLS connection to a managed SQL service in production.",
+      pt: "O backend lê o histórico recente e persiste cada conversa. \"SQL\" é a linguagem de consulta; o transporte muda por ambiente — um driver de arquivo in-process aqui, uma conexão TLS com pool a um serviço SQL gerenciado em produção.",
     },
     comm: "sync", // blocking read / write
     secure: true,

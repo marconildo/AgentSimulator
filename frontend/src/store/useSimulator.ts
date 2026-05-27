@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { LIVE_STEP_MS, paceAdvance } from "../lib/pacing";
 import type { StationId } from "../lib/stations";
 import {
   beginTour,
@@ -57,6 +58,10 @@ interface SimulatorState {
 let abort: AbortController | null = null;
 let playTimer: ReturnType<typeof setInterval> | null = null;
 let tourTimer: ReturnType<typeof setInterval> | null = null;
+// 009-live-pacing: the live playhead ticker + the time of its last structural
+// advance. Lives outside React state — it's timing, not view state.
+let liveTimer: ReturnType<typeof setInterval> | null = null;
+let liveAdvanceAt = 0;
 
 function stopTimer() {
   if (playTimer) {
@@ -70,6 +75,42 @@ function stopTourTimer() {
     clearInterval(tourTimer);
     tourTimer = null;
   }
+}
+
+function stopLiveTimer() {
+  if (liveTimer) {
+    clearInterval(liveTimer);
+    liveTimer = null;
+  }
+}
+
+// (Re)start the live ticker. While `following`, it walks the playhead toward the
+// live tail at a paced cadence (see lib/pacing.ts) so the journey through the
+// stations is legible instead of teleporting. It owns *only* the live, following
+// playhead — the moment the user scrubs / replays / tours (following = false) it
+// hands off and stops. After the run finishes it drains to the tail, then settles.
+function startLiveTimer() {
+  stopLiveTimer();
+  liveAdvanceAt = Date.now();
+  liveTimer = setInterval(() => {
+    const state = useSimulator.getState();
+    if (!state.following) {
+      stopLiveTimer();
+      return;
+    }
+    const { cursor, advancedAt } = paceAdvance(
+      state.events,
+      state.cursor,
+      liveAdvanceAt,
+      Date.now(),
+    );
+    liveAdvanceAt = advancedAt;
+    if (cursor !== state.cursor) useSimulator.setState({ cursor });
+    // Drain-then-settle: once caught up to a finished run, stop ticking.
+    if (cursor >= state.events.length - 1 && state.status !== "streaming") {
+      stopLiveTimer();
+    }
+  }, LIVE_STEP_MS);
 }
 
 // --- Tour driver helpers (resolve `useSimulator` lazily, at call time) --------
@@ -139,16 +180,17 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       error: null,
       tour: IDLE_TOUR,
     });
+    startLiveTimer(); // pace the live journey instead of snapping to the tail
     return abort.signal;
   },
 
-  pushTrace: (event) =>
-    set((state) => {
-      const events = [...state.events, event];
-      return { events, cursor: state.following ? events.length - 1 : state.cursor };
-    }),
+  // Append only — the paced live ticker (startLiveTimer) owns cursor advancement,
+  // so a burst of events no longer teleports the playhead to the tail (009).
+  pushTrace: (event) => set((state) => ({ events: [...state.events, event] })),
 
-  endRun: () => set((state) => ({ status: "done", cursor: state.events.length - 1 })),
+  // The run is over, but don't snap: the live ticker drains the remaining tail
+  // (respond → db.write → backend) at the same cadence, then settles (009).
+  endRun: () => set({ status: "done" }),
 
   failRun: (message) => set({ status: "error", error: message }),
 
@@ -164,6 +206,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
     abort?.abort();
     stopTimer();
     stopTourTimer();
+    stopLiveTimer();
     set({
       status: "idle",
       events: [],
@@ -187,12 +230,14 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   step: (delta) => {
     stopTimer();
     stopTourTimer();
+    stopLiveTimer();
     const next = get().cursor + delta;
     get().setCursor(next);
     set({ playing: false, tour: IDLE_TOUR });
   },
 
   togglePlay: () => {
+    stopLiveTimer(); // replay takes over the playhead from the live ticker
     // Raw replay and the guided tour are mutually exclusive — toggling replay
     // ends any tour in progress.
     if (get().tour.status !== "idle") {
@@ -222,8 +267,9 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   startTour: () => {
     const tour = beginTour(get().events);
     if (tour.status !== "playing") return; // AC5: no replayable trace → no-op
-    // Take over from any replay.
+    // Take over from any replay / live ticker.
     stopTimer();
+    stopLiveTimer();
     set({ playing: false, following: false, tour });
     applyTourStep(tour); // first phase applies immediately
     startTourTimer();

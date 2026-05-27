@@ -20,6 +20,17 @@ export interface ActiveHop {
   reverse: boolean; // packet runs target→source relative to the edge direction
 }
 
+// 011-token-cost: real token usage + US$ cost, summed across every LLM call in
+// the run (each reasoning round's decide on `agent.think` + the final generation
+// on `llm.generate`). Accumulates with the cursor so the LLM block updates live.
+export interface UsageTotals {
+  rounds: number; // number of LLM calls (decide rounds + the generation)
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
 export interface DerivedView {
   stations: Record<StationId, StationRuntime>;
   activeStation: StationId | null;
@@ -33,6 +44,7 @@ export interface DerivedView {
   streaming: boolean;
   answer: string;
   iterations: number; // agent reasoning turns so far
+  usage: UsageTotals; // real tokens + cost across the run's LLM calls (011)
 }
 
 function hopId(source: StationId, target: StationId): string {
@@ -105,6 +117,14 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
   let respondAnswer = "";
   let generateAnswer = ""; // batch mode: the whole answer arrives on the END event
   let iterations = 0;
+  const usage: UsageTotals = {
+    rounds: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    costUsd: 0,
+  };
+  const num = (v: unknown): number => (typeof v === "number" ? v : 0);
 
   for (const ev of visible) {
     const stationId = STAGE_TO_STATION[ev.stage];
@@ -118,6 +138,16 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
     }
 
     if (distinct[distinct.length - 1] !== stationId) distinct.push(stationId);
+
+    // Every decide round (agent.think) and the generation (llm.generate) is a real
+    // LLM call — total rounds, tokens and cost across them (011-token-cost).
+    if (ev.phase === "end" && (ev.stage === "agent.think" || ev.stage === "llm.generate")) {
+      usage.rounds += 1;
+      usage.promptTokens += num(ev.metrics.prompt_tokens);
+      usage.completionTokens += num(ev.metrics.completion_tokens);
+      usage.totalTokens += num(ev.metrics.total_tokens);
+      usage.costUsd += num(ev.metrics.cost_usd);
+    }
 
     if (ev.stage === "agent.think" && ev.phase === "end") iterations += 1;
     if (ev.stage === "llm.generate" && ev.phase === "progress" && typeof ev.data.token === "string") {
@@ -164,5 +194,6 @@ export function deriveView(events: TraceEvent[], upto: number): DerivedView {
     // generate END (then respond) — so it appears at once, not typed out.
     answer: tokens.length ? tokens.join("") : respondAnswer || generateAnswer,
     iterations,
+    usage,
   };
 }

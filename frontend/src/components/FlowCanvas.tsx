@@ -12,7 +12,8 @@ import { useMemo } from "react";
 import { useLang, useT } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { cloudValue, useCloud } from "../lib/cloud";
-import type { DerivedView, StationRuntime } from "../lib/derive";
+import { formatTokens, formatUsd } from "../lib/cost";
+import type { DerivedView, StationRuntime, UsageTotals } from "../lib/derive";
 import { computeLayout } from "../lib/layout";
 import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
@@ -95,11 +96,15 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
         runtime: view.stations[meta.id],
         // Spotlight: only the current station is highlighted; others deactivate.
         isActive: view.activeStation === meta.id,
-        readout: readoutFor(meta.id, view.stations[meta.id], ro),
+        readout: readoutFor(meta.id, view.stations[meta.id], ro, view.usage),
         isSelected: selected === meta.id,
         expanded: expandedSet.has(meta.id),
         height: layout.heights[meta.id],
         comingSoon: meta.comingSoon ?? false,
+        // 011-token-cost: the LLM block totals rounds/tokens/cost across the run's
+        // LLM calls — the aggregate spans agent.think + llm.generate, so thread it
+        // in from the projection rather than recomputing per-station.
+        usage: meta.id === "llm" ? view.usage : undefined,
       },
       draggable: false,
       zIndex: 1,
@@ -192,7 +197,12 @@ function lastWith(events: StationRuntime["events"], pred: (e: StationRuntime["ev
   return undefined;
 }
 
-function readoutFor(id: StationId, rt: StationRuntime, ro: Strings["readout"]): string {
+function readoutFor(
+  id: StationId,
+  rt: StationRuntime,
+  ro: Strings["readout"],
+  usage: UsageTotals,
+): string {
   switch (id) {
     case "frontend": {
       const respond = lastWith(rt.events, (e) => e.stage === "respond" && e.phase === "end");
@@ -244,11 +254,15 @@ function readoutFor(id: StationId, rt: StationRuntime, ro: Strings["readout"]): 
       return "";
     }
     case "llm": {
+      if (rt.status === "idle") return "";
       const tokens = rt.events.filter((e) => e.stage === "llm.generate" && e.phase === "progress").length;
       if (rt.status === "active" && tokens) return ro.streaming(tokens);
+      // Real tokens + cost once a round has reported usage (011-token-cost).
+      if (usage.totalTokens > 0)
+        return ro.tokensCost(formatTokens(usage.totalTokens), formatUsd(usage.costUsd));
       if (tokens) return ro.tokens(tokens);
       if (lastWith(rt.events, (e) => e.stage === "llm.prompt")) return ro.promptAssembled;
-      return rt.status === "idle" ? "" : "…";
+      return "…";
     }
     // 008-scenario-framework preview nodes: non-executing, so no live readout —
     // the "coming soon" badge on the node carries the message instead.

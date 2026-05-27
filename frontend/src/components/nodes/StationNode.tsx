@@ -2,7 +2,8 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
 
 import { useT } from "../../i18n";
-import type { StationRuntime } from "../../lib/derive";
+import { formatTokens, formatUsd } from "../../lib/cost";
+import type { StationRuntime, UsageTotals } from "../../lib/derive";
 import { NODE_WIDTH } from "../../lib/layout";
 import type { StationId, StationMeta } from "../../lib/stations";
 import { useSimulator } from "../../store/useSimulator";
@@ -17,6 +18,7 @@ export interface StationNodeData {
   expanded: boolean;
   height: number;
   comingSoon: boolean; // 008 preview node — non-executing, rendered dashed/dimmed
+  usage?: UsageTotals; // 011-token-cost — set on the LLM node only
   [key: string]: unknown;
 }
 
@@ -24,7 +26,7 @@ export interface StationNodeData {
 const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
 
 export function StationNode(props: NodeProps) {
-  const { meta, runtime, isActive, readout, isSelected, expanded, height, comingSoon } =
+  const { meta, runtime, isActive, readout, isSelected, expanded, height, comingSoon, usage } =
     props.data as StationNodeData;
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
@@ -113,7 +115,7 @@ export function StationNode(props: NodeProps) {
 
         {expanded ? (
           <div className="mt-2 flex min-h-0 flex-1 flex-col">
-            <ExpandedBody meta={meta} rt={runtime} />
+            <ExpandedBody meta={meta} rt={runtime} usage={usage} />
             {HAS_DETAIL[meta.id] && (
               <button
                 onClick={(e) => {
@@ -143,10 +145,18 @@ export function StationNode(props: NodeProps) {
 
 // --- compact inner detail shown when a node is expanded ----------------------
 
-function ExpandedBody({ meta, rt }: { meta: StationMeta; rt: StationRuntime }) {
+function ExpandedBody({
+  meta,
+  rt,
+  usage,
+}: {
+  meta: StationMeta;
+  rt: StationRuntime;
+  usage?: UsageTotals;
+}) {
   const t = useT();
   const i = t.inspector;
-  const rows = innerRows(meta.id, rt.events, t);
+  const rows = innerRows(meta.id, rt.events, t, usage);
 
   return (
     <div className="space-y-1.5 overflow-hidden">
@@ -179,7 +189,12 @@ interface Row {
   v: string;
 }
 
-function innerRows(id: StationId, events: TraceEvent[], t: ReturnType<typeof useT>): Row[] {
+function innerRows(
+  id: StationId,
+  events: TraceEvent[],
+  t: ReturnType<typeof useT>,
+  usage?: UsageTotals,
+): Row[] {
   const i = t.inspector;
   switch (id) {
     case "frontend": {
@@ -231,7 +246,15 @@ function innerRows(id: StationId, events: TraceEvent[], t: ReturnType<typeof use
       const tokens = events.filter((e) => e.stage === "llm.generate" && e.phase === "progress").length;
       const rows: Row[] = [];
       if (gen) rows.push({ k: i.model, v: String(gen.data.model ?? "—") });
-      if (tokens) rows.push({ k: "tokens", v: String(tokens) });
+      // Real rounds / tokens / cost when usage was reported (011-token-cost);
+      // otherwise fall back to the live streamed-chunk count.
+      if (usage && usage.rounds) rows.push({ k: i.rounds, v: String(usage.rounds) });
+      if (usage && usage.totalTokens > 0) {
+        rows.push({ k: i.totalTokens, v: formatTokens(usage.totalTokens) });
+        rows.push({ k: i.cost, v: formatUsd(usage.costUsd) });
+      } else if (tokens) {
+        rows.push({ k: i.totalTokens, v: String(tokens) });
+      }
       return rows;
     }
     // 008 preview nodes have no live events to summarize.

@@ -13,7 +13,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from .provider import Decision, LLMProvider, ToolCall, ToolSpec
+from .provider import Decision, LLMProvider, TokenUsage, ToolCall, ToolSpec
 
 
 class OpenAIProvider(LLMProvider):
@@ -22,6 +22,7 @@ class OpenAIProvider(LLMProvider):
     def __init__(self, model: str, api_key: str) -> None:
         self.model_name = model
         self._api_key = api_key
+        self.last_stream_usage: TokenUsage | None = None
 
     def _client(self, *, streaming: bool) -> ChatOpenAI:
         return ChatOpenAI(
@@ -29,6 +30,9 @@ class OpenAIProvider(LLMProvider):
             api_key=self._api_key,
             temperature=0,
             streaming=streaming,
+            # Ask the streaming API to report token usage on a final chunk so the
+            # agent can record real completion tokens while still streaming (011).
+            stream_usage=streaming,
         )
 
     async def decide(
@@ -59,6 +63,7 @@ class OpenAIProvider(LLMProvider):
         return Decision(
             tool_calls=tool_calls,
             prompt_preview=_preview(system, context, messages, tools, history or []),
+            usage=TokenUsage.from_metadata(getattr(result, "usage_metadata", None)),
         )
 
     async def stream_answer(
@@ -72,7 +77,13 @@ class OpenAIProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         lc_messages = _build_messages(system, context, messages, tool_results, history)
         client = self._client(streaming=True)
+        self.last_stream_usage = None
         async for chunk in client.astream(lc_messages):
+            # Usage rides a final chunk (stream_usage=True); capture it so the
+            # agent can record real generation tokens after the stream (011).
+            usage = TokenUsage.from_metadata(getattr(chunk, "usage_metadata", None))
+            if usage:
+                self.last_stream_usage = usage
             text = chunk.content
             if isinstance(text, str) and text:
                 yield text
@@ -87,14 +98,14 @@ def _build_messages(
 ) -> list[Any]:
     system_block = system
     if history:
-        rendered = "\n".join(
-            f"- user: {h['message']}\n  assistant: {h['answer']}" for h in history
-        )
+        rendered = "\n".join(f"- user: {h['message']}\n  assistant: {h['answer']}" for h in history)
         system_block += f"\n\n# Recent conversation history (long-term memory)\n{rendered}"
     if context.strip():
         system_block += f"\n\n# Retrieved context\n{context}"
     if tool_results:
-        rendered = "\n".join(f"- {tr['tool']}({tr['args']}) -> {tr['result']}" for tr in tool_results)
+        rendered = "\n".join(
+            f"- {tr['tool']}({tr['args']}) -> {tr['result']}" for tr in tool_results
+        )
         system_block += f"\n\n# Tool results\n{rendered}"
 
     out: list[Any] = [SystemMessage(content=system_block)]

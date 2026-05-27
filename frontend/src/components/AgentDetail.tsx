@@ -1,15 +1,17 @@
 import type { ReactNode } from "react";
 
 import { useT } from "../i18n";
+import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView } from "../lib/derive";
 import type { TraceEvent } from "../types/events";
 
-// Focused drill-in for the Agent: the mechanism behind an AI agent — its ReAct
-// loop, working memory, long-term memory, and the context window it assembles.
-// Everything is composed from the captured trace (no extra requests), so it
-// stays in sync with the timeline cursor.
+// Focused drill-in for the Agent: the **anatomy** of an AI agent — its brain (the
+// LLM, called on every reasoning round), its senses (the message), its memory
+// (working + long-term + vector recall), its hands (tools) and its speech (the
+// answer). Everything is composed from the captured trace + the projection's real
+// token/cost totals (no extra requests), so it stays in sync with the cursor.
 
-const ACCENT = "var(--color-pink)";
+const BRAIN = "var(--color-orange)";
 
 interface AgentDetailProps {
   view: DerivedView;
@@ -34,11 +36,17 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const mcpEv = view.stations.mcp.events;
   const dbEv = view.stations.database.events;
   const ragEv = view.stations.rag.events;
+  const usage = view.usage;
 
   const thinks = agentEv.filter((e) => e.stage === "agent.think" && e.phase === "end");
   const route = lastEnd(agentEv, "agent.route");
   const prompt = lastEnd(llmEv, "llm.prompt");
+  const generate = lastEnd(llmEv, "llm.generate");
   const query = (route?.data.query as string | undefined) ?? "";
+  const model =
+    (generate?.data.model as string | undefined) ??
+    (thinks.length ? (thinks[thinks.length - 1].data.model as string | undefined) : undefined) ??
+    "";
 
   const toolCalls = mcpEv
     .filter((e) => e.stage === "mcp.call" && e.phase === "end")
@@ -58,8 +66,11 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const historyText = historyPairs.map((h) => `${h.message} / ${h.answer}`).join("\n");
 
   const started = agentEv.length > 0;
+  const rounds = usage.rounds || thinks.length;
+  const hasRealUsage = usage.totalTokens > 0;
 
-  // Context-window parts with rough token estimates for a proportional bar.
+  // Context-window parts with rough token estimates for a proportional bar. These
+  // are an *approximation* of the mix (the real totals are in the Brain block).
   const parts = [
     { label: a.systemPrompt, tokens: tok(system), color: "var(--color-violet)" },
     { label: a.retrievedContext, tokens: tok(context), color: "var(--color-ok)" },
@@ -74,7 +85,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
         <button
           onClick={onClose}
           className="rounded-full border px-3 py-1 text-[12px] font-medium transition hover:bg-[var(--color-panel-2)]"
-          style={{ borderColor: ACCENT, color: ACCENT }}
+          style={{ borderColor: BRAIN, color: BRAIN }}
         >
           ← {a.back}
         </button>
@@ -91,8 +102,8 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
         </div>
       ) : (
         <div className="grid flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 lg:grid-cols-2">
-          {/* ReAct loop */}
-          <Panel title={a.reactLoop} accent={ACCENT}>
+          {/* Brain — the LLM, used on every reasoning round (the centerpiece). */}
+          <Panel title={a.brain} accent={BRAIN} hint={a.brainHint}>
             <div className="mb-3 flex items-center gap-1.5 text-[11px]">
               <Step label={a.reason} color="var(--color-pink)" />
               <Arrow />
@@ -101,15 +112,24 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
               <Step label={a.observe} color="var(--color-ok)" />
               <span className="ml-1 text-[var(--color-muted)]">↺</span>
             </div>
-            <KV k={a.iterations} v={String(thinks.length)} />
+            {model && <KV k={a.model} v={model} />}
+            <KV k={a.rounds} v={String(rounds)} />
             <KV k={a.lastDecision} v={lastDecision} />
+            {hasRealUsage && (
+              <div className="mt-1.5 grid grid-cols-2 gap-x-4 border-t border-[var(--color-line)] pt-1.5">
+                <KV k={a.promptTokens} v={formatTokens(usage.promptTokens)} />
+                <KV k={a.completionTokens} v={formatTokens(usage.completionTokens)} />
+                <KV k={a.totalTokens} v={formatTokens(usage.totalTokens)} />
+                <KV k={a.cost} v={formatUsd(usage.costUsd)} />
+              </div>
+            )}
             <div className="mt-2 space-y-1">
               {thinks.map((th, idx) => {
                 const calls = (th.data.tool_calls as { name: string }[] | undefined) ?? [];
                 return (
                   <div key={idx} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]">
                     <span className="font-mono text-[var(--color-muted)]">#{idx + 1}</span>{" "}
-                    <span style={{ color: ACCENT }}>{String(th.data.decision)}</span>
+                    <span style={{ color: BRAIN }}>{String(th.data.decision)}</span>
                     {calls.length > 0 && (
                       <span className="text-[var(--color-muted)]"> → {calls.map((c) => c.name).join(", ")}</span>
                     )}
@@ -119,14 +139,14 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
             </div>
           </Panel>
 
-          {/* Working memory */}
-          <Panel title={a.workingMemory} accent="var(--color-warn)" hint={a.workingMemoryHint}>
+          {/* Senses + hands — what it perceives this turn, and the tools it used. */}
+          <Panel title={a.senses} accent="var(--color-warn)" hint={a.workingMemoryHint}>
             {query && (
               <Labeled label={a.userMessage}>
                 <Mono>{query}</Mono>
               </Labeled>
             )}
-            <Labeled label={a.scratchpad}>
+            <Labeled label={a.hands}>
               {toolCalls.length === 0 ? (
                 <p className="text-[11px] italic text-[var(--color-label)]">{a.noToolCalls}</p>
               ) : (
@@ -144,7 +164,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
             </Labeled>
           </Panel>
 
-          {/* Long-term memory */}
+          {/* Long-term memory — survives across requests. */}
           <Panel title={a.longTermMemory} accent="var(--color-blue)" hint={a.longTermMemoryHint}>
             <Labeled label={a.conversationHistory}>
               {historyPairs.length === 0 ? (
@@ -171,8 +191,11 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
             </Labeled>
           </Panel>
 
-          {/* Context window */}
+          {/* Context window — what is actually assembled and sent to the brain. */}
           <Panel title={a.contextWindow} accent="var(--color-ok)" hint={a.contextWindowHint}>
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--color-label)]">
+              {a.approxProportion}
+            </div>
             <div className="mb-2 flex h-3 w-full overflow-hidden rounded-full border border-[var(--color-line)]">
               {parts.map((p) => (
                 <div
@@ -205,6 +228,17 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
               </Labeled>
             )}
           </Panel>
+
+          {/* Speech — what the agent says back. */}
+          <div className="lg:col-span-2">
+            <Panel title={a.speech} accent="var(--color-sky)">
+              {view.answer ? (
+                <Mono>{view.answer}</Mono>
+              ) : (
+                <p className="text-[11px] italic text-[var(--color-label)]">{a.noAnswerYet}</p>
+              )}
+            </Panel>
+          </div>
         </div>
       )}
     </div>

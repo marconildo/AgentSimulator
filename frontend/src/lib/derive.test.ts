@@ -68,3 +68,39 @@ describe("deriveView — settled end state", () => {
     expect(view.streaming).toBe(true);
   });
 });
+
+// 010-llm-as-brain (AC2) — the reasoning round-trip: the agent calls the model to
+// decide, so `llm.prompt` is now a START/END span. The LLM station must light up
+// *during* that span and the Agent ⇄ LLM hop must animate both ways.
+describe("deriveView — reasoning round-trip (010 AC2)", () => {
+  function reasoningRound(): TraceEvent[] {
+    seq = 0;
+    return [
+      ev("agent.route", "end", { query: "hi" }), // agent
+      ev("agent.think", "start"), // agent
+      ev("llm.prompt", "start"), // llm — the agent consults the brain
+      ev("llm.prompt", "end", { system: "…" }), // llm
+      ev("agent.think", "end", { decision: "answer" }), // back to agent
+    ];
+  }
+
+  it("lights the LLM and runs agent→llm while the model is deciding", () => {
+    const events = reasoningRound();
+    const at = events.findIndex((e) => e.stage === "llm.prompt" && e.phase === "start");
+    const view = deriveView(events, at);
+
+    expect(view.activeStation).toBe("llm");
+    expect(view.stations.llm.status).toBe("active");
+    expect(view.activeHops.map((h) => h.id)).toContain("agent-llm");
+  });
+
+  it("returns control to the agent (llm→agent) when the round ends", () => {
+    const events = reasoningRound();
+    const view = deriveView(events, events.length - 1);
+
+    expect(view.activeStation).toBe("agent");
+    const hop = view.activeHops.find((h) => h.id === "agent-llm");
+    expect(hop).toBeDefined();
+    expect(hop?.reverse).toBe(true); // packet travels llm → agent
+  });
+});
