@@ -75,7 +75,6 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
     <div
       ref={scrollRef}
       className="flex h-full flex-col gap-3 overflow-y-auto p-4"
-      style={{ color: meta.accent }}
     >
       <button
         onClick={() => onSelect(null)}
@@ -86,7 +85,16 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
       <div className="flex items-center gap-2.5">
         <span className="text-2xl">{meta.icon}</span>
         <div className="flex-1">
-          <div className="text-base font-semibold text-[var(--color-ink)]">{meta.title}</div>
+          {/* Force high-contrast ink via inline style so it wins over any
+              ancestor `color` (the wrapper used to set `meta.accent`, which
+              cascaded into the title and rendered it in the pale accent
+              instead of ink). */}
+          <div
+            className="text-base font-semibold"
+            style={{ color: "var(--color-ink)" }}
+          >
+            {meta.title}
+          </div>
           <div className="text-xs text-[var(--color-muted)]">{meta.subtitle}</div>
         </div>
         <StatusBadge status={rt.status} accent={meta.accent} i={i} />

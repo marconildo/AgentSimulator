@@ -49,7 +49,16 @@ export function ExecutionTracesDetail({ onBack }: { onBack: () => void }) {
           🌳
         </span>
         <div className="flex-1">
-          <div className="text-base font-semibold text-[var(--color-ink)]">{x.title}</div>
+          {/* Same fix as the station-detail title in InspectorPanel: force the
+              ink color via inline style so it wins over any ancestor `color`
+              in the cascade (Tailwind v4 emits utilities into @layer, which
+              loses to an inline color on a parent). */}
+          <div
+            className="text-base font-semibold"
+            style={{ color: "var(--color-ink)" }}
+          >
+            {x.title}
+          </div>
           <div className="text-xs text-[var(--color-muted)]">{x.subtitle}</div>
         </div>
       </div>
