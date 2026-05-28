@@ -23,9 +23,7 @@ relacional e as chamadas de ferramentas são todos reais.
 ![i18n](https://img.shields.io/badge/i18n-EN%20%2F%20PT-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-black)
 
-<img src="docs/images/hero.png" alt="AI Agent Simulator — o fluxo da requisição com um inspetor aberto" width="860"/>
-
-<sub>🎥 Dica: coloque uma gravação de tela curta em <code>docs/images/demo.gif</code> para mostrar a animação ao vivo.</sub>
+<img src="docs/agentsimulatordemo.gif" alt="AI Agent Simulator — uma mensagem de chat ao vivo atravessando o pipeline do agente, etapa por etapa" width="900"/>
 
 <br/>
 

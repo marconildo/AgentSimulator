@@ -22,9 +22,7 @@ reasoning, embeddings, vector store, relational DB and tool calls are all real.
 ![i18n](https://img.shields.io/badge/i18n-EN%20%2F%20PT-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-black)
 
-<img src="docs/images/hero.png" alt="AI Agent Simulator — the request flow with an inspector open" width="860"/>
-
-<sub>🎥 Tip: drop a short screen capture into <code>docs/images/demo.gif</code> to show the live animation.</sub>
+<img src="docs/agentsimulatordemo.gif" alt="AI Agent Simulator — a live chat message traveling stage by stage through the agent pipeline" width="900"/>
 
 <br/>
 
