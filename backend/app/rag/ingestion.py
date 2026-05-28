@@ -73,8 +73,19 @@ def delete_uploaded_vectors() -> int:
     The global companion to ``delete_document_vectors`` (025-clear-databases):
     it clears all uploaded-document vectors at once while leaving the built-in
     corpus (``corpus=True``) intact, so retrieval keeps working with no rebuild.
+
+    Keyless-safe: opening the Chroma store needs the embedding function, which
+    needs an ``OPENAI_API_KEY``. Without one, the store can't have any uploads
+    to delete — so we report 0 instead of raising, matching the resilience
+    pattern in ``rag/store.py::is_indexed`` and keeping the keyless
+    ``POST /api/data/clear`` path (used by agent/reseed tests) working.
     """
-    store = get_vectorstore()
+    from ..config import MissingAPIKeyError
+
+    try:
+        store = get_vectorstore()
+    except MissingAPIKeyError:
+        return 0
     ids = store.get(where={"corpus": False}).get("ids", [])
     if ids:
         store.delete(ids=ids)

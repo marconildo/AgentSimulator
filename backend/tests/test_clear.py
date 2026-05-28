@@ -76,6 +76,30 @@ async def test_clear_all_is_safe_and_idempotent_on_empty_store(tmp_path):
 # --- AC2 (vector store keeps the corpus) ------------------------------------
 
 
+def test_delete_uploaded_vectors_is_keyless_safe(monkeypatch):
+    """Regression — without an ``OPENAI_API_KEY`` the function must report 0
+    removed instead of raising ``MissingAPIKeyError``.
+
+    ``delete_uploaded_vectors`` is called by ``POST /api/data/clear`` (which has
+    keyless tests of its own, e.g. ``test_agents_table.py::
+    test_clear_data_reports_agents_and_reseeds``). Opening the Chroma store
+    needs the embedding function, which needs a key — but conceptually, with no
+    key the store can't have any uploads to delete, so 0 is the truthful answer
+    and mirrors the resilience pattern in ``rag/store.py::is_indexed``.
+    """
+    from app.config import get_settings
+    from app.rag import store as rag_store
+
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    get_settings.cache_clear()
+    rag_store.reset_vectorstore_cache()
+    try:
+        assert delete_uploaded_vectors() == 0
+    finally:
+        get_settings.cache_clear()
+        rag_store.reset_vectorstore_cache()
+
+
 @pytest.mark.openai
 async def test_delete_uploaded_vectors_removes_uploads_but_keeps_corpus():
     # AC2 — only corpus=False (user-imported) vectors are removed; every corpus

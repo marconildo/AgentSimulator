@@ -11,11 +11,19 @@ into two distinct prompt layers, each independently overridable per request:
   This is the layer end-users edit when they want to give the agent a new
   identity.
 
-The composed system message sent to the model is
-``GUARDRAILS_PROMPT + "\\n\\n" + AGENT_PROMPT [+ "\\n\\n" + skills_block]``
-(the skills block is appended by 027-skills only when applicable). Both
-layers accept request-level overrides (006-style) — blank/whitespace falls
-back to the default for that layer.
+On top of those, :func:`identity_block` renders the **identity layer**:
+``"You are {name}. {description}"`` resolved from the bound agent row
+(``agents.name`` / ``agents.description``, 043/044). Without it the model has
+no way to answer "what is your name?" — only the chat bubble label did.
+
+The composed system message sent to the model is therefore
+``[identity + "\\n\\n" +] GUARDRAILS_PROMPT + "\\n\\n" + AGENT_PROMPT
+[+ "\\n\\n" + skills_block]`` (identity is prepended only when ``name`` is
+non-blank, so a run without an agent row reproduces today's three-layer
+assembly byte-for-byte; the skills block is appended by 027-skills only
+when applicable). The guardrails / role layers accept request-level
+overrides (006-style) — blank/whitespace falls back to the default for
+that layer.
 """
 
 from __future__ import annotations
@@ -48,6 +56,29 @@ definition.
 """
 
 
+def identity_block(name: str | None, description: str | None) -> str:
+    """Render the agent's self-identity as a leading prompt line.
+
+    Returns ``""`` when ``name`` is blank/None — the prior 042-anatomy
+    composition (``guardrails + role [+ skills]``) is then preserved
+    byte-for-byte, so callers that never resolve an agent row keep today's
+    behavior. With ``name`` present and ``description`` blank the block is
+    just ``"You are {name}."``; with both present it is
+    ``"You are {name}. {description}"`` on a single line.
+
+    The text is intentionally English-only (a platform convention shared with
+    ``GUARDRAILS_PROMPT`` / ``AGENT_PROMPT``); ``name`` and ``description``
+    themselves are free text the user wrote in whatever language and pass
+    through unchanged.
+    """
+    if not name or not name.strip():
+        return ""
+    name = name.strip()
+    if description and description.strip():
+        return f"You are {name}. {description.strip()}"
+    return f"You are {name}."
+
+
 def skills_block(catalog: list[dict[str, str]]) -> str:
     """Render the skill catalog as a system-prompt block — **name + description only**.
 
@@ -66,13 +97,23 @@ def skills_block(catalog: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def compose_system(guardrails: str, role: str, catalog: list[dict[str, str]]) -> str:
-    """Compose the 2-layer prompt with the optional skills block on top.
+def compose_system(
+    guardrails: str,
+    role: str,
+    catalog: list[dict[str, str]],
+    *,
+    identity: str = "",
+) -> str:
+    """Compose the assembled system message.
 
-    Returns ``guardrails + "\\n\\n" + role`` plus, when the catalog yields a
-    non-empty block, ``"\\n\\n" + skills``. This is the canonical assembly
+    Returns ``[identity + "\\n\\n" +] guardrails + "\\n\\n" + role`` plus, when
+    the catalog yields a non-empty block, ``"\\n\\n" + skills``. ``identity``
+    is keyword-only and defaults to ``""`` so existing callers (and the
+    042-anatomy 2-layer composition tests) keep working unchanged; a non-empty
+    string is prepended at the very top. This is the canonical assembly
     helper; ``graph._effective_system`` calls it after resolving each layer.
     """
     base = f"{guardrails}\n\n{role}"
     block = skills_block(catalog)
-    return f"{base}\n\n{block}" if block else base
+    composed = f"{base}\n\n{block}" if block else base
+    return f"{identity}\n\n{composed}" if identity else composed

@@ -31,6 +31,12 @@ class AgentState(TypedDict):
     agent_prompt: str | None
     enabled_tools: list[str] | None
     model: str | None
+    # Self-identity (049-agent-self-identity), resolved server-side from the
+    # session's bound agent row (043/044). Either may be None when no agent
+    # is bound — the identity layer is then omitted from the system prompt
+    # entirely, reproducing the prior 042-anatomy 3-layer assembly.
+    agent_name: str | None
+    agent_description: str | None
     # Maturity-ladder rung (008-scenario-framework), request-only. Carried for
     # later specs to branch on; node logic does not read it yet.
     scenario: str

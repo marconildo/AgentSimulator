@@ -245,6 +245,14 @@ async def chat(req: ChatRequest):
     effective_agent_prompt = req.agent_prompt
     effective_enabled_tools = req.enabled_tools
     effective_model = req.model
+    # 049-agent-self-identity: name + description are server-resolved from the
+    # bound agent row (not a 006 hot-override — the FE edits them via
+    # PATCH /api/agents and they propagate to every session sharing the agent,
+    # 044-shared-agent-catalog). Both stay None when no agent is bound, which
+    # makes the prompt's identity layer collapse to the prior 042-anatomy
+    # 3-layer assembly byte-for-byte.
+    effective_agent_name: str | None = None
+    effective_agent_description: str | None = None
     if agent is not None:
         if effective_system_prompt is None:
             effective_system_prompt = agent["system_prompt"]
@@ -258,6 +266,8 @@ async def chat(req: ChatRequest):
             effective_enabled_tools = list(agent["enabled_tools"])
         if effective_model is None:
             effective_model = agent["model"]
+        effective_agent_name = agent.get("name")
+        effective_agent_description = agent.get("description")
     resolved_model = effective_model or settings.llm_model
 
     # The resolved POST body the backend actually acted on, echoed onto the
@@ -340,6 +350,10 @@ async def chat(req: ChatRequest):
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,
                     model=effective_model,
+                    # 049-agent-self-identity: server-resolved from the bound
+                    # agent row above; never a request override.
+                    agent_name=effective_agent_name,
+                    agent_description=effective_agent_description,
                 )
 
                 # Persist the finished message + the chunks retrieved for it

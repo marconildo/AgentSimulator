@@ -38,7 +38,13 @@ from ..mcp.server import LOAD_SKILL_TOOL, found_for
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import TraceEmitter
-from .prompts import AGENT_PROMPT, GUARDRAILS_PROMPT, compose_system, skills_block
+from .prompts import (
+    AGENT_PROMPT,
+    GUARDRAILS_PROMPT,
+    compose_system,
+    identity_block,
+    skills_block,
+)
 from .state import AgentState
 from .tools import RETRIEVAL_TOOL, agent_tool_specs, is_retrieval
 
@@ -72,8 +78,19 @@ def _skills_advertised(state: AgentState) -> bool:
     return enabled is None or LOAD_SKILL_TOOL in enabled
 
 
+def _identity_part(state: AgentState) -> str:
+    """The agent's self-identity line (049-agent-self-identity) or ``""``.
+
+    Reads ``agent_name`` / ``agent_description`` from state (resolved server-side
+    from the session's bound agent row, 043/044) and defers rendering to
+    :func:`identity_block`. When no name is bound the layer is omitted entirely
+    so the 042-anatomy 3-layer assembly is reproduced byte-for-byte.
+    """
+    return identity_block(state.get("agent_name"), state.get("agent_description"))
+
+
 def _system_parts(state: AgentState) -> tuple[str, str, str]:
-    """The three layers of the assembled system message.
+    """The three composition-time layers of the assembled system message.
 
     042-agent-anatomy split the prior single prompt into two independently
     overridable layers:
@@ -87,7 +104,10 @@ def _system_parts(state: AgentState) -> tuple[str, str, str]:
     replaces the corresponding default; blank/whitespace falls back. 027-skills:
     the catalog block is the third layer, non-empty only when there are skills
     *and* ``load_skill`` is advertised. Returned separately so 036's context
-    budget can attribute each to a distinct category.
+    budget can attribute each to a distinct category. The 049-identity layer
+    is resolved by :func:`_identity_part`; for budget accounting it joins the
+    ``system`` slice (alongside guardrails + role) so the per-category totals
+    stay coherent end-to-end.
     """
     sys_override = state.get("system_prompt")
     agent_override = state.get("agent_prompt")
@@ -99,13 +119,18 @@ def _system_parts(state: AgentState) -> tuple[str, str, str]:
 
 
 def _effective_system(state: AgentState) -> str:
-    """The system message actually sent to the model (guardrails + role [+ skills])."""
+    """The system message actually sent to the model.
+
+    Layout: ``[identity + "\\n\\n" +] guardrails + "\\n\\n" + role [+ "\\n\\n"
+    + skills]``. Without an agent row (identity blank) it falls back to
+    today's 042-anatomy composition exactly.
+    """
     guardrails, role, skills = _system_parts(state)
     # Recompose via the canonical helper so this and ``compose_system`` can never
     # drift on the join separator. An empty catalog yields just the two layers.
     catalog = state.get("skills_catalog") or []
     catalog_for_block = catalog if skills else []
-    return compose_system(guardrails, role, catalog_for_block)
+    return compose_system(guardrails, role, catalog_for_block, identity=_identity_part(state))
 
 
 async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -174,13 +199,21 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                 # panel renders a /context-style budget against the real maximum.
                 # 042-agent-anatomy: the system layer now spans guardrails + role;
                 # the budget attributes their combined token count to ``system``.
+                # 049-agent-self-identity: when an identity line is rendered, it
+                # joins the same ``system`` slice so the per-category totals stay
+                # coherent with what the model actually received (the identity
+                # line ships as part of the same system message).
                 guardrails, role, skills = _system_parts(state)
+                identity = _identity_part(state)
+                system_text = f"{guardrails}\n\n{role}"
+                if identity:
+                    system_text = f"{identity}\n\n{system_text}"
                 prompt_rec.data = {
                     **decision.prompt_preview,
                     "context": state["context"],
                     "context_window": context_window(provider.model_name),
                     "context_budget": context_budget(
-                        system=f"{guardrails}\n\n{role}",
+                        system=system_text,
                         tools=specs,
                         skills=skills,
                         history=state["history"],
@@ -450,6 +483,8 @@ async def run_agent_state(
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
     model: str | None = None,
+    agent_name: str | None = None,
+    agent_description: str | None = None,
 ) -> AgentState:
     """Run the agent for one message and return the final graph state.
 
@@ -469,6 +504,8 @@ async def run_agent_state(
         "agent_prompt": agent_prompt,
         "enabled_tools": enabled_tools,
         "model": model,
+        "agent_name": agent_name,
+        "agent_description": agent_description,
         "scenario": scenario,
         "simulate_failure": simulate_failure,
         "history": history or [],
@@ -501,6 +538,8 @@ async def run_agent(
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
     model: str | None = None,
+    agent_name: str | None = None,
+    agent_description: str | None = None,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -517,6 +556,12 @@ async def run_agent(
     are discovered and callable (``None`` = all, ``[]`` = none) — including the
     knowledge-base retrieval tool; ``model`` picks the OpenAI model for this
     run (validated against the curated allowlist by the API layer).
+
+    Server-resolved identity (049-agent-self-identity, not a request override):
+    ``agent_name`` and ``agent_description`` are read from the session's bound
+    agent row in ``main.py`` and folded into a leading "You are {name}. …"
+    line of the system message so the model can honestly answer questions
+    about its own identity. Omitting both keeps today's 3-layer assembly.
     """
     final_state = await run_agent_state(
         message,
@@ -532,5 +577,7 @@ async def run_agent(
         simulate_failure=simulate_failure,
         skills_catalog=skills_catalog,
         model=model,
+        agent_name=agent_name,
+        agent_description=agent_description,
     )
     return final_state["answer"]
