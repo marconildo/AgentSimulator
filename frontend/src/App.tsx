@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
+import { ConfigToggle } from "./components/ConfigToggle";
 import { FlowCanvas } from "./components/FlowCanvas";
 import {
   BackIcon,
@@ -16,7 +17,6 @@ import {
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
 import { ScenarioToggle } from "./components/ScenarioToggle";
-import { SettingsPanel } from "./components/SettingsPanel";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Timeline } from "./components/Timeline";
 import { TourCaption } from "./components/TourCaption";
@@ -26,8 +26,10 @@ import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
 import { healthBanner, useHealth } from "./lib/health";
 import { markOnboarded, shouldAutoOnboard } from "./lib/onboarding";
+import type { Page } from "./lib/page";
 import { activePhase } from "./lib/phases";
 import { currentStep, isTouring } from "./lib/tour";
+import { SettingsPage } from "./settings/SettingsPage";
 import { useSimulator } from "./store/useSimulator";
 
 // Thin vertical rule that separates the header into zones (brand · view ·
@@ -155,7 +157,10 @@ export default function App() {
   const bubble = useMemo(() => pendingBubble(view, activePhase(events, cursor)), [view, events, cursor]);
   const t = useT();
 
-  const [page, setPage] = useState<"sim" | "learn">("sim");
+  // 041-settings-page: the page state grew from 2 to 3. The ⚙️ Config control
+  // now navigates to a dedicated page (`<SettingsPage />`) instead of opening a
+  // popover; only one of {sim, learn, settings} is mounted at a time.
+  const [page, setPage] = useState<Page>("sim");
   const healthStatus = useHealth((s) => s.status);
   const llmModel = useHealth((s) => s.llmModel);
   const hasKey = useHealth((s) => s.hasKey);
@@ -221,26 +226,30 @@ export default function App() {
         {/* Preferences + architecture options. */}
         <ThemeToggle />
         <LanguageToggle />
-        <SettingsPanel />
+        <ConfigToggle page={page} setPage={setPage} />
 
         <Divider />
 
         {/* Navigation + status. */}
+        {/* Learn ↔ Sim toggle. 041-settings-page tightens this: clicking from
+            `settings` jumps straight to `learn` (mutual exclusion), not back
+            to sim. Symmetric for ConfigToggle. */}
         <button
-          onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}
+          onClick={() => setPage(page === "learn" ? "sim" : "learn")}
+          aria-pressed={page === "learn"}
           className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[12px] font-medium transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
           style={{
             borderColor: page === "learn" ? "var(--color-sky)" : "var(--color-line)",
             color: page === "learn" ? "var(--color-sky-soft)" : "var(--color-text-soft)",
           }}
         >
-          {page === "sim" ? (
-            <BookIcon className="h-3.5 w-3.5" />
-          ) : (
+          {page === "learn" ? (
             <BackIcon className="h-3.5 w-3.5" />
+          ) : (
+            <BookIcon className="h-3.5 w-3.5" />
           )}
           <span className="hidden lg:inline">
-            {page === "sim" ? t.app.learn : t.app.simulator}
+            {page === "learn" ? t.app.simulator : t.app.learn}
           </span>
         </button>
         {healthStatus === "ok" && llmModel && (
@@ -280,7 +289,11 @@ export default function App() {
         </div>
       )}
 
-      {page === "sim" ? (
+      {page === "settings" ? (
+        <SettingsPage />
+      ) : page === "learn" ? (
+        <LearnPage />
+      ) : (
         <>
           <div className="flex min-h-0 flex-1">
             <SidePanel
@@ -320,8 +333,6 @@ export default function App() {
 
           <Timeline />
         </>
-      ) : (
-        <LearnPage />
       )}
     </div>
   );

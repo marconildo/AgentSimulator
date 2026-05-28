@@ -388,6 +388,7 @@ describe("canvas jargon glossary (term tooltips)", () => {
     "ASGI",
     "ALB",
     "TLS 1.3",
+    "RAG",
     "cosine",
     "HNSW",
     "ReAct",

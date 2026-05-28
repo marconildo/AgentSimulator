@@ -11,6 +11,8 @@ export interface Strings {
     tagline: string;
     learn: string;
     simulator: string;
+    // 041-settings-page: header toggle label (mirrors `learn` / `simulator`).
+    config: string;
     liveTitle: string;
     language: string;
     cloud: string;
@@ -201,6 +203,10 @@ export interface Strings {
     open: string;
     label: string;
     title: string;
+    // 041-settings-page: chrome for the dedicated Settings page.
+    pageTitle: string;
+    pageTagline: string;
+    backToSim: string;
     delivery: string;
     deliveryHint: string;
     streaming: string;
@@ -484,6 +490,7 @@ const en: Strings = {
       "A chat message's journey through RAG, MCP tools and an LLM — visualized live.",
     learn: "Learn",
     simulator: "Simulator",
+    config: "Config",
     liveTitle: "Live OpenAI calls",
     language: "Language",
     cloud: "Cloud provider",
@@ -676,6 +683,9 @@ const en: Strings = {
     open: "Architecture options",
     label: "Config",
     title: "Architecture options",
+    pageTitle: "Settings",
+    pageTagline: "Pipeline options, experiment knobs, and data controls.",
+    backToSim: "Back to Simulator",
     delivery: "Response delivery",
     deliveryHint: "How the backend returns the result to the browser.",
     streaming: "Streaming (SSE)",
@@ -749,6 +759,7 @@ const en: Strings = {
     "Multi-agent":
       "Multi-agent — several specialized agents that coordinate (e.g. an orchestrator delegating to sub-agents) instead of one monolithic loop. (Planned — not yet implemented.)",
     SQL: "SQL — the query language of the relational database that stores the conversation.",
+    RAG: "RAG (Retrieval-Augmented Generation) — embed the query, pull the closest chunks from the vector DB, and ground the answer in them.",
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
     stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
@@ -1015,6 +1026,7 @@ const pt: Strings = {
       "A jornada de uma mensagem de chat por RAG, ferramentas MCP e um LLM — visualizada ao vivo.",
     learn: "Aprender",
     simulator: "Simulador",
+    config: "Config",
     liveTitle: "Chamadas reais à OpenAI",
     language: "Idioma",
     cloud: "Provedor de nuvem",
@@ -1207,6 +1219,9 @@ const pt: Strings = {
     open: "Opções de arquitetura",
     label: "Config",
     title: "Opções de arquitetura",
+    pageTitle: "Configurações",
+    pageTagline: "Opções do pipeline, controles de experimento e dados.",
+    backToSim: "Voltar ao Simulador",
     delivery: "Entrega da resposta",
     deliveryHint: "Como o backend devolve o resultado ao navegador.",
     streaming: "Streaming (SSE)",
@@ -1280,6 +1295,7 @@ const pt: Strings = {
     "Multi-agent":
       "Multi-agente — vários agentes especializados que se coordenam (ex.: um orquestrador delegando a subagentes) em vez de um único loop monolítico. (Planejado — ainda não implementado.)",
     SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
+    RAG: "RAG (Retrieval-Augmented Generation) — embeda a pergunta, busca os trechos mais próximos no vector DB e fundamenta a resposta neles.",
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
     stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",
