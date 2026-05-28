@@ -1,16 +1,39 @@
-"""Seed the skill catalog with a few demonstrable examples (027-skills).
+"""Server-side seed data (idempotent).
 
-Like the RAG corpus, these are **example data**, not UI chrome — so they are not
-subject to the bilingual rule (§4). Each body tells the model to answer in the
-user's language, so a PT or EN prompt both work. Seeding only runs when the
-catalog is empty (idempotent), mirroring how the vector index is built on first
-boot. After a "Clear databases" reset the catalog is left empty until the next
-startup re-seeds it.
+Today this module covers two seeds, both running on startup:
+
+- **Skills** (027-skills): a few demonstrable example skills. Like the RAG
+  corpus, these are example data, not UI chrome — so they're not subject to
+  the bilingual rule (§4). Each body tells the model to answer in the user's
+  language, so a PT or EN prompt both work. Re-runs are no-ops once the
+  catalog has skills.
+
+- **Default agent** (043-persisted-agent): the "Agent Simulator" row every
+  fresh conversation clones from. The actual insert lives in `store.py`
+  (sharing one sync helper with the migration); this module re-exports the
+  name constants + a thin async wrapper so callers don't reach into store
+  internals.
 """
 
 from __future__ import annotations
 
-from .store import ConversationStore, get_store
+import asyncio
+
+from .store import (
+    DEFAULT_AGENT_DESCRIPTION,
+    DEFAULT_AGENT_NAME,
+    ConversationStore,
+    _seed_default_agent_sync,
+    get_store,
+)
+
+__all__ = [
+    "DEFAULT_AGENT_DESCRIPTION",
+    "DEFAULT_AGENT_NAME",
+    "seed_default_agent",
+    "seed_skills",
+    "SEED_SKILLS",
+]
 
 # Three simple, simulator-appropriate skills, each easy to trigger by an explicit
 # user phrasing and each producing a visibly different answer (plan.md).
@@ -46,6 +69,22 @@ SEED_SKILLS: list[dict[str, str]] = [
         ),
     },
 ]
+
+
+async def seed_default_agent(store: ConversationStore | None = None) -> bool:
+    """Insert the default 'Agent Simulator' row when missing (043-persisted-agent).
+
+    Idempotent — safe to call on every startup. The actual insert is the
+    shared sync helper :func:`_seed_default_agent_sync` (used by the migration
+    + by `clear_all`'s re-seed). Returns True when a row was inserted.
+    """
+    store = store or get_store()
+    return await asyncio.to_thread(_seed_in_own_connection, store)
+
+
+def _seed_in_own_connection(store: ConversationStore) -> bool:
+    with store._connect() as conn:  # noqa: SLF001 - module-internal helper
+        return _seed_default_agent_sync(conn)
 
 
 async def seed_skills(store: ConversationStore | None = None) -> int:

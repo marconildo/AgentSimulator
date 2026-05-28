@@ -6,18 +6,41 @@ import type { TraceEvent } from "../types/events";
 import type { Scenario } from "./scenario";
 import { API_BASE, consumeEventStream } from "./sse";
 
+// 043-persisted-agent: the agent is a real SQLite row, cloned from the server
+// default on each `create_session`. The dialog edits this row via
+// `PATCH /api/agents/{id}`; edits in one conversation never affect another.
+export interface AgentMeta {
+  id: string;
+  name: string;
+  description: string;
+  system_prompt: string;
+  agent_prompt: string;
+  model: string;
+  enabled_tools: string[];
+  is_default: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface SessionMeta {
   id: string;
   title: string | null;
-  // 042-agent-anatomy: per-conversation agent name. Optional in the type
-  // because the legacy session list endpoint also returns it; the FE coalesces
-  // to the localized default "Agent" / "Agente" when null/absent. The PATCH
-  // endpoint always sets the column to either a value or NULL.
-  agent_name?: string | null;
+  // 043-persisted-agent: the conversation's agent, inlined on session reads
+  // so the FE never needs a follow-up `GET /api/agents/{id}` round-trip.
+  // Optional because some legacy test fixtures don't seed it; live backends
+  // always set it (the session-create path clones the default agent).
+  agent?: AgentMeta | null;
   created_at: number;
   updated_at: number;
   message_count?: number;
 }
+
+export type AgentPatchBody = Partial<
+  Pick<
+    AgentMeta,
+    "name" | "description" | "system_prompt" | "agent_prompt" | "model" | "enabled_tools"
+  >
+>;
 
 export interface ChatChunk {
   text: string;
@@ -67,10 +90,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const listSessions = () => api<SessionMeta[]>("/api/sessions");
 export const createSession = () => api<SessionMeta>("/api/sessions", { method: "POST" });
-// 042-agent-anatomy: edit a conversation's metadata (today: agent_name only).
-// The backend strips and length-checks (≤60 chars); "" clears the override.
-export const patchSession = (id: string, body: { agent_name?: string | null }) =>
-  jsonApi<SessionMeta>(`/api/sessions/${id}`, "PATCH", body);
+// 043-persisted-agent: edit the agent attached to a conversation. The backend
+// validates bounds and the `model` allowlist (returns 422 otherwise). The PATCH
+// is partial — only the keys in `body` are touched.
+export const patchAgent = (id: string, body: AgentPatchBody) =>
+  jsonApi<AgentMeta>(`/api/agents/${id}`, "PATCH", body);
 
 // 025-clear-databases: the global reset. Counts of what was removed from both
 // stores — relational rows + user-imported vectors (the built-in corpus is kept).

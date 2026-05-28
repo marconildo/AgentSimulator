@@ -1,14 +1,16 @@
-// 041-settings-page · AC6b/c/d regression for the 🧪 Experiment block after
-// it leaves the popover. Asserts the system prompt textarea, the tool toggles,
-// and the top-k slider all keep wiring `useExperiment.byConv[conv]` exactly as
-// the popover did, and that the Reset button clears overrides when dirty.
+// 041-settings-page · 🧪 Experiment regressions.
+// 043-persisted-agent shrank this section: system prompt + tools + agent-fields
+// moved to the Agent Anatomy dialog (they edit the persisted agent row now).
+// What remains here is the per-run knobs: RAG top-k and the simulate-failure
+// selector. Plus the redirect block pointing users to the dialog.
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/chatApi", () => ({
   getConfig: vi.fn().mockResolvedValue({
     default_system_prompt: "You are the assistant.",
+    default_agent_prompt: "Role.",
     default_top_k: 3,
     top_k_min: 1,
     top_k_max: 8,
@@ -19,69 +21,52 @@ vi.mock("../lib/chatApi", () => ({
     ],
     scenarios: [],
     failure_modes: ["none", "tool_error"],
+    models: [{ id: "gpt-4o-mini", label: "GPT-4o mini", description: "" }],
+    default_model: "gpt-4o-mini",
   }),
 }));
 
 import { SettingsExperiment } from "./SettingsExperiment";
+import { useAgentAnatomy } from "../lib/agentAnatomy";
 import { DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { useChat } from "../store/useChat";
 
 beforeEach(() => {
   useExperiment.setState({ byConv: {} });
   useChat.setState({ activeSessionId: null });
+  useAgentAnatomy.setState({ open: false, initialSection: null });
 });
 
 afterEach(() => {
   cleanup();
 });
 
-// Some browsers/jsdom serialize <input type="range"> changes only on a
-// dispatched change event with a value; React Testing Library's fireEvent
-// handles this, but we double-check by mutating value before dispatch.
 const setRange = (el: HTMLInputElement, value: number) => {
   fireEvent.change(el, { target: { value: String(value) } });
 };
 
-describe("SettingsExperiment — AC6b/c/d", () => {
-  it("typing the system prompt textarea writes byConv[draft].systemPrompt", async () => {
+describe("SettingsExperiment — 043 shape", () => {
+  it("no longer renders the system-prompt textarea (043 — moved to the dialog)", async () => {
     render(<SettingsExperiment />);
-    const ta = (await screen.findByRole("textbox", {
-      name: /System prompt/i,
-    })) as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "Be terse." } });
-    expect(useExperiment.getState().byConv[DRAFT_KEY]?.systemPrompt).toBe("Be terse.");
+    // Wait for the redirect block (which depends on i18n) to settle the render.
+    await screen.findByTestId("settings-open-agent-anatomy");
+    expect(screen.queryByRole("textbox", { name: /System prompt/i })).toBeNull();
   });
 
-  it("the Reset button appears only when dirty and clears the override on click", async () => {
+  it("no longer renders the tool checkboxes (043 — moved to the dialog)", async () => {
     render(<SettingsExperiment />);
-    expect(screen.queryByRole("button", { name: /Reset to default/i })).toBeNull();
-    const ta = await screen.findByRole("textbox", { name: /System prompt/i });
-    fireEvent.change(ta, { target: { value: "Be terse." } });
-    const reset = await screen.findByRole("button", { name: /Reset to default/i });
-    fireEvent.click(reset);
-    await waitFor(() =>
-      expect(useExperiment.getState().byConv[DRAFT_KEY]).toBeUndefined(),
-    );
+    await screen.findByTestId("settings-open-agent-anatomy");
+    expect(screen.queryByLabelText(/Calculator/i, { selector: "input" })).toBeNull();
   });
 
-  it("unchecking a tool removes it from enabledTools; rechecking restores it", async () => {
+  it("the redirect button opens the Agent Anatomy dialog (AC18)", async () => {
     render(<SettingsExperiment />);
-    const calcCheckbox = (await screen.findByLabelText(/Calculator/i, {
-      selector: "input",
-    })) as HTMLInputElement;
-    expect(calcCheckbox.checked).toBe(true);
-
-    fireEvent.click(calcCheckbox);
-    expect(useExperiment.getState().byConv[DRAFT_KEY]?.enabledTools).toEqual(
-      expect.not.arrayContaining(["calculator"]),
-    );
-
-    fireEvent.click(calcCheckbox);
-    // Back to all-on ⇒ store normalizes to null (no override).
-    expect(useExperiment.getState().byConv[DRAFT_KEY]?.enabledTools).toBeNull();
+    const btn = await screen.findByTestId("settings-open-agent-anatomy");
+    fireEvent.click(btn);
+    expect(useAgentAnatomy.getState().open).toBe(true);
   });
 
-  it("the top-k slider updates byConv[conv].topK", async () => {
+  it("the top-k slider still updates byConv[conv].topK (AC6d regression)", async () => {
     render(<SettingsExperiment />);
     const range = (await screen.findByRole("slider")) as HTMLInputElement;
     setRange(range, 6);

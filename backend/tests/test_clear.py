@@ -36,12 +36,15 @@ async def test_clear_all_wipes_all_relational_history(tmp_path):
     result = await store.clear_all()
 
     # 027-skills extends the clear contract with `skills_deleted` (0 here — this
-    # test seeds no skills); the relational counts are unchanged.
+    # test seeds no skills); 043-persisted-agent adds `agents_deleted` (2 cloned
+    # agents from the two sessions + the seed default = 3, all wiped — the
+    # default is then immediately re-seeded so future `create_session` works).
     assert result == {
         "sessions_deleted": 2,
         "messages_deleted": 3,
         "documents_deleted": 1,
         "skills_deleted": 0,
+        "agents_deleted": 3,
     }
     assert await store.list_sessions() == []
     assert await store.list_messages(s1) == []
@@ -52,14 +55,18 @@ async def test_clear_all_is_safe_and_idempotent_on_empty_store(tmp_path):
     # AC4 (relational side) — clearing an empty store, or clearing twice, returns
     # all-zero counts and raises nothing.
     store = ConversationStore(tmp_path / "app.sqlite3")
-    zero = {
+    # On a fresh store the migration ran (which seeds the default agent), so
+    # `agents_deleted` starts at 1; the clear re-seeds it, so the second call
+    # sees the same shape. The other counts are 0 (no user data).
+    first = await store.clear_all()
+    assert first == {
         "sessions_deleted": 0,
         "messages_deleted": 0,
         "documents_deleted": 0,
         "skills_deleted": 0,
+        "agents_deleted": 1,
     }
-    assert await store.clear_all() == zero
-    assert await store.clear_all() == zero
+    assert await store.clear_all() == first
 
 
 # --- AC2 (vector store keeps the corpus) ------------------------------------
@@ -139,11 +146,14 @@ def test_clear_data_endpoint_is_idempotent_on_empty():
         client.post("/api/data/clear")  # ensure empty
         resp = client.post("/api/data/clear")
         assert resp.status_code == 200
+        # 043-persisted-agent: the default agent is re-seeded between clears,
+        # so the second clear wipes exactly 1 agent every time.
         assert resp.json() == {
             "sessions_deleted": 0,
             "messages_deleted": 0,
             "documents_deleted": 0,
             "skills_deleted": 0,
+            "agents_deleted": 1,
             "vectors_removed": 0,
             "objects_deleted": 0,
         }

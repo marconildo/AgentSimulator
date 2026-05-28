@@ -24,7 +24,7 @@ from .agent import run_agent
 from .agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from .agent.tools import agent_tool_specs
 from .config import get_settings
-from .db.seed import seed_skills
+from .db.seed import seed_default_agent, seed_skills
 from .db.store import DuplicateSkillName, get_store
 from .llm.context import history_pair_tokens
 from .llm.models import model_ids, models_payload
@@ -92,6 +92,13 @@ async def lifespan(_app: FastAPI):
             print(f"[startup] Seeded {added} example skills.")
     except Exception as exc:  # noqa: BLE001 - app should still start
         print(f"[startup] Could not seed skills: {exc!r}")
+    # 043-persisted-agent: ensure the default "Agent Simulator" exists so the
+    # first `create_session` after boot has something to clone.
+    try:
+        if await seed_default_agent():
+            print("[startup] Seeded default agent.")
+    except Exception as exc:  # noqa: BLE001 - app should still start
+        print(f"[startup] Could not seed default agent: {exc!r}")
     yield
 
 
@@ -212,7 +219,6 @@ async def chat(req: ChatRequest):
             },
         )
     top_k = req.top_k or settings.rag_top_k
-    resolved_model = req.model or settings.llm_model
     trace_id = uuid.uuid4().hex
     emitter = TraceEmitter(trace_id, req.message)
 
@@ -221,6 +227,29 @@ async def chat(req: ChatRequest):
     # client didn't send a session_id. The id is echoed on the SSE `done` event.
     session = await store.ensure_session(req.session_id or uuid.uuid4().hex)
     session_id = session["id"]
+    # 043-persisted-agent: the session always carries an inline agent (clone
+    # of the seed default). Request-level overrides (006) still win when set
+    # — falling back to the agent row only fills in the absent fields. So a
+    # programmatic caller sending `system_prompt="X"` keeps today's behavior.
+    agent = session.get("agent")
+    effective_system_prompt = req.system_prompt
+    effective_agent_prompt = req.agent_prompt
+    effective_enabled_tools = req.enabled_tools
+    effective_model = req.model
+    if agent is not None:
+        if effective_system_prompt is None:
+            effective_system_prompt = agent["system_prompt"]
+        if effective_agent_prompt is None:
+            effective_agent_prompt = agent["agent_prompt"]
+        if effective_enabled_tools is None and agent["enabled_tools"]:
+            # The agent stores `enabled_tools` as a concrete list (the FE writes
+            # exactly the tools the user kept on). An empty list means "no tools
+            # disabled" from the FE's perspective today — match that semantic by
+            # leaving the override at None (fall through to "all tools").
+            effective_enabled_tools = list(agent["enabled_tools"])
+        if effective_model is None:
+            effective_model = agent["model"]
+    resolved_model = effective_model or settings.llm_model
 
     # The resolved POST body the backend actually acted on, echoed onto the
     # frontend event so the client/backend inspector can show it verbatim
@@ -292,13 +321,16 @@ async def chat(req: ChatRequest):
                     history=history["recent"],
                     mode=req.mode,
                     session_id=session_id,
-                    system_prompt=req.system_prompt,
-                    agent_prompt=req.agent_prompt,
-                    enabled_tools=req.enabled_tools,
+                    # 043-persisted-agent: fall back to the session's agent row
+                    # when the request omits the field; the request's value
+                    # still wins when present (006 hot-override).
+                    system_prompt=effective_system_prompt,
+                    agent_prompt=effective_agent_prompt,
+                    enabled_tools=effective_enabled_tools,
                     scenario=req.scenario,
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,
-                    model=req.model,
+                    model=effective_model,
                 )
 
                 # Persist the finished message + the chunks retrieved for it
@@ -447,28 +479,68 @@ async def delete_session(session_id: str):
     return await get_store().delete_session(session_id)
 
 
-class SessionPatch(BaseModel):
-    """Body of ``PATCH /api/sessions/{id}`` (042-agent-anatomy).
+class AgentPatch(BaseModel):
+    """Body of ``PATCH /api/agents/{id}`` (043-persisted-agent).
 
-    Only the per-session agent name is editable today. ``agent_name`` is
-    bounded at 60 chars (after strip); an empty string clears the override.
-    Future fields go here (e.g. short description, color tag).
+    Partial update: every field is optional. The PATCH only touches the columns
+    actually present in the request — sending ``{"name": "X"}`` leaves the
+    prompts and model alone. Field bounds:
+
+    - ``name``: 1..60 chars (after strip)
+    - ``description``: 0..240 chars
+    - ``system_prompt`` / ``agent_prompt``: ≤ 2000 chars each
+    - ``model``: must be in the curated allowlist (`app/llm/models.py`)
+    - ``enabled_tools``: list of tool names (subset of the advertised tools)
     """
 
-    agent_name: str | None = Field(default=None, max_length=60)
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    description: str | None = Field(default=None, max_length=240)
+    system_prompt: str | None = Field(default=None, max_length=2000)
+    agent_prompt: str | None = Field(default=None, max_length=2000)
+    model: str | None = Field(default=None, max_length=120)
+    enabled_tools: list[str] | None = Field(default=None)
 
 
-@app.patch("/api/sessions/{session_id}")
-async def patch_session(session_id: str, body: SessionPatch):
-    """Update per-conversation agent metadata (042-agent-anatomy)."""
-    # Normalize the incoming value: strip whitespace; ``""`` after strip means
-    # "clear the override" (NULL in the row). The 60-char cap is enforced by
-    # pydantic at validation time (over-cap ⇒ 422).
-    raw = body.agent_name
-    name = raw.strip() if isinstance(raw, str) else None
-    row = await get_store().update_session(session_id, agent_name=name)
+@app.get("/api/agents/{agent_id}")
+async def get_agent(agent_id: str):
+    """Direct read of an agent row (convenience). Sessions already include
+    the agent inline, so the FE rarely calls this."""
+    row = await get_store().get_agent(agent_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="agent not found")
+    return row
+
+
+@app.patch("/api/agents/{agent_id}")
+async def patch_agent(agent_id: str, body: AgentPatch):
+    """Partial-update an agent (043-persisted-agent).
+
+    Each conversation owns its own agent row (clone-on-create), so this PATCH
+    is conversation-scoped in practice — there is no shared catalog to surprise.
+    Validates `model` against the curated allowlist; over-cap text is already
+    rejected by pydantic at validation time (422).
+    """
+    patch = body.model_dump(exclude_unset=True)
+    # Validate `model` against the same allowlist used by /api/chat (defense in
+    # depth — the FE dropdown also filters, but a programmatic caller might not).
+    if "model" in patch and patch["model"] not in model_ids():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "model not in allowlist",
+                "model": patch["model"],
+                "allowed": sorted(model_ids()),
+            },
+        )
+    # Normalize name (strip), reject post-strip emptiness explicitly so 1..60
+    # actually means "1..60 visible characters".
+    if "name" in patch and isinstance(patch["name"], str):
+        patch["name"] = patch["name"].strip()
+        if not patch["name"]:
+            raise HTTPException(status_code=422, detail="name cannot be blank")
+    row = await get_store().update_agent(agent_id, patch)
+    if row is None:
+        raise HTTPException(status_code=404, detail="agent not found")
     return row
 
 

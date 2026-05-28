@@ -40,14 +40,16 @@ export function StationNode(props: NodeProps) {
   // The hook is mounted for every station (zustand allows this), but the
   // affordance only renders on the agent station below.
   const openAnatomy = useAgentAnatomy((s) => s.openDialog);
-  // The conversation's `agent_name` (when set) overrides the station header
+  // The conversation's agent name (when set) overrides the station header
   // label so users see the named agent on the canvas, not the generic "Agent".
+  // 043-persisted-agent: read from `session.agent.name` (the inline row);
+  // legacy `session.agent_name` was removed in this spec.
   const activeSession = useChat((c) => {
     const id = c.activeSessionId;
     return id ? c.sessions.find((s) => s.id === id) ?? null : null;
   });
   const isAgent = meta.id === "agent";
-  const agentName = isAgent ? activeSession?.agent_name ?? null : null;
+  const agentName = isAgent ? activeSession?.agent?.name ?? null : null;
   const displayTitle = agentName ?? meta.title;
 
   // Spotlight model: only the station the packet is at right now is lit; every

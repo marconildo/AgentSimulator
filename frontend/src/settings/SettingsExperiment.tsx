@@ -1,23 +1,28 @@
-// 041-settings-page · 🧪 Experiment section, lifted out of the popover.
-// Behavior is identical (per-conversation overrides via `useExperiment`,
-// tools list from /api/config, top-k slider, failure-mode selector); the
-// textarea defaults to 8 rows since vertical space is no longer scarce.
+// 041-settings-page · 🧪 Experiment section.
+// 043-persisted-agent: the system-prompt textarea + tools toggle + Reset
+// button all moved into the Agent Anatomy dialog (where they edit the
+// persisted agent row directly). What stays here are the **per-run**
+// experiment knobs that aren't part of the agent's identity: RAG top-k and
+// the 017 simulate-failure selector. A small redirect block explains where
+// the other controls live now.
 
 import { useEffect, useState } from "react";
 
 import { useT } from "../i18n";
+import { useAgentAnatomy } from "../lib/agentAnatomy";
 import { getConfig, type AppConfig } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
-import { toolRows } from "../lib/tools";
 import { useChat } from "../store/useChat";
 
 export function SettingsExperiment() {
   const t = useT();
   const ex = t.settings.experiment;
+  const aa = t.agentAnatomy;
 
   const conv = useChat((c) => c.activeSessionId);
   const exp = useExperiment((e) => e.byConv[conv ?? DRAFT_KEY] ?? DEFAULT_EXPERIMENT);
   const exp_ = useExperiment.getState();
+  const openAnatomy = useAgentAnatomy((s) => s.openDialog);
 
   const [config, setConfig] = useState<AppConfig | null>(null);
   useEffect(() => {
@@ -25,17 +30,10 @@ export function SettingsExperiment() {
     getConfig().then(setConfig).catch(() => {});
   }, [config]);
 
-  const allTools = config?.tools.map((tool) => tool.name) ?? [];
-  const enabled = exp.enabledTools ?? allTools; // null ⇒ all on
   const topK = exp.topK ?? config?.default_top_k ?? 4;
-  const promptValue = exp.systemPrompt ?? config?.default_system_prompt ?? "";
   const failureModes = config?.failure_modes ?? ["none"];
   const simulateFailure = exp.simulateFailure ?? "none";
-  const dirty =
-    exp.systemPrompt !== null ||
-    exp.enabledTools !== null ||
-    exp.topK !== null ||
-    simulateFailure !== "none";
+  const dirty = exp.topK !== null || simulateFailure !== "none";
 
   return (
     <section>
@@ -54,61 +52,20 @@ export function SettingsExperiment() {
         )}
       </div>
 
-      {/* System prompt */}
-      <label
-        htmlFor="exp-system-prompt"
-        className="mb-1 block text-[11px] font-semibold text-[var(--color-ink)]"
-      >
-        {ex.systemPrompt}
-      </label>
-      <p className="mb-1.5 text-[10.5px] leading-snug text-[var(--color-muted)]">
-        {ex.promptHint}
-      </p>
-      <textarea
-        id="exp-system-prompt"
-        aria-label={ex.systemPrompt}
-        value={promptValue}
-        onChange={(e) => exp_.setSystemPrompt(conv, e.target.value)}
-        rows={8}
-        maxLength={2000}
-        disabled={!config}
-        spellCheck={false}
-        className="w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2 font-mono text-[11px] leading-snug text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
-      />
-
-      {/* Tools */}
-      <div className="mt-3 mb-1 text-[11px] font-semibold text-[var(--color-ink)]">
-        {ex.tools}
+      {/* 043-persisted-agent: pointer to the dialog where prompts/model/tools
+          now live. The Settings page keeps only the per-run knobs below. */}
+      <div className="mb-3 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2.5 py-2">
+        <p className="mb-1.5 text-[11px] leading-snug text-[var(--color-muted)]">
+          {aa.settingsRedirect}
+        </p>
+        <button
+          onClick={() => openAnatomy()}
+          data-testid="settings-open-agent-anatomy"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-accent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent)] transition hover:bg-[var(--color-panel)]"
+        >
+          ⚙️ {aa.openFromSettings}
+        </button>
       </div>
-      <p className="mb-1.5 text-[10.5px] leading-snug text-[var(--color-muted)]">{ex.toolsHint}</p>
-      <div className="flex flex-col gap-1">
-        {toolRows(config?.tools ?? [], ex.toolLabels).map((tool) => {
-          const on = enabled.includes(tool.name);
-          return (
-            <label
-              key={tool.name}
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-line)] px-2.5 py-1.5 text-[11.5px] text-[var(--color-ink)]"
-              title={tool.description}
-            >
-              <input
-                type="checkbox"
-                checked={on}
-                onChange={() => exp_.toggleTool(conv, tool.name, allTools)}
-                className="accent-[var(--color-accent)]"
-              />
-              <span className={on ? "" : "text-[var(--color-muted)] line-through"}>
-                {tool.label}
-              </span>
-              <span className="ml-auto font-mono text-[10px] text-[var(--color-muted)]">
-                {tool.name}
-              </span>
-            </label>
-          );
-        })}
-      </div>
-      <p className="mt-1.5 text-[10.5px] leading-snug text-[var(--color-label)]">
-        {ex.toolsDisambig}
-      </p>
 
       {/* top-k */}
       <div className="mt-3 mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--color-ink)]">

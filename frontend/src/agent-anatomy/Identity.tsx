@@ -1,56 +1,26 @@
 // 042-agent-anatomy · 🪪 Identity section.
-//
-// Edits the conversation's `agent_name` (max 60 chars, debounced PATCH).
-// The short description is a local-only field for now — the spec keeps it
-// visible (it's part of the agent's anatomy mental model) but persistence is
-// a follow-up if users actually start using it. AC13 only asks the name to
-// round-trip.
+// 043-persisted-agent: name AND description now persist in the `agents` table.
+// Edits PATCH /api/agents/{id} via the shared `useActiveAgent` hook (debounced
+// 500 ms, flushed on blur + on dialog close — the 042 unmount-flush bug fix).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useT } from "../i18n";
-import { patchSession } from "../lib/chatApi";
-import { useChat } from "../store/useChat";
+import { useActiveAgent } from "../lib/agentAccess";
 
 export function Identity() {
   const t = useT().agentAnatomy.identity;
-  const reset = useT().agentAnatomy.reset;
-  const sessionId = useChat((c) => c.activeSessionId);
-  const sessions = useChat((c) => c.sessions);
-  const replaceSession = useChat((c) => c.replaceSession);
-  // The current name comes from the session record (server is source of truth).
-  const session = sessions.find((s) => s.id === sessionId) ?? null;
-  const remoteName = session?.agent_name ?? "";
+  const { agent, updateAgent, flush } = useActiveAgent();
 
-  const [draft, setDraft] = useState<string>(remoteName);
-  // Sync local draft when switching conversations (or after a remote refresh).
-  useEffect(() => setDraft(remoteName), [sessionId, remoteName]);
+  // Local drafts shadow the row so the input is responsive while we debounce
+  // the PATCH; switching conversations or refetches sync them back.
+  const [nameDraft, setNameDraft] = useState<string>(agent?.name ?? "");
+  const [descDraft, setDescDraft] = useState<string>(agent?.description ?? "");
 
-  const [desc, setDesc] = useState<string>("");
-  useEffect(() => setDesc(""), [sessionId]);
-
-  // Debounced PATCH so every keystroke isn't a network round-trip. 300 ms is the
-  // human-typing pause threshold (same window the cumulative HUD uses for its
-  // debounced refreshes).
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!sessionId) return;
-    if (draft === remoteName) return;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      patchSession(sessionId, { agent_name: draft })
-        .then((row) => {
-          // Reflect the new name in the chat sidebar / station header.
-          if (row) replaceSession(row);
-        })
-        .catch(() => {});
-    }, 300);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [draft, remoteName, sessionId, replaceSession]);
-
-  const dirty = remoteName !== "";
+    setNameDraft(agent?.name ?? "");
+    setDescDraft(agent?.description ?? "");
+  }, [agent?.id, agent?.name, agent?.description]);
 
   return (
     <section data-anatomy-section="identity" className="space-y-2">
@@ -59,30 +29,21 @@ export function Identity() {
       <div>
         <label
           htmlFor="agent-anatomy-name"
-          className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--color-ink)]"
+          className="mb-1 block text-[11px] font-semibold text-[var(--color-ink)]"
         >
-          <span>{t.nameLabel}</span>
-          {dirty && (
-            <button
-              onClick={() => {
-                if (!sessionId) return;
-                patchSession(sessionId, { agent_name: "" })
-                  .then((row) => row && replaceSession(row))
-                  .catch(() => {});
-                setDraft("");
-              }}
-              className="rounded-full border border-[var(--color-line)] px-2 py-px text-[10px] font-normal text-[var(--color-muted)] transition hover:text-[var(--color-ink)]"
-            >
-              {reset}
-            </button>
-          )}
+          {t.nameLabel}
         </label>
         <input
           id="agent-anatomy-name"
           aria-label={t.nameLabel}
           data-testid="agent-anatomy-name-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value.slice(0, 60))}
+          value={nameDraft}
+          onChange={(e) => {
+            const next = e.target.value.slice(0, 60);
+            setNameDraft(next);
+            updateAgent({ name: next });
+          }}
+          onBlur={flush}
           maxLength={60}
           placeholder={t.namePlaceholder}
           spellCheck={false}
@@ -100,8 +61,14 @@ export function Identity() {
         <textarea
           id="agent-anatomy-desc"
           aria-label={t.descLabel}
-          value={desc}
-          onChange={(e) => setDesc(e.target.value.slice(0, 240))}
+          data-testid="agent-anatomy-desc-input"
+          value={descDraft}
+          onChange={(e) => {
+            const next = e.target.value.slice(0, 240);
+            setDescDraft(next);
+            updateAgent({ description: next });
+          }}
+          onBlur={flush}
           maxLength={240}
           rows={2}
           placeholder={t.descPlaceholder}

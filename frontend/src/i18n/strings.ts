@@ -494,6 +494,9 @@ export interface Strings {
     close: string;
     reset: string;
     defaultAgentName: string;
+    // 043-persisted-agent — Settings page's pointer to this dialog.
+    settingsRedirect: string;
+    openFromSettings: string;
     identity: {
       title: string;
       nameLabel: string;
@@ -1082,6 +1085,9 @@ const en: Strings = {
     close: "Close",
     reset: "Reset to default",
     defaultAgentName: "Agent",
+    settingsRedirect:
+      "The agent's name, prompts, model and tools live in the Agent Anatomy dialog now — edits persist per conversation.",
+    openFromSettings: "Open Agent Anatomy",
     identity: {
       title: "Identity",
       nameLabel: "Name",
@@ -1672,6 +1678,9 @@ const pt: Strings = {
     close: "Fechar",
     reset: "Restaurar padrão",
     defaultAgentName: "Agente",
+    settingsRedirect:
+      "O nome do agente, prompts, modelo e ferramentas agora ficam no diálogo Anatomia do agente — edições persistem por conversa.",
+    openFromSettings: "Abrir Anatomia do agente",
     identity: {
       title: "Identidade",
       nameLabel: "Nome",

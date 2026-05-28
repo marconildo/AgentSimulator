@@ -258,7 +258,12 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
   const activeId = useChat((s) => s.activeSessionId);
   const sessions = useChat((s) => s.sessions);
 
-  const activeTitle = sessions.find((s) => s.id === activeId)?.title;
+  const activeSession = sessions.find((s) => s.id === activeId);
+  const activeTitle = activeSession?.title;
+  // 043-persisted-agent: the conversation's agent name labels every assistant
+  // bubble (replaces the generic "Agent" / "Agente"). Empty/missing ⇒ fallback
+  // to the bilingual default inside AgentMessage.
+  const agentName = activeSession?.agent?.name ?? null;
 
   // Re-scroll on any meaningful change to the live bubble (stage label or answer).
   const bubbleKey = bubble.kind === "answer" ? bubble.text : `status:${bubble.phase}`;
@@ -319,6 +324,7 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
                 lang={lang}
                 onSelect={() => void selectMessage(m.id)}
                 active={m.id === loadedTraceId}
+                agentName={agentName}
               />
             ))}
             {pending && (
@@ -330,7 +336,7 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
                   lang={lang}
                   ts={null}
                 />
-                <AgentMessage t={t} lang={lang} ts={null}>
+                <AgentMessage t={t} lang={lang} ts={null} agentName={agentName}>
                   {bubble.kind === "answer" ? (
                     <>
                       {bubble.text}
@@ -416,6 +422,7 @@ function Exchange({
   lang,
   onSelect,
   active,
+  agentName,
 }: {
   message: ChatMessage;
   t: Strings;
@@ -424,6 +431,9 @@ function Exchange({
   // onto the canvas; `active` marks the turn currently shown there.
   onSelect: () => void;
   active: boolean;
+  // 043-persisted-agent: label every assistant bubble with the conversation's
+  // agent name (falls back to the localized "Agent" / "Agente" inside).
+  agentName?: string | null;
 }) {
   return (
     <div className="space-y-3">
@@ -440,6 +450,7 @@ function Exchange({
         t={t}
         lang={lang}
         ts={message.created_at}
+        agentName={agentName}
         below={
           <>
             {/* 027-skills: which skills the agent loaded for this turn. */}
@@ -536,6 +547,7 @@ function AgentMessage({
   onClick,
   title,
   active = false,
+  agentName,
 }: {
   t: Strings;
   lang: Lang;
@@ -547,6 +559,10 @@ function AgentMessage({
   onClick?: () => void;
   title?: string;
   active?: boolean;
+  // 043-persisted-agent: the conversation's agent name (replaces the generic
+  // "Agent" / "Agente" label on the assistant bubble). Falls back to the
+  // bilingual default when the session hasn't loaded its agent yet.
+  agentName?: string | null;
 }) {
   const clickable = Boolean(onClick);
   return (
@@ -560,7 +576,9 @@ function AgentMessage({
       </span>
       <div className="flex min-w-0 flex-1 flex-col items-start">
         <div className="mb-0.5 flex items-center gap-1.5 px-0.5">
-          <span className="text-[11px] font-semibold text-[var(--color-ink)]">{t.chat.agent}</span>
+          <span className="text-[11px] font-semibold text-[var(--color-ink)]">
+            {agentName?.trim() || t.chat.agent}
+          </span>
           <Stamp ts={ts} lang={lang} t={t} />
         </div>
         <div

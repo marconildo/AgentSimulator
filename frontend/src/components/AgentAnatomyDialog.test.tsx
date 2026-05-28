@@ -49,7 +49,7 @@ vi.mock("../lib/chatApi", () => {
 
 import { AgentAnatomyDialog } from "./AgentAnatomyDialog";
 import { useAgentAnatomy } from "../lib/agentAnatomy";
-import { DRAFT_KEY, useExperiment } from "../lib/experiment";
+import { useExperiment } from "../lib/experiment";
 
 beforeEach(() => {
   useAgentAnatomy.setState({ open: false, initialSection: null });
@@ -105,17 +105,14 @@ describe("AgentAnatomyDialog", () => {
     expect(useAgentAnatomy.getState().open).toBe(false);
   });
 
-  it("toggling a tool updates the per-conversation enabledTools (AC16)", async () => {
+  it("renders tool checkboxes from /api/config (AC16)", async () => {
+    // 043-persisted-agent: tool toggles now PATCH the active agent (covered by
+    // section-level tests). Here we just assert the dialog mounts the tool
+    // rows from the cached `/api/config.tools` payload.
     useAgentAnatomy.setState({ open: true });
     render(<AgentAnatomyDialog />);
-    // Wait for getConfig to settle so the tool rows render.
-    const cb = await screen.findByTestId("agent-anatomy-tool-calculator");
-    fireEvent.click(cb);
-    const stored = useExperiment.getState().byConv[DRAFT_KEY]?.enabledTools;
-    // One unchecked ⇒ a restricted list (not null/all-on).
-    expect(stored).not.toBeNull();
-    expect(stored).not.toContain("calculator");
-    expect(stored).toContain("current_time");
+    expect(await screen.findByTestId("agent-anatomy-tool-calculator")).toBeTruthy();
+    expect(await screen.findByTestId("agent-anatomy-tool-current_time")).toBeTruthy();
   });
 
   it("shared-skills callout is visible in the Skills section (AC19)", async () => {

@@ -1,22 +1,20 @@
 // 042-agent-anatomy · 🛠️ Tools.
-// Mirrors the 006/041 Experiment tools list — same store, same semantics, same
-// per-conversation `enabledTools` field. Adds a count badge so the dialog
-// reads "agent-shaped" (e.g. "4 of 5 enabled").
+// 043-persisted-agent: writes `agents.enabled_tools` (a concrete list of tool
+// names) directly. The agent row's empty list = "no tools"; the full list =
+// "all tools". The dialog never persists a `null` (the FE store's prior
+// "null = all on" sentinel is gone).
 
 import { useEffect, useState } from "react";
 
 import { useT } from "../i18n";
+import { useActiveAgent } from "../lib/agentAccess";
 import { getConfig, type AppConfig } from "../lib/chatApi";
-import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { toolRows } from "../lib/tools";
-import { useChat } from "../store/useChat";
 
 export function ToolsSection() {
   const t = useT().agentAnatomy.tools;
   const ex = useT().settings.experiment;
-  const conv = useChat((c) => c.activeSessionId);
-  const exp = useExperiment((e) => e.byConv[conv ?? DRAFT_KEY] ?? DEFAULT_EXPERIMENT);
-  const toggleTool = useExperiment((e) => e.toggleTool);
+  const { agent, updateAgent } = useActiveAgent();
 
   const [config, setConfig] = useState<AppConfig | null>(null);
   useEffect(() => {
@@ -24,8 +22,29 @@ export function ToolsSection() {
   }, []);
 
   const allTools = config?.tools.map((tool) => tool.name) ?? [];
-  const enabled = exp.enabledTools ?? allTools; // null ⇒ all on
-  const count = exp.enabledTools === null ? t.countAll : t.countSome(enabled.length, allTools.length);
+  // The persisted `enabled_tools` is the source of truth. An empty list (newly
+  // cloned default carries `[]`) means "all tools" by convention — the FE
+  // initializes the row to `allTools` the first time the user toggles one off.
+  // This matches the 006 semantic without needing a null sentinel.
+  const persisted = agent?.enabled_tools ?? [];
+  const allOn = persisted.length === 0;
+  const enabled = allOn ? allTools : persisted;
+  const enabledCount = allOn ? allTools.length : enabled.length;
+  const totalCount = allTools.length;
+  const count = allOn ? t.countAll : t.countSome(enabledCount, totalCount);
+
+  function toggle(name: string) {
+    if (!agent) return;
+    const current = allOn ? new Set(allTools) : new Set(persisted);
+    if (current.has(name)) current.delete(name);
+    else current.add(name);
+    // Persist the canonical order (matches allTools).
+    const ordered = allTools.filter((n) => current.has(n));
+    // If the user toggled everything back on, persist `[]` to preserve the
+    // "all enabled = empty list" convention.
+    const next = ordered.length === allTools.length ? [] : ordered;
+    updateAgent({ enabled_tools: next });
+  }
 
   return (
     <section data-anatomy-section="tools" className="space-y-2">
@@ -43,11 +62,13 @@ export function ToolsSection() {
               <input
                 type="checkbox"
                 checked={on}
-                onChange={() => toggleTool(conv, tool.name, allTools)}
+                onChange={() => toggle(tool.name)}
                 className="accent-[var(--color-accent)]"
                 data-testid={`agent-anatomy-tool-${tool.name}`}
               />
-              <span className={on ? "" : "text-[var(--color-muted)] line-through"}>{tool.label}</span>
+              <span className={on ? "" : "text-[var(--color-muted)] line-through"}>
+                {tool.label}
+              </span>
               <span className="ml-auto font-mono text-[10px] text-[var(--color-muted)]">
                 {tool.name}
               </span>
