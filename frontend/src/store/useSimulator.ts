@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { initialInspectorCollapsed } from "../lib/onboarding";
 import { LIVE_STEP_MS, paceAdvance } from "../lib/pacing";
 import type { StationId } from "../lib/stations";
 import {
@@ -9,6 +10,8 @@ import {
   pauseTour as pauseTourReducer,
   resumeTour as resumeTourReducer,
   TOUR_PACE_MS,
+  tourNext as tourNextReducer,
+  tourPrev as tourPrevReducer,
   tourStep,
   type TourState,
 } from "../lib/tour";
@@ -26,6 +29,10 @@ interface SimulatorState {
   selected: StationId | null;
   expanded: StationId[]; // stations expanded inline on the canvas
   detail: StationId | null; // station opened in the focused drill-in overlay
+  // 038-execution-traces — the run-level span tree opened in the Inspector body
+  // (like a station detail, with a ← Overview back button), keyed off a boolean
+  // (it is not a station, so it stays out of the StationId-exhaustive switches).
+  tracesOpen: boolean;
   error: string | null;
   // Side-panel collapse (013-canvas-space-disclosure) — layout state kept here
   // (not local) so `select` can re-open the Inspector when a station is clicked.
@@ -36,10 +43,15 @@ interface SimulatorState {
   // current phase carries the caption. Mutually exclusive with raw replay.
   tour: TourState;
 
-  select: (id: StationId | null) => void;
+  // `reveal` defaults to true: a manual click re-opens a collapsed Inspector (013
+  // AC3). The tour passes `reveal: false` so the auto-tour keeps the canvas-first
+  // frame on a first visit (037 AC4).
+  select: (id: StationId | null, opts?: { reveal?: boolean }) => void;
   toggleExpand: (id: StationId) => void;
   openDetail: (id: StationId) => void;
   closeDetail: () => void;
+  openTraces: () => void;
+  closeTraces: () => void;
   toggleChat: () => void;
   toggleInspector: () => void;
 
@@ -68,6 +80,10 @@ interface SimulatorState {
   pauseTour: () => void;
   resumeTour: () => void;
   stopTour: () => void;
+  // 037 — manual ◀ ▶ stepping; each pauses the auto-play (via the reducer) so the
+  // visitor reads at their own pace.
+  tourNextStep: () => void;
+  tourPrevStep: () => void;
 }
 
 let abort: AbortController | null = null;
@@ -137,7 +153,9 @@ function applyTourStep(tour: TourState) {
   if (!step) return;
   const { setCursor, select } = useSimulator.getState();
   setCursor(step.cursor);
-  select(step.station);
+  // Keep the canvas the hero through the tour: highlight the station without
+  // forcing a collapsed Inspector open (037 AC4) — the balloon narration teaches.
+  select(step.station, { reveal: false });
 }
 
 // (Re)start the tour timer — advances one phase per tick at a fixed pace, and
@@ -168,15 +186,27 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   selected: null,
   expanded: [],
   detail: null,
+  tracesOpen: false,
   error: null,
   chatCollapsed: false,
-  inspectorCollapsed: false,
+  // 037 — collapsed on the first visit only (canvas-first opening frame), else the
+  // expanded default; clicking a station still re-opens it.
+  inspectorCollapsed: initialInspectorCollapsed(),
   tour: IDLE_TOUR,
 
   // Selecting a station (non-null) re-opens the Inspector if it was collapsed, so
-  // a click always reveals the data (AC3); deselecting leaves the panel as-is (AC4).
-  select: (id) =>
-    set((s) => ({ selected: id, inspectorCollapsed: id !== null ? false : s.inspectorCollapsed })),
+  // a click always reveals the data (013 AC3); deselecting leaves the panel as-is
+  // (AC4). `reveal: false` opts out of the re-open so the tour can highlight a
+  // station while keeping the canvas-first frame (037 AC4).
+  select: (id, opts) =>
+    set((s) => ({
+      selected: id,
+      // Selecting a station leaves the Execution-traces detail (038) — they share
+      // the Inspector body, so only one shows at a time.
+      tracesOpen: false,
+      inspectorCollapsed:
+        opts?.reveal === false ? s.inspectorCollapsed : id !== null ? false : s.inspectorCollapsed,
+    })),
   toggleChat: () => set((s) => ({ chatCollapsed: !s.chatCollapsed })),
   toggleInspector: () => set((s) => ({ inspectorCollapsed: !s.inspectorCollapsed })),
   toggleExpand: (id) =>
@@ -187,6 +217,10 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
     })),
   openDetail: (id) => set({ detail: id, selected: id }),
   closeDetail: () => set({ detail: null }),
+  // 038 — the run-level span tree opens in the Inspector body (like a station
+  // detail); clear `selected` so the tracesOpen branch wins over any station.
+  openTraces: () => set({ tracesOpen: true, selected: null }),
+  closeTraces: () => set({ tracesOpen: false }),
 
   beginRun: () => {
     abort?.abort();
@@ -273,6 +307,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       error: null,
       selected: null,
       detail: null,
+      tracesOpen: false,
       tour: IDLE_TOUR,
     });
   },
@@ -355,5 +390,21 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   stopTour: () => {
     stopTourTimer();
     set({ tour: IDLE_TOUR, selected: null });
+  },
+
+  // Manual stepping (037): stop the auto-advance, move one stop (the reducer
+  // clamps and marks the tour `paused`), and apply the new stop to the canvas.
+  tourNextStep: () => {
+    stopTourTimer();
+    const tour = tourNextReducer(get().tour);
+    set({ tour });
+    applyTourStep(tour);
+  },
+
+  tourPrevStep: () => {
+    stopTourTimer();
+    const tour = tourPrevReducer(get().tour);
+    set({ tour });
+    applyTourStep(tour);
   },
 }));

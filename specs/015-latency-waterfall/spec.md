@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 015-latency-waterfall |
-| **Status** | done |
+| **Status** | superseded by 038-execution-traces |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |
 

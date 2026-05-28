@@ -12,12 +12,16 @@ import { STAGE_TO_STATION } from "./stations";
 import {
   beginTour,
   currentStep,
+  IDLE_TOUR,
   pauseTour,
   resumeTour,
   stopTour,
+  TOUR_PACE_MS,
   tourCaptionsFor,
   tourLabelsFor,
   tourNarrationFor,
+  tourNext,
+  tourPrev,
   tourStep,
   tourSteps,
   type TourStep,
@@ -198,7 +202,50 @@ describe("captions + labels are bilingual (AC2)", () => {
       expect(labels.pause).toBeTruthy();
       expect(labels.resume).toBeTruthy();
       expect(labels.stop).toBeTruthy();
+      expect(labels.prev).toBeTruthy(); // 037 — manual step-back control
+      expect(labels.next).toBeTruthy(); // 037 — manual step-forward control
     }
+  });
+});
+
+// 037-first-visit-onboarding — a calmer auto dwell + manual ◀ ▶ stepping that
+// pauses the auto-play, so the visitor reads each stop at their own pace.
+describe("calmer pacing + manual stepping (037)", () => {
+  it("AC5: the auto dwell is calm enough to read (>= 7000 ms)", () => {
+    expect(TOUR_PACE_MS).toBeGreaterThanOrEqual(7000);
+  });
+
+  it("AC6: tourNext advances one stop and pauses the auto-play", () => {
+    const playing = beginTour(plainRun()); // index 0, playing
+    const next = tourNext(playing);
+    expect(next.index).toBe(1);
+    expect(next.status).toBe("paused");
+  });
+
+  it("AC6: tourPrev retreats one stop and pauses", () => {
+    const atTwo = { ...beginTour(plainRun()), index: 2 };
+    const prev = tourPrev(atTwo);
+    expect(prev.index).toBe(1);
+    expect(prev.status).toBe("paused");
+  });
+
+  it("AC6: stepping clamps at both ends (no underflow / overrun)", () => {
+    const steps = tourSteps(plainRun());
+    const atFirst = { steps, index: 0, status: "paused" as const };
+    expect(tourPrev(atFirst).index).toBe(0);
+
+    const atLast = { steps, index: steps.length - 1, status: "playing" as const };
+    const clamped = tourNext(atLast);
+    expect(clamped.index).toBe(steps.length - 1);
+    expect(clamped.status).toBe("paused");
+  });
+
+  it("AC6: stepping is inert when the tour is idle or done", () => {
+    expect(tourNext(IDLE_TOUR)).toEqual(IDLE_TOUR);
+    expect(tourPrev(IDLE_TOUR)).toEqual(IDLE_TOUR);
+    const done = { steps: tourSteps(plainRun()), index: 3, status: "done" as const };
+    expect(tourNext(done)).toEqual(done);
+    expect(tourPrev(done)).toEqual(done);
   });
 });
 

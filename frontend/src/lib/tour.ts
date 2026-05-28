@@ -11,8 +11,10 @@ import { phaseMarkers, type TimelinePhase } from "./phases";
 import { STAGE_TO_STATION, type StationId } from "./stations";
 
 // Fixed dwell per phase (Q1). A single configurable constant — predictable,
-// independent of model latency variability.
-export const TOUR_PACE_MS = 3500;
+// independent of model latency variability. 037 raised it from 3500 → 7000 so a
+// stop stays on screen long enough to read the balloon and scan the canvas; the
+// manual ◀ ▶ controls (tourNext/tourPrev) let the visitor go faster or slower.
+export const TOUR_PACE_MS = 7000;
 
 /** One narrated stop on the tour. Carries only what the driver needs to apply. */
 export interface TourStep {
@@ -58,6 +60,22 @@ export function tourStep(state: TourState): TourState {
   if (state.status !== "playing") return state;
   if (state.index >= state.steps.length - 1) return { ...state, status: "done" };
   return { ...state, index: state.index + 1 };
+}
+
+/**
+ * Manual step forward one stop (037). Using a manual control pauses the auto-play
+ * so the visitor reads at their own pace; clamps at the last stop; inert when the
+ * tour is idle/done.
+ */
+export function tourNext(state: TourState): TourState {
+  if (!isTouring(state)) return state;
+  return { ...state, index: Math.min(state.index + 1, state.steps.length - 1), status: "paused" };
+}
+
+/** Manual step back one stop (037). Pauses auto-play; clamps at the first stop. */
+export function tourPrev(state: TourState): TourState {
+  if (!isTouring(state)) return state;
+  return { ...state, index: Math.max(state.index - 1, 0), status: "paused" };
 }
 
 export function pauseTour(state: TourState): TourState {

@@ -16,6 +16,8 @@ export function TourControls() {
   const pauseTour = useSimulator((s) => s.pauseTour);
   const resumeTour = useSimulator((s) => s.resumeTour);
   const stopTour = useSimulator((s) => s.stopTour);
+  const tourPrevStep = useSimulator((s) => s.tourPrevStep);
+  const tourNextStep = useSimulator((s) => s.tourNextStep);
 
   if (!isTouring(tour)) {
     // Empty state → louder "preview the journey" CTA (filled); with a run → the
@@ -37,8 +39,15 @@ export function TourControls() {
   }
 
   const paused = tour.status === "paused";
+  // Manual step controls flank the play/pause (037) — using them pauses the
+  // auto-advance so the visitor reads each stop at their own pace.
+  const stepCls =
+    "grid h-7 w-7 place-items-center rounded-full border border-[var(--color-line)] text-[12px] text-[var(--color-muted)] transition hover:border-[color-mix(in_srgb,var(--color-violet)_60%,transparent)] hover:text-[var(--color-violet-soft)]";
   return (
     <div className="flex items-center gap-1.5">
+      <button onClick={tourPrevStep} title={t.tour.prev} aria-label={t.tour.prev} className={stepCls}>
+        ◀
+      </button>
       <button
         onClick={paused ? resumeTour : pauseTour}
         title={paused ? t.tour.resume : t.tour.pause}
@@ -46,6 +55,9 @@ export function TourControls() {
         className="flex items-center gap-1 rounded-full bg-[var(--color-violet)] px-3 py-1 text-[11px] font-semibold text-[var(--color-on-accent)] shadow-sm shadow-[color-mix(in_srgb,var(--color-violet)_35%,transparent)] transition hover:opacity-90"
       >
         {paused ? "▶" : "⏸"} {paused ? t.tour.resume : t.tour.pause}
+      </button>
+      <button onClick={tourNextStep} title={t.tour.next} aria-label={t.tour.next} className={stepCls}>
+        ▶
       </button>
       <button
         onClick={stopTour}

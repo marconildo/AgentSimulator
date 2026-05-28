@@ -7,6 +7,7 @@ import {
   type AnswerSegment,
   type CitationSource,
 } from "../lib/citations";
+import { CELL_COUNT, deriveBudget, gridCells, type GridSlice } from "../lib/contextBudget";
 import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView } from "../lib/derive";
 import { abstained } from "../lib/abstain";
@@ -45,14 +46,46 @@ function lastEnd(events: TraceEvent[], stage: string): TraceEvent | undefined {
   return undefined;
 }
 
-// Section → its anatomy label + bar color (shared by the bar and the diff rows).
+// Category → its budget color (shared by the grid, the legend and the diff rows).
 const SECTION_COLOR: Record<Section, string> = {
   system: "var(--color-violet)",
-  rag: "var(--color-ok)",
-  tools: "var(--color-warn)",
-  history: "var(--color-blue)",
-  user: "var(--color-sky)",
+  tool_defs: "var(--color-pink)",
+  skills: "var(--color-sky)",
+  memory: "var(--color-blue)",
+  retrieved: "var(--color-ok)",
+  messages: "var(--color-warn)",
 };
+
+// The generated answer's slice color (distinct from the six input categories).
+const COMPLETION_COLOR = "var(--color-orange)";
+// The faint outline color for an empty (free) grid cell / the Free-space row.
+const FREE_COLOR = "var(--color-line)";
+
+// Color for any grid/legend slice: the six input categories, the answer, or free.
+function sliceColor(key: GridSlice | "free"): string {
+  if (key === "free") return FREE_COLOR;
+  if (key === "completion") return COMPLETION_COLOR;
+  return SECTION_COLOR[key];
+}
+
+// Category → its bilingual legend label (one source, used by legend + diff).
+function categoryLabel(a: ReturnType<typeof useT>["agentDetail"], key: Section): string {
+  return {
+    system: a.catSystemPrompt,
+    tool_defs: a.catToolDefs,
+    skills: a.catSkills,
+    memory: a.catMemory,
+    retrieved: a.catRetrieved,
+    messages: a.catMessages,
+  }[key];
+}
+
+/** Percent-of-window for the legend, e.g. 0.062 → "6%", 0.004 → "<1%". */
+function formatPct(p: number): string {
+  if (p <= 0) return "0%";
+  if (p < 0.01) return "<1%";
+  return `${Math.round(p * 100)}%`;
+}
 
 export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const t = useT();
@@ -109,18 +142,25 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const rounds = usage.rounds || thinks.length;
   const hasRealUsage = usage.totalTokens > 0;
 
-  // 020-turn-diff: the per-section context-window estimate — one source, shared
-  // with the proportional bar below and the "compare with previous turn" view.
+  // 036-context-window-budget: the real context-window budget as of the cursor —
+  // input (real prompt_tokens) + answer (real completion_tokens) vs. the model
+  // window, plus the per-category input split (one source, also feeds the "compare
+  // with previous turn" diff). 020's diff reads the same numbers, so grid and diff
+  // can't disagree. The generated answer is its own slice (input vs. answer tokens).
+  const budget = useMemo(() => deriveBudget(events, cursor), [events, cursor]);
+  const slices = useMemo(
+    () => [
+      ...budget.categories.map((c) => ({ key: c.key as GridSlice, tokens: c.tokens })),
+      { key: "completion" as GridSlice, tokens: budget.completion },
+    ],
+    [budget],
+  );
+  const cells = useMemo(
+    () => gridCells(slices, budget.used, budget.window, CELL_COUNT),
+    [slices, budget.used, budget.window],
+  );
   const sections = useMemo(() => contextSections(visible), [visible]);
-  const parts = (["system", "rag", "tools", "history"] as const)
-    .map((key) => ({
-      key,
-      label: { system: a.systemPrompt, rag: a.retrievedContext, tools: a.toolResults, history: a.history }[key],
-      tokens: sections[key],
-      color: SECTION_COLOR[key],
-    }))
-    .filter((p) => p.tokens > 0);
-  const totalTokens = parts.reduce((s, p) => s + p.tokens, 0) || 1;
+  const legend = budget.categories.filter((c) => c.tokens > 0);
 
   // 019-inline-citations: honest, sentence-level provenance over the settled
   // answer, composed from this turn's tool results + retrieved chunks.
@@ -251,31 +291,74 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
             </Labeled>
           </Panel>
 
-          {/* Context window — what is actually assembled and sent to the brain. */}
-          <Panel title={a.contextWindow} accent="var(--color-ok)" hint={a.contextWindowHint}>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--color-label)]">
-              {a.approxProportion}
+          {/* Context window — a /context-style budget against the model's real
+              maximum: input (prompt) + answer (completion) vs. free, split by
+              category. Per model call, so it differs from the cumulative Usage block. */}
+          <Panel title={a.contextWindow} accent="var(--color-ok)" hint={a.windowHint}>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+              <span className="font-mono text-[12px] text-[var(--color-ink)]">
+                {a.usedInOut(
+                  formatTokens(budget.input),
+                  formatTokens(budget.completion),
+                  formatTokens(budget.window),
+                  formatPct(budget.pct),
+                )}
+              </span>
+              {model && (
+                <span className="text-[10px] text-[var(--color-muted)]" title={a.windowHint}>
+                  {a.windowOf(model, formatTokens(budget.window))}
+                </span>
+              )}
             </div>
-            <div className="mb-2 flex h-3 w-full overflow-hidden rounded-full border border-[var(--color-line)]">
-              {parts.map((p) => (
-                <div
-                  key={p.label}
-                  title={`${p.label} · ${a.approxTokens(p.tokens)}`}
-                  style={{ width: `${(p.tokens / totalTokens) * 100}%`, background: p.color }}
+            <div
+              className="mb-2 grid gap-[2px]"
+              style={{ gridTemplateColumns: "repeat(20, minmax(0, 1fr))" }}
+            >
+              {cells.map((c, i) => (
+                <span
+                  key={i}
+                  className="aspect-square rounded-[2px]"
+                  style={
+                    c === "free"
+                      ? { background: "transparent", border: `1px solid ${FREE_COLOR}` }
+                      : { background: sliceColor(c) }
+                  }
                 />
               ))}
             </div>
-            <div className="space-y-1">
-              {parts.map((p) => (
-                <div key={p.label} className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
-                    <span className="text-[var(--color-text-soft)]">{p.label}</span>
-                  </span>
-                  <span className="font-mono text-[var(--color-muted)]">{a.approxTokens(p.tokens)}</span>
-                </div>
-              ))}
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--color-label)]">
+              {a.estimatedByCategory}
             </div>
+            <div className="space-y-1">
+              {legend.map((c) => (
+                <LegendRow
+                  key={c.key}
+                  color={SECTION_COLOR[c.key]}
+                  label={categoryLabel(a, c.key)}
+                  tokens={c.tokens}
+                  pct={c.pctOfWindow}
+                />
+              ))}
+              {budget.completion > 0 && (
+                <LegendRow
+                  color={COMPLETION_COLOR}
+                  label={a.catCompletion}
+                  tokens={budget.completion}
+                  pct={budget.window > 0 ? budget.completion / budget.window : 0}
+                />
+              )}
+              <LegendRow
+                color={FREE_COLOR}
+                label={a.freeSpace}
+                tokens={budget.free}
+                pct={budget.window > 0 ? budget.free / budget.window : 0}
+                hollow
+              />
+            </div>
+            <p className="mt-1.5 text-[10px] italic text-[var(--color-muted)]">{a.perCallNote}</p>
+            {budget.estimated && (
+              <p className="mt-1 text-[10px] italic text-[var(--color-muted)]">{a.estimatedNote}</p>
+            )}
             {tools.length > 0 && (
               <Labeled label={a.tools}>
                 <div className="flex flex-wrap gap-1">
@@ -389,14 +472,6 @@ function TurnCompare({ current }: { current: Record<Section, number> }) {
     };
   }, [comparing, priorId]);
 
-  const sectionLabel: Record<Section, string> = {
-    system: a.systemPrompt,
-    history: a.history,
-    rag: a.retrievedContext,
-    tools: a.toolResults,
-    user: a.userMessage,
-  };
-
   const prevSections = prior?.ok ? contextSections(prior.events) : null;
   const diff = prevSections ? diffTurns(prevSections, current) : null;
 
@@ -431,7 +506,7 @@ function TurnCompare({ current }: { current: Record<Section, number> }) {
                     <div key={s} className="flex items-center justify-between gap-2 text-[11px]">
                       <span className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full" style={{ background: SECTION_COLOR[s] }} />
-                        <span className="text-[var(--color-text-soft)]">{sectionLabel[s]}</span>
+                        <span className="text-[var(--color-text-soft)]">{categoryLabel(a, s)}</span>
                       </span>
                       <span className="flex items-center gap-2 font-mono text-[var(--color-muted)]">
                         <span>
@@ -493,6 +568,38 @@ function Panel({
         {hint && <span className="text-[10px] text-[var(--color-muted)]">{hint}</span>}
       </div>
       {children}
+    </div>
+  );
+}
+
+// One legend row in the context-window budget: a color swatch, the category
+// label, and its token count + percentage of the whole window (036).
+function LegendRow({
+  color,
+  label,
+  tokens,
+  pct,
+  hollow = false,
+}: {
+  color: string;
+  label: string;
+  tokens: number;
+  pct: number;
+  hollow?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between text-[11px]">
+      <span className="flex items-center gap-1.5">
+        <span
+          className="h-2 w-2 rounded-full"
+          style={hollow ? { border: `1px solid ${color}` } : { background: color }}
+        />
+        <span className="text-[var(--color-text-soft)]">{label}</span>
+      </span>
+      <span className="flex items-center gap-2 font-mono text-[var(--color-muted)]">
+        <span>{formatTokens(tokens)}</span>
+        <span className="w-9 text-right text-[var(--color-label)]">{formatPct(pct)}</span>
+      </span>
     </div>
   );
 }

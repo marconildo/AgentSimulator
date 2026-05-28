@@ -6,7 +6,7 @@ import { formatTokens, formatUsd } from "../../lib/cost";
 import type { StationRuntime, UsageTotals } from "../../lib/derive";
 import { NODE_WIDTH } from "../../lib/layout";
 import { formatLatency } from "../../lib/time";
-import type { StationId, StationMeta } from "../../lib/stations";
+import { READOUT_GLOSSARY_KEY, type StationId, type StationMeta } from "../../lib/stations";
 import { useSimulator } from "../../store/useSimulator";
 import type { TraceEvent } from "../../types/events";
 
@@ -46,6 +46,18 @@ export function StationNode(props: NodeProps) {
   const borderColor = spotlit ? accent : "var(--color-line)";
   const dotColor = spotlit ? accent : "var(--color-faint)";
 
+  // The collapsed readout is dense jargon ("decision: answer", "top-4 · score
+  // 0.50"). Append the matching one-line glossary hint to its native tooltip so
+  // the term isn't thrown without a definition; fall back to revealing the full
+  // (clipped) readout text when the station has no jargon hint.
+  const hintKey = READOUT_GLOSSARY_KEY[meta.id];
+  const readoutHint = hintKey ? t.glossary[hintKey] : undefined;
+  const readoutTitle = readout
+    ? readoutHint
+      ? `${readout}\n\n${readoutHint}`
+      : readout
+    : undefined;
+
   return (
     <motion.div
       animate={{ scale: spotlit || emphasized ? 1.03 : 1 }}
@@ -76,8 +88,15 @@ export function StationNode(props: NodeProps) {
         <div className="flex items-center gap-2.5">
           <span className="text-xl leading-none">{meta.icon}</span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-semibold text-[var(--color-ink)]">{meta.title}</div>
-            <div className="truncate text-[10px] text-[var(--color-muted)]">{meta.subtitle}</div>
+            {/* Titles/subtitles can exceed the node width (e.g. "RAG · Vector DB",
+                "Model Context Protocol"); clip with ellipsis but reveal the full
+                text on hover via the native title tooltip. */}
+            <div title={meta.title} className="truncate text-[13px] font-semibold text-[var(--color-ink)]">
+              {meta.title}
+            </div>
+            <div title={meta.subtitle} className="truncate text-[10px] text-[var(--color-muted)]">
+              {meta.subtitle}
+            </div>
           </div>
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -138,7 +157,7 @@ export function StationNode(props: NodeProps) {
           </div>
         ) : (
           <div
-            title={readout || undefined}
+            title={readoutTitle}
             className="mt-2 h-[18px] truncate font-mono text-[10.5px]"
             style={{ color: readout ? accent : "transparent" }}
           >

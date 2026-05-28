@@ -126,6 +126,7 @@ export function Timeline() {
               label={t.timeline.phases[phase]}
               hint={t.tour.captions[phase]}
               count={marker?.count ?? 0}
+              countHint={t.glossary.iterations}
               occurred={Boolean(marker)}
               passed={Boolean(marker && marker.index <= cursor)}
               active={active === phase}
@@ -146,6 +147,7 @@ function PhaseChip({
   label,
   hint,
   count,
+  countHint,
   occurred,
   passed,
   active,
@@ -154,6 +156,7 @@ function PhaseChip({
   label: string;
   hint: string;
   count: number;
+  countHint: string;
   occurred: boolean;
   passed: boolean;
   active: boolean;
@@ -180,7 +183,11 @@ function PhaseChip({
     >
       {label}
       {count > 1 && (
-        <span className="font-mono text-[9px] opacity-70" aria-label={`×${count}`}>
+        <span
+          className="cursor-help font-mono text-[9px] opacity-70"
+          title={countHint}
+          aria-label={`×${count}`}
+        >
           ×{count}
         </span>
       )}

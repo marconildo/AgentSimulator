@@ -81,6 +81,33 @@ export interface ToolResultData {
   found?: boolean;
 }
 
+// 036-context-window-budget — the real per-category token split of the assembled
+// prompt, computed server-side with tiktoken and emitted (additively) on the
+// `llm.prompt` END `data`. Six "used" categories; Free space is derived on the
+// client (window − used). Mirrors backend/app/llm/context.py BUDGET_CATEGORIES.
+export interface ContextBudget {
+  system: number;
+  tool_defs: number;
+  skills: number;
+  memory: number;
+  retrieved: number;
+  messages: number;
+}
+
+// The assembled-prompt preview carried on the `llm.prompt` END `data` (the
+// inspector reads it). 036 adds the real `context_window` (the model's max) +
+// `context_budget` (the per-category split) alongside the existing fields. Both
+// optional ⇒ older/replayed traces still type-check (AC9).
+export interface PromptPreview {
+  system?: string;
+  context?: string;
+  tools?: string[];
+  messages?: { role: string; content: string }[];
+  history?: { message: string; answer: string }[];
+  context_window?: number;
+  context_budget?: ContextBudget;
+}
+
 export interface TraceSummary {
   trace_id: string;
   message: string;

@@ -17,6 +17,7 @@ import { LearnPage } from "./learn/LearnPage";
 import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
 import { healthBanner, useHealth } from "./lib/health";
+import { markOnboarded, shouldAutoOnboard } from "./lib/onboarding";
 import { activePhase } from "./lib/phases";
 import { currentStep, isTouring } from "./lib/tour";
 import { useSimulator } from "./store/useSimulator";
@@ -131,6 +132,7 @@ export default function App() {
   const toggleChat = useSimulator((s) => s.toggleChat);
   const toggleInspector = useSimulator((s) => s.toggleInspector);
   const tour = useSimulator((s) => s.tour);
+  const startTour = useSimulator((s) => s.startTour);
 
   // 014-tour-scripted: the guided tour emphasizes the station it narrates. Feed
   // its current station into the projection so the canvas leads the eye to it;
@@ -153,6 +155,18 @@ export default function App() {
   useEffect(() => {
     loadHealth();
   }, [loadHealth]);
+
+  // 037-first-visit-onboarding — on the very first visit, auto-start the guided
+  // tour (it loads the bundled canned trace, so it works with no backend) so a
+  // newcomer sees the journey unprompted. Mark onboarded immediately, so a refresh
+  // or a new conversation never re-triggers it; the first-visit Inspector collapse
+  // is seeded in the store from the same flag.
+  useEffect(() => {
+    if (shouldAutoOnboard()) {
+      markOnboarded();
+      startTour();
+    }
+  }, [startTour]);
   const banner = healthBanner(healthStatus, hasKey);
 
   return (

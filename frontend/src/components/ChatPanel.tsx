@@ -213,7 +213,10 @@ function ConversationRow({
       <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-sky)] opacity-60 transition group-hover:opacity-100" />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--color-ink)]">
+          <span
+            title={session.title || t.chat.untitled}
+            className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--color-ink)]"
+          >
             {session.title || t.chat.untitled}
           </span>
           <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--color-faint)]">
@@ -281,7 +284,10 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
-        <h2 className="min-w-0 flex-1 truncate text-center text-[13px] font-semibold text-[var(--color-ink)]">
+        <h2
+          title={activeTitle || t.chat.untitled}
+          className="min-w-0 flex-1 truncate text-center text-[13px] font-semibold text-[var(--color-ink)]"
+        >
           {activeTitle || t.chat.untitled}
         </h2>
         <button
@@ -783,7 +789,7 @@ function PreSendHint({ text, t }: { text: string; t: Strings }) {
 
   const cost = estimateInputCostUsd(tokens, model);
   return (
-    <span title={t.hud.tokenizer}>
+    <span title={t.glossary.tiktoken} className="cursor-help">
       ≈ {formatTokens(tokens)} {t.hud.tokens} · ≈ {formatUsd(cost)} · {t.hud.estimate}
     </span>
   );

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PHASE_ORDER } from "../lib/phases";
+import { READOUT_GLOSSARY_KEY, stationsFor } from "../lib/stations";
 import { UI } from "./strings";
 
 const en = UI.en.settings.experiment;
@@ -238,6 +239,39 @@ describe("turn-diff i18n (020-turn-diff)", () => {
   });
 });
 
+describe("context-window-budget i18n (036-context-window-budget AC10)", () => {
+  it("has every new budget label in en and pt, non-empty", () => {
+    for (const k of [
+      "estimatedByCategory",
+      "catSystemPrompt",
+      "catToolDefs",
+      "catSkills",
+      "catMemory",
+      "catRetrieved",
+      "catMessages",
+      "catCompletion",
+      "freeSpace",
+      "windowHint",
+      "estimatedNote",
+      "perCallNote",
+    ] as const) {
+      expect(UI.en.agentDetail[k]?.trim()).toBeTruthy();
+      expect(UI.pt.agentDetail[k]?.trim()).toBeTruthy();
+    }
+  });
+
+  it("has the windowOf + usedInOut builders in en and pt (interpolating their args)", () => {
+    expect(UI.en.agentDetail.windowOf("gpt-4o-mini", "128k")).toContain("gpt-4o-mini");
+    expect(UI.en.agentDetail.windowOf("gpt-4o-mini", "128k")).toContain("128k");
+    expect(UI.pt.agentDetail.windowOf("gpt-4o-mini", "128k")).toContain("128k");
+    // input + answer both surfaced (the user's ask: show prompt AND completion).
+    expect(UI.en.agentDetail.usedInOut("647", "67", "128k", "6%")).toContain("647");
+    expect(UI.en.agentDetail.usedInOut("647", "67", "128k", "6%")).toContain("67");
+    expect(UI.pt.agentDetail.usedInOut("647", "67", "128k", "6%")).toContain("647");
+    expect(UI.pt.agentDetail.usedInOut("647", "67", "128k", "6%")).toContain("67");
+  });
+});
+
 describe("abstain-badge i18n (021-abstain-badge)", () => {
   it("has the badge + hint in en and pt", () => {
     for (const k of ["badge", "hint"] as const) {
@@ -295,6 +329,87 @@ describe("settings.experiment i18n", () => {
         path.split(".").reduce<unknown>((o, key) => (o as Record<string, unknown>)[key], dict),
       );
       for (const v of values) expect(String(v).trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// Canvas jargon tooltips — every dense term the diagram throws at a learner
+// (station tags, readouts, the HUD, the timeline) carries a one-line, bilingual
+// plain-language hint via the native `title` attribute. The glossary is the
+// single source; this pins its coverage so a term can never surface undefined.
+describe("canvas jargon glossary (term tooltips)", () => {
+  const en = UI.en.glossary;
+  const pt = UI.pt.glossary;
+
+  // The terms a junior flagged as "thrown without a definition" — tags + the
+  // readout/HUD/timeline concepts. Each must resolve to a real bilingual hint.
+  const FLAGGED = [
+    "ASGI",
+    "ALB",
+    "TLS 1.3",
+    "cosine",
+    "HNSW",
+    "ReAct",
+    "MCP",
+    "stream",
+    "decision",
+    "iterations",
+    "RAG hits",
+    "tiktoken",
+    "load_skill",
+    "top-k",
+  ];
+
+  // AC1 — en/pt parity: a hint defined in one language exists in the other, so a
+  // tooltip is never English-only (constitution §4).
+  it("has the same glossary keys in en and pt", () => {
+    expect(Object.keys(en).sort()).toEqual(Object.keys(pt).sort());
+  });
+
+  // AC2 — every tech tag rendered on a station node (it carries cursor-help) has
+  // a hint in both languages, so no `title` ever resolves to undefined.
+  it("explains every station tag in both languages", () => {
+    const tags = new Set(stationsFor("en").map((s) => s.tag));
+    for (const tag of tags) {
+      expect(en[tag]?.trim(), `en glossary for tag ${tag}`).toBeTruthy();
+      expect(pt[tag]?.trim(), `pt glossary for tag ${tag}`).toBeTruthy();
+    }
+  });
+
+  // AC3 — every flagged jargon term is demystified, in both languages.
+  it("defines every flagged jargon term in both languages", () => {
+    for (const term of FLAGGED) {
+      expect(en[term]?.trim(), `en glossary for ${term}`).toBeTruthy();
+      expect(pt[term]?.trim(), `pt glossary for ${term}`).toBeTruthy();
+    }
+  });
+
+  // AC4 — hints ride a native `title` tooltip, so they must be single-line.
+  it("keeps every hint to a single line", () => {
+    for (const dict of [en, pt]) {
+      for (const [key, val] of Object.entries(dict)) {
+        expect(val, `${key} single line`).not.toMatch(/\n/);
+      }
+    }
+  });
+
+  // AC5 — the flagged hints stay short and scannable at a glance.
+  it("keeps the flagged hints short and scannable", () => {
+    for (const dict of [en, pt]) {
+      for (const term of FLAGGED) {
+        expect(dict[term].length, `${term} length`).toBeLessThanOrEqual(150);
+      }
+    }
+  });
+
+  // AC6 — the per-station readout-hint map points only at real glossary terms, so
+  // a node's readout tooltip never resolves to undefined.
+  it("maps each readout hint to a defined glossary term", () => {
+    const keys = Object.values(READOUT_GLOSSARY_KEY).filter((k): k is string => Boolean(k));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(en[key]?.trim(), `en glossary for readout key ${key}`).toBeTruthy();
+      expect(pt[key]?.trim(), `pt glossary for readout key ${key}`).toBeTruthy();
     }
   });
 });

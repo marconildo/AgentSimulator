@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
@@ -17,10 +17,11 @@ import {
   type StationId,
   type StationMeta,
 } from "../lib/stations";
+import { executionTree } from "../lib/executionTree";
 import { formatLatency } from "../lib/time";
 import { useSimulator } from "../store/useSimulator";
 import type { JsonRpcFrames, Phase, RequestBody, Stage, TraceEvent } from "../types/events";
-import { TimingPanel } from "./TimingPanel";
+import { ExecutionTracesDetail } from "./ExecutionTraces";
 
 type I = Strings["inspector"];
 
@@ -34,6 +35,9 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
   const lang = useLang((s) => s.lang);
   const scenario = useScenario((s) => s.scenario);
   const events = useSimulator((s) => s.events);
+  const openTraces = useSimulator((s) => s.openTraces);
+  const tracesOpen = useSimulator((s) => s.tracesOpen);
+  const closeTraces = useSimulator((s) => s.closeTraces);
   const t = useT();
   const i = t.inspector;
   // 035 — the Overview catalog matches the canvas: list the upload nodes only
@@ -49,9 +53,18 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
     scrollRef.current?.scrollTo({ top: 0 });
   }, [selected]);
 
+  // 038 — the run-level execution-trace tree shares the Inspector body with the
+  // station details; it wins over the Overview / a station when open.
+  if (tracesOpen) return <ExecutionTracesDetail onBack={closeTraces} />;
+
   if (!selected)
     return (
-      <Overview onSelect={onSelect} stations={visibleStationsFor(lang, scenario, showUpload)} i={i} />
+      <Overview
+        onSelect={onSelect}
+        onOpenTraces={openTraces}
+        stations={visibleStationsFor(lang, scenario, showUpload)}
+        i={i}
+      />
     );
 
   const meta = stationByIdFor(lang)[selected];
@@ -758,22 +771,40 @@ function StatusBadge({ status, accent, i }: { status: string; accent: string; i:
 
 function Overview({
   onSelect,
+  onOpenTraces,
   stations,
   i,
 }: {
   onSelect: (id: StationId) => void;
+  onOpenTraces: () => void;
   stations: StationMeta[];
   i: I;
 }) {
   const cloud = useCloud((s) => s.cloud);
+  const events = useSimulator((s) => s.events);
+  const x = useT().timeline.execTrace;
+  const tree = useMemo(() => executionTree(events), [events]);
+  const hasRun = tree.spans.length > 0 && tree.totalMs > 0;
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
       <h2 className="text-sm font-semibold text-[var(--color-ink)]">{i.overviewTitle}</h2>
       <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{i.overviewBody}</p>
-      {/* Whole-run latency waterfall (015) — the run-level summary belongs with
-          the overview, not in the per-station detail or the full-width scrubber. */}
-      <TimingPanel />
       <div className="space-y-1.5">
+        {/* Whole-run execution-trace tree (038, supersedes the flat 015 waterfall).
+            Listed like a station but opens as a full-width overlay (more room than
+            the narrow panel); it summarizes the whole run, so it sits first. */}
+        <button
+          onClick={onOpenTraces}
+          className="flex w-full items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2.5 py-2 text-left transition hover:border-[color-mix(in_srgb,var(--color-sky)_50%,transparent)]"
+        >
+          <span className="text-lg" aria-hidden>
+            🌳
+          </span>
+          <span className="text-[13px] text-[var(--color-ink)]">{x.title}</span>
+          <span className="ml-auto truncate pl-2 font-mono text-[10px] text-[var(--color-muted)]">
+            {hasRun ? formatLatency(tree.totalMs) : ""}
+          </span>
+        </button>
         {stations.map((s) => (
           <button
             key={s.id}

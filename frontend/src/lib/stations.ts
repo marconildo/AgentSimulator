@@ -1169,6 +1169,16 @@ function relabelAgentForScenario(s: StationMeta, lang: Lang, scenario: Scenario)
 // They stay **real** stations (not `comingSoon`); this is render-gating only.
 export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["storage", "ingestion"]);
 
+// Per-station glossary key for the dense, jargon-y compact readout each node
+// shows ("decision: answer", "top-4 · score 0.50"). `StationNode` appends the
+// matching one-line hint to the readout's native tooltip so the term isn't
+// thrown without a definition. Only stations whose readout uses jargon need one;
+// every value here must be a real key in the i18n `glossary` (pinned by a test).
+export const READOUT_GLOSSARY_KEY: Partial<Record<StationId, string>> = {
+  agent: "decision",
+  rag: "top-k",
+};
+
 function isUploadOnlyHop(h: { source: StationId; target: StationId }): boolean {
   return UPLOAD_ONLY_STATIONS.has(h.source) || UPLOAD_ONLY_STATIONS.has(h.target);
 }

@@ -2,6 +2,7 @@
 // or the architecture data, which live localized in their own files). One
 // object per language; the `Strings` interface keeps both in lockstep.
 
+import type { TraceNode } from "../lib/executionTree";
 import type { TimelinePhase } from "../lib/phases";
 import type { Lang } from "./index";
 
@@ -270,13 +271,15 @@ export interface Strings {
     idle: string;
     // Named phase markers on the scrubber (004-timeline-phases).
     phases: Record<TimelinePhase, string>;
-    // Per-phase latency waterfall (015-latency-waterfall). Phase bar names reuse
-    // `phases`; only this chrome is new.
-    timing: {
+    // Execution-traces span tree (038-execution-traces, supersedes 015). Node
+    // names are LangGraph-faithful; `ChatOpenAI` and tool names are proper nouns
+    // rendered verbatim (not here).
+    execTrace: {
       title: string;
-      total: string;
-      overhead: string;
+      subtitle: string;
       empty: string;
+      nodes: Record<TraceNode, string>;
+      child: { embed: string; search: string; select: string };
     };
   };
   // 030-event-console — the expandable, scrollable trace log next to the footer.
@@ -300,6 +303,9 @@ export interface Strings {
     pause: string;
     resume: string;
     stop: string;
+    // 037 — manual ◀ ▶ stepping controls (pause the auto-play).
+    prev: string;
+    next: string;
     // Empty-state call to action — ▶ Tour loads a bundled canned trace so a
     // first-time visitor can preview the journey before sending (014 AC6).
     ctaEmpty: string;
@@ -392,6 +398,22 @@ export interface Strings {
     totalTokens: string;
     cost: string;
     approxProportion: string;
+    // 036-context-window-budget — the /context-style budget grid + legend.
+    windowOf: (model: string, size: string) => string;
+    usedInOut: (input: string, answer: string, max: string, pct: string) => string;
+    estimatedByCategory: string;
+    catSystemPrompt: string;
+    catToolDefs: string;
+    catSkills: string;
+    catMemory: string;
+    catRetrieved: string;
+    catMessages: string;
+    catCompletion: string;
+    freeSpace: string;
+    windowHint: string;
+    estimatedNote: string;
+    // The window is one model call; Usage & Cost sums every round of the turn.
+    perCallNote: string;
   };
   // 019-inline-citations — provenance chips on the settled answer. Chrome only;
   // tool args / chunk snippets / proper nouns stay verbatim (not translated).
@@ -711,6 +733,28 @@ const en: Strings = {
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
     stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
+    ALB: "ALB (Application Load Balancer) — AWS's load balancer that terminates TLS and spreads requests across backend containers.",
+    BLOB: "Blob storage — an object store for raw files (PDFs, images) the app keeps outside the databases.",
+    INDEX: "Vector index (HNSW) — the graph structure that makes nearest-neighbour search over embeddings fast.",
+    HNSW: "HNSW — the graph-based approximate-nearest-neighbour index the vector store uses to find similar chunks fast.",
+    RERANK: "Reranker — a second-pass model that reorders retrieved chunks by true relevance before they reach the LLM.",
+    GATEWAY: "LLM gateway — a proxy in front of model providers for routing, retries, rate limits and cost control.",
+    SAFETY: "Guardrails — input/output checks that block unsafe or off-policy prompts and responses.",
+    CACHE: "Semantic cache — reuses a past answer when a new question is close enough in meaning, skipping the LLM.",
+    EVALS: "Eval runner — automated scoring of answers against test cases to catch quality regressions.",
+    OTEL: "OpenTelemetry — the open standard for traces, metrics and logs that makes the pipeline observable.",
+    research:
+      "Researcher — a sub-agent that gathers and synthesises information for the orchestrator. (Planned — not yet implemented.)",
+    execute:
+      "Coder — a sub-agent that writes and runs code to carry out a task. (Planned — not yet implemented.)",
+    review:
+      "Critic — a sub-agent that reviews another agent's output and flags problems. (Planned — not yet implemented.)",
+    tiktoken: "tiktoken · o200k_base — OpenAI's tokenizer/encoding; token counts are model-specific, not chars ÷ 4.",
+    load_skill: "load_skill — an MCP tool the agent calls to pull in a named instruction bundle (a skill) on demand.",
+    "RAG hits": "RAG hits — the number of corpus chunks retrieved and fed to the LLM this turn (0 = ungrounded).",
+    decision: "decision: answer — the agent chose to reply directly; the alternative is call: a tool to gather more first.",
+    "top-k": "top-k · score — the k most similar chunks retrieved; score (0–1) is how close the best match is.",
+    iterations: "×N — this phase ran N times because the ReAct loop repeated (reason → act → observe).",
   },
   timeline: {
     title: "Replay & step",
@@ -731,11 +775,21 @@ const en: Strings = {
       respond: "Respond",
       persist: "Persist",
     },
-    timing: {
-      title: "Timing breakdown",
-      total: "Total",
-      overhead: "overhead / transit",
-      empty: "Run a turn to see where the time went.",
+    execTrace: {
+      title: "Execution traces",
+      subtitle: "Hierarchical span tree of the run — duration, tokens and cost per node.",
+      empty: "Run a turn to see the execution trace.",
+      nodes: {
+        route: "route",
+        think: "think",
+        tools: "tools",
+        generate: "generate",
+        respond: "respond",
+        retrieve: "retrieve",
+        memory: "memory",
+        persist: "persist",
+      },
+      child: { embed: "embed", search: "search", select: "select" },
     },
   },
   console: {
@@ -757,15 +811,19 @@ const en: Strings = {
     pause: "Pause tour",
     resume: "Resume tour",
     stop: "Stop tour",
+    prev: "Previous phase",
+    next: "Next phase",
     ctaEmpty: "▶ Preview the journey",
     captions: {
       request: "The browser sends your message to the API over HTTPS.",
       memory: "The backend loads recent conversation history — long-term memory.",
-      route: "The agent classifies the request and plans its route.",
+      route: "Route: the agent receives the query and plans its path — no LLM call yet.",
       retrieve: "RAG embeds the query and pulls the most relevant chunks.",
-      reason: "The agent reasons over the context and decides whether to call a tool.",
+      reason:
+        "Reason ≠ Generate: Reason decides what to do (which tool, if any) — the ReAct decision step. Generate writes the answer. Both call the LLM.",
       tools: "A tool runs over MCP and returns an observation.",
-      generate: "The model writes the answer, token by token.",
+      generate:
+        "Generate ≠ Reason: Generate writes the final answer, token by token. Reason only decides what to do. Both call the LLM.",
       respond: "The finished answer is streamed back to the client.",
       persist: "The conversation is saved to the database for next time.",
     },
@@ -864,6 +922,21 @@ const en: Strings = {
     totalTokens: "total tokens",
     cost: "cost (USD)",
     approxProportion: "approx. proportion of the context",
+    windowOf: (model, size) => `${model} · ${size} window`,
+    usedInOut: (input, answer, max, pct) =>
+      `input ${input} + answer ${answer} / ${max} (${pct})`,
+    estimatedByCategory: "Estimated usage by category",
+    catSystemPrompt: "System prompt",
+    catToolDefs: "Tool definitions",
+    catSkills: "Skills",
+    catMemory: "Memory (long-term)",
+    catRetrieved: "Retrieved context",
+    catMessages: "Messages",
+    catCompletion: "Completion (answer)",
+    freeSpace: "Free space",
+    windowHint: "The model's finite context window — used vs. free this turn.",
+    estimatedNote: "Per-category split is an estimate; used/max is the real billed total.",
+    perCallNote: "This is one model call's window; Usage & Cost sums every round of the turn.",
   },
   citation: {
     sources: "sources",
@@ -1180,6 +1253,28 @@ const pt: Strings = {
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
     stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",
+    ALB: "ALB (Application Load Balancer) — o balanceador de carga da AWS que encerra o TLS e distribui as requisições entre os containers.",
+    BLOB: "Armazenamento de blobs — um object store para arquivos brutos (PDFs, imagens) que o app guarda fora dos bancos.",
+    INDEX: "Índice vetorial (HNSW) — a estrutura em grafo que torna rápida a busca por vizinhos mais próximos sobre embeddings.",
+    HNSW: "HNSW — o índice de vizinhos mais próximos aproximados (baseado em grafo) que o banco vetorial usa para achar trechos similares rápido.",
+    RERANK: "Reranker — um modelo de segunda passada que reordena os trechos recuperados por relevância real antes do LLM.",
+    GATEWAY: "Gateway de LLM — um proxy na frente dos provedores de modelo para roteamento, retries, limites de taxa e controle de custo.",
+    SAFETY: "Guardrails — verificações de entrada/saída que bloqueiam prompts e respostas inseguros ou fora de política.",
+    CACHE: "Cache semântico — reutiliza uma resposta anterior quando a nova pergunta é próxima o bastante em significado, pulando o LLM.",
+    EVALS: "Eval runner — pontuação automática de respostas contra casos de teste para flagrar regressões de qualidade.",
+    OTEL: "OpenTelemetry — o padrão aberto de traces, métricas e logs que torna o pipeline observável.",
+    research:
+      "Pesquisador — um subagente que reúne e sintetiza informação para o orquestrador. (Planejado — ainda não implementado.)",
+    execute:
+      "Coder — um subagente que escreve e executa código para realizar uma tarefa. (Planejado — ainda não implementado.)",
+    review:
+      "Crítico — um subagente que revisa a saída de outro agente e aponta problemas. (Planejado — ainda não implementado.)",
+    tiktoken: "tiktoken · o200k_base — o tokenizador/encoding da OpenAI; a contagem de tokens é específica do modelo, não caracteres ÷ 4.",
+    load_skill: "load_skill — uma tool MCP que o agente chama para carregar sob demanda um pacote de instruções (uma skill).",
+    "RAG hits": "RAG hits — quantos trechos do corpus foram recuperados e enviados ao LLM neste turno (0 = sem fundamentação).",
+    decision: "decision: answer — o agente decidiu responder direto; a alternativa é call: chamar uma tool para buscar mais antes.",
+    "top-k": "top-k · score — os k trechos mais similares recuperados; o score (0–1) indica o quão próximo é o melhor.",
+    iterations: "×N — esta fase rodou N vezes porque o loop ReAct se repetiu (raciocinar → agir → observar).",
   },
   timeline: {
     title: "Replay e passo a passo",
@@ -1200,11 +1295,21 @@ const pt: Strings = {
       respond: "Resposta",
       persist: "Persistência",
     },
-    timing: {
-      title: "Quebra de tempo",
-      total: "Total",
-      overhead: "sobrecarga / trânsito",
-      empty: "Rode um turno para ver para onde foi o tempo.",
+    execTrace: {
+      title: "Traces de execução",
+      subtitle: "Árvore hierárquica de spans do run — duração, tokens e custo por nó.",
+      empty: "Rode um turno para ver o trace de execução.",
+      nodes: {
+        route: "route",
+        think: "think",
+        tools: "tools",
+        generate: "generate",
+        respond: "respond",
+        retrieve: "retrieve",
+        memory: "memory",
+        persist: "persist",
+      },
+      child: { embed: "embed", search: "search", select: "select" },
     },
   },
   console: {
@@ -1226,15 +1331,19 @@ const pt: Strings = {
     pause: "Pausar tour",
     resume: "Retomar tour",
     stop: "Encerrar tour",
+    prev: "Fase anterior",
+    next: "Próxima fase",
     ctaEmpty: "▶ Pré-visualizar a jornada",
     captions: {
       request: "O navegador envia sua mensagem à API por HTTPS.",
       memory: "O backend carrega o histórico recente da conversa — memória de longo prazo.",
-      route: "O agente classifica a requisição e planeja a rota.",
+      route: "Route: o agente recebe a consulta e planeja o caminho — ainda sem chamar o LLM.",
       retrieve: "O RAG vetoriza a pergunta e busca os trechos mais relevantes.",
-      reason: "O agente raciocina sobre o contexto e decide se chama uma ferramenta.",
+      reason:
+        "Reason ≠ Generate: Reason decide o que fazer (qual ferramenta, se houver) — o passo de decisão do ReAct. Generate escreve a resposta. Ambos chamam o LLM.",
       tools: "Uma ferramenta roda via MCP e retorna uma observação.",
-      generate: "O modelo escreve a resposta, token a token.",
+      generate:
+        "Generate ≠ Reason: Generate escreve a resposta final, token a token. Reason apenas decide o que fazer. Ambos chamam o LLM.",
       respond: "A resposta pronta é transmitida de volta ao cliente.",
       persist: "A conversa é salva no banco para a próxima vez.",
     },
@@ -1333,6 +1442,21 @@ const pt: Strings = {
     totalTokens: "tokens totais",
     cost: "custo (US$)",
     approxProportion: "proporção aprox. do contexto",
+    windowOf: (model, size) => `${model} · janela de ${size}`,
+    usedInOut: (input, answer, max, pct) =>
+      `entrada ${input} + resposta ${answer} / ${max} (${pct})`,
+    estimatedByCategory: "Uso estimado por categoria",
+    catSystemPrompt: "Prompt de sistema",
+    catToolDefs: "Definições de ferramentas",
+    catSkills: "Skills",
+    catMemory: "Memória (longo prazo)",
+    catRetrieved: "Contexto recuperado",
+    catMessages: "Mensagens",
+    catCompletion: "Resposta gerada",
+    freeSpace: "Espaço livre",
+    windowHint: "A janela de contexto finita do modelo — usado × livre neste turno.",
+    estimatedNote: "A divisão por categoria é uma estimativa; usado/máx é o total real cobrado.",
+    perCallNote: "Esta é a janela de uma chamada ao modelo; Usage & Cost soma todas as rodadas do turno.",
   },
   citation: {
     sources: "fontes",

@@ -88,7 +88,15 @@ class SimulateFailure(StrEnum):
 
 
 class TraceEvent(BaseModel):
-    """A single observable moment in the lifecycle of one request."""
+    """A single observable moment in the lifecycle of one request.
+
+    ``data`` is an open map; some stages enrich it additively (no new ``Stage``):
+    the ``llm.prompt`` END carries the assembled-prompt preview and, since
+    036-context-window-budget, ``context_window`` (int) + ``context_budget`` (a
+    per-category token map: ``system``/``tool_defs``/``skills``/``memory``/
+    ``retrieved``/``messages``). Mirrored by ``PromptPreview`` in
+    ``frontend/src/types/events.ts``.
+    """
 
     trace_id: str
     seq: int = Field(..., description="Monotonic order within the trace.")

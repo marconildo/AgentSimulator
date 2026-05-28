@@ -5,6 +5,8 @@
 // we say so (`partial`) rather than faking a number. The tokenizer in play is
 // surfaced so learners grasp that token counts are model-specific.
 
+import { Fragment } from "react";
+
 import { useT } from "../i18n";
 import { formatTokens, formatUsd } from "../lib/cost";
 import { useHud } from "../store/useHud";
@@ -23,23 +25,39 @@ export function ConversationHud() {
       ? `${formatTokens(c.totalTokens)} ${t.hud.tokens} (${formatTokens(c.promptTokens)} ${t.hud.tokensIn} · ${formatTokens(c.completionTokens)} ${t.hud.tokensOut})`
       : `${formatTokens(c.totalTokens)} ${t.hud.tokens}`;
 
-  const stats = [
-    `${c.turns} ${t.hud.turns}`,
-    tokenStat,
-    formatUsd(c.costUsd),
-    `${c.toolCalls} ${t.hud.toolCalls}`,
-    `${c.ragHits} ${t.hud.ragHits}`,
+  // Each stat is its own span so the jargon ones carry a one-line glossary
+  // tooltip (e.g. what a "RAG hit" is) instead of being thrown undefined.
+  const stats: { text: string; hint?: string }[] = [
+    { text: `${c.turns} ${t.hud.turns}` },
+    { text: tokenStat },
+    { text: formatUsd(c.costUsd) },
+    { text: `${c.toolCalls} ${t.hud.toolCalls}` },
+    { text: `${c.ragHits} ${t.hud.ragHits}`, hint: t.glossary["RAG hits"] },
   ];
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--color-line)] bg-[var(--color-panel)] px-3 py-1.5 text-[10.5px] text-[var(--color-muted)]">
-      <span className="tabular-nums">{stats.join("  ·  ")}</span>
+      <span className="tabular-nums">
+        {stats.map((s, i) => (
+          <Fragment key={i}>
+            {i > 0 && "  ·  "}
+            <span title={s.hint} className={s.hint ? "cursor-help" : undefined}>
+              {s.text}
+            </span>
+          </Fragment>
+        ))}
+      </span>
       {c.partial && (
         <span className="text-[var(--color-warn)]" title={t.hud.estimate}>
           · {t.hud.partial}
         </span>
       )}
-      <span className="ml-auto shrink-0 font-mono text-[var(--color-faint)]">{t.hud.tokenizer}</span>
+      <span
+        title={t.glossary.tiktoken}
+        className="ml-auto shrink-0 cursor-help font-mono text-[var(--color-faint)]"
+      >
+        {t.hud.tokenizer}
+      </span>
     </div>
   );
 }

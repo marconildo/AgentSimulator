@@ -30,6 +30,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
+from ..llm.context import context_budget, context_window
 from ..llm.pricing import usage_metrics
 from ..llm.provider import LLMProvider, get_provider
 from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
@@ -37,9 +38,9 @@ from ..mcp.server import LOAD_SKILL_TOOL, found_for
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import TraceEmitter
-from .prompts import SYSTEM_PROMPT, compose_system
+from .prompts import SYSTEM_PROMPT, skills_block
 from .state import AgentState
-from .tools import agent_tool_specs, is_retrieval
+from .tools import RETRIEVAL_TOOL, agent_tool_specs, is_retrieval
 
 MAX_ITERATIONS = 3
 
@@ -71,21 +72,26 @@ def _skills_advertised(state: AgentState) -> bool:
     return enabled is None or LOAD_SKILL_TOOL in enabled
 
 
-def _effective_system(state: AgentState) -> str:
-    """The system prompt actually sent to the model.
+def _system_parts(state: AgentState) -> tuple[str, str]:
+    """The base system prompt and the (separate) skills-catalog block.
 
     006-interactive-experiments: a non-blank ``system_prompt`` override fully
-    replaces the default; a blank/whitespace one (or absent) falls back to the
-    default ``SYSTEM_PROMPT``. 027-skills: the skill catalog (name + description)
-    is appended when there are skills *and* ``load_skill`` is advertised — the
-    body is never included (loaded on demand via the tool).
+    replaces the default ``base``; a blank/whitespace one falls back to the
+    default ``SYSTEM_PROMPT``. 027-skills: the catalog block (name + description)
+    is non-empty only when there are skills *and* ``load_skill`` is advertised.
+    Returned separately so 036's budget can attribute them to distinct categories.
     """
     override = state["system_prompt"]
     base = override if (override and override.strip()) else SYSTEM_PROMPT
     catalog = state.get("skills_catalog") or []
-    if catalog and _skills_advertised(state):
-        return compose_system(base, catalog)
-    return base
+    skills = skills_block(catalog) if (catalog and _skills_advertised(state)) else ""
+    return base, skills
+
+
+def _effective_system(state: AgentState) -> str:
+    """The system prompt actually sent to the model (base + skills block)."""
+    base, skills = _system_parts(state)
+    return f"{base}\n\n{skills}" if skills else base
 
 
 async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -149,7 +155,25 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                 )
                 # The retrieved-context readout (the inspector's "context window")
                 # comes from state — the thread carries it as a ToolMessage.
-                prompt_rec.data = {**decision.prompt_preview, "context": state["context"]}
+                # 036-context-window-budget: attach the real model window + the
+                # per-category tiktoken split (a labelled estimate) so the Agent
+                # panel renders a /context-style budget against the real maximum.
+                base, skills = _system_parts(state)
+                prompt_rec.data = {
+                    **decision.prompt_preview,
+                    "context": state["context"],
+                    "context_window": context_window(provider.model_name),
+                    "context_budget": context_budget(
+                        system=base,
+                        tools=specs,
+                        skills=skills,
+                        history=state["history"],
+                        retrieved=state["context"],
+                        thread=state["messages"],
+                        retrieval_tools={RETRIEVAL_TOOL},
+                        skill_tools={LOAD_SKILL_TOOL},
+                    ),
+                }
         except TimeoutError as exc:
             # Only the *injected* timeout degrades here; a real model timeout
             # propagates unchanged to main.py's handler (preserves prior behavior).

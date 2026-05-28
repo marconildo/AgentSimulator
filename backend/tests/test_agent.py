@@ -112,6 +112,26 @@ async def test_llm_calls_carry_token_usage_and_cost():
         assert ev.metrics.get("cost_usd", -1) >= 0, f"no cost_usd on {ev.stage}"
 
 
+async def test_llm_prompt_carries_context_window_and_budget():
+    # 036-context-window-budget (AC4) — every reasoning round's `llm.prompt` END
+    # carries the real model window (int) + the per-category token split (the six
+    # used categories), computed server-side with tiktoken. Additive `data`; no
+    # new Stage.
+    from app.llm.context import BUDGET_CATEGORIES
+
+    _answer, events = await _run(_RETRIEVAL_QUESTION)
+    prompt = next(e for e in events if e.stage == "llm.prompt" and e.phase == "end")
+    window = prompt.data["context_window"]
+    budget = prompt.data["context_budget"]
+    assert isinstance(window, int) and window > 0
+    assert set(budget) == set(BUDGET_CATEGORIES)
+    assert all(isinstance(v, int) and v >= 0 for v in budget.values())
+    # This run grounds an answer, so the system prompt + advertised tool schemas
+    # are non-empty real slices of the window.
+    assert budget["system"] > 0
+    assert budget["tool_defs"] > 0
+
+
 async def test_reasoning_uses_the_llm_as_an_observable_span():
     # 010-llm-as-brain (AC1) — the agent reasons by *calling the model*: the decide
     # call is an `llm.prompt` START/END span (not an end-only marker), so the LLM is

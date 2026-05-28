@@ -13,6 +13,10 @@ export interface TierNodeData {
 // canonical n-tier term. Clicks pass through to the pane below.
 export function TierNode(props: NodeProps) {
   const { meta, service } = props.data as TierNodeData;
+  // The cloud line is proper nouns (e.g. "App Runner / ECS Fargate + ALB") the
+  // overlay deliberately doesn't translate. Append the tier's generic role so a
+  // hover answers "what is this / why is it here" without defining each acronym.
+  const serviceTitle = service === meta.generic ? service : `${service} — ${meta.generic}`;
   return (
     <div
       className="pointer-events-none h-full w-full rounded-2xl"
@@ -28,11 +32,17 @@ export function TierNode(props: NodeProps) {
         >
           {meta.title}
         </span>
-        <span className="min-w-0 truncate text-[9px] uppercase tracking-wider text-[var(--color-muted)]">
+        <span
+          title={meta.alias}
+          className="min-w-0 truncate text-[9px] uppercase tracking-wider text-[var(--color-muted)]"
+        >
           {meta.alias}
         </span>
       </div>
-      <div className="truncate px-3 text-[10px] leading-tight text-[var(--color-muted)]">
+      {/* The cloud service line can concatenate several proper nouns (e.g.
+          "Cloud Storage + Cloud CDN + Cloud Armor") and overflow the box —
+          clip with ellipsis and reveal the full list on hover. */}
+      <div title={serviceTitle} className="truncate px-3 text-[10px] leading-tight text-[var(--color-muted)]">
         <span className="font-mono">{service}</span>
       </div>
     </div>

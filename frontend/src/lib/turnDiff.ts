@@ -1,26 +1,36 @@
-// 020-turn-diff: the pure core behind "compare with previous turn". The lesson —
-// "the context window is finite and grows with the conversation" — is best taught
-// by comparison, so we diff two turns' per-section context-window breakdowns and
-// highlight what grew/shrank/stayed the same.
+// 020-turn-diff (+ 036-context-window-budget): the pure core behind "compare with
+// previous turn". The lesson — "the context window is finite and grows with the
+// conversation" — is best taught by comparison, so we diff two turns' per-category
+// context-window breakdowns and highlight what grew/shrank/stayed the same.
 //
-// `contextSections(events)` is the SINGLE source of the per-section token split:
-// the Agent-anatomy context-window bar consumes it too, so the bar and the diff
-// can never disagree (a parity test pins the numbers). It deliberately reuses the
-// same coarse `tok()` estimate the bar has always shown (chars/4), NOT a real
-// tokenizer — the diff matches what's on screen, labelled approximate. It reads
-// only existing event `data`; the prior turn's trace is loaded via 022.
+// `contextSections(events)` is the SINGLE source of the per-category token split:
+// the Agent-anatomy budget grid (036) consumes it too, so the grid and the diff
+// can never disagree. Since 036 it prefers the **real** per-category split emitted
+// on the `llm.prompt` END (`context_budget`, counted server-side with tiktoken);
+// it falls back to the coarse chars/4 estimate only for older/replayed traces that
+// lack it (labelled approximate). It reads only existing event `data`; the prior
+// turn's trace is loaded via 022.
 
-import type { TraceEvent } from "../types/events";
+import type { ContextBudget, TraceEvent } from "../types/events";
 
-export type Section = "system" | "history" | "rag" | "tools" | "user";
+// The six "used" categories (mirrors backend BUDGET_CATEGORIES); Free space is
+// derived in `contextBudget.ts`, not a section here. Order is fixed so the diff
+// and grid render deterministically.
+export type Section = keyof ContextBudget;
 
-// Order is fixed so the diff renders deterministically.
-export const SECTIONS: Section[] = ["system", "history", "rag", "tools", "user"];
+export const SECTIONS: Section[] = [
+  "system",
+  "tool_defs",
+  "skills",
+  "memory",
+  "retrieved",
+  "messages",
+];
 
-/** The bar's rough token estimate: ~4 chars per token (mirrors AgentDetail). */
+/** The fallback's rough token estimate: ~4 chars per token (pre-036 traces). */
 export const tok = (s: string | undefined): number => Math.ceil((s?.length ?? 0) / 4);
 
-function lastEnd(events: TraceEvent[], stage: string): TraceEvent | undefined {
+export function lastEnd(events: TraceEvent[], stage: string): TraceEvent | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     if (events[i].stage === stage && events[i].phase === "end") return events[i];
   }
@@ -28,15 +38,30 @@ function lastEnd(events: TraceEvent[], stage: string): TraceEvent | undefined {
 }
 
 /**
- * Per-section token estimate for one turn — identical to what the Agent-anatomy
- * context-window bar derives (so the two share one source). Sections absent from
- * the trace report 0.
+ * Per-category token split for one turn — the single source shared by the
+ * Agent-anatomy budget grid and the "compare with previous turn" diff. Prefers
+ * the real `context_budget` emitted on the latest `llm.prompt` END (036); falls
+ * back to the chars/4 estimate when absent. Categories with no content report 0.
  */
 export function contextSections(events: TraceEvent[]): Record<Section, number> {
-  const route = lastEnd(events, "agent.route");
   const prompt = lastEnd(events, "llm.prompt");
-  const read = lastEnd(events, "db.read");
+  const emitted = prompt?.data.context_budget as ContextBudget | undefined;
+  if (emitted) {
+    return {
+      system: emitted.system ?? 0,
+      tool_defs: emitted.tool_defs ?? 0,
+      skills: emitted.skills ?? 0,
+      memory: emitted.memory ?? 0,
+      retrieved: emitted.retrieved ?? 0,
+      messages: emitted.messages ?? 0,
+    };
+  }
 
+  // chars/4 fallback (pre-036 / replayed traces): reconstruct the categories from
+  // the legacy event data the bar used to read. Tool *schemas* and skills were
+  // never on the trace then, so those slices are honestly 0.
+  const route = lastEnd(events, "agent.route");
+  const read = lastEnd(events, "db.read");
   const query = (route?.data.query as string | undefined) ?? "";
   const system = (prompt?.data.system as string | undefined) ?? "";
   const context = (prompt?.data.context as string | undefined) ?? "";
@@ -52,10 +77,12 @@ export function contextSections(events: TraceEvent[]): Record<Section, number> {
 
   return {
     system: tok(system),
-    rag: tok(context),
-    tools: tok(toolResultsText),
-    history: tok(historyText),
-    user: tok(query),
+    tool_defs: 0,
+    skills: 0,
+    memory: tok(historyText),
+    retrieved: tok(context),
+    // The user turn + tool results make up the working thread.
+    messages: tok(query) + tok(toolResultsText),
   };
 }
 
