@@ -19,8 +19,9 @@ export interface MemoryGrowthRow {
   turn: number; // 1-based, oldest-first
   message: string; // the user's question of this prior turn
   answer: string; // the assistant's final answer (the only thing carried)
-  tokens: number; // real tiktoken count, from the backend (cl100k_base)
-  barWidth: number; // tokens / max(rows.tokens) — for the bar visualization
+  tokens: number; // real tiktoken count of THIS turn alone (backend, cl100k_base)
+  cumulativeTokens: number; // Σ tokens[0..i] — what's in the window after this turn
+  barWidth: number; // cumulativeTokens / totalTokens — staircase, last row = 1.0
 }
 
 export interface MemoryGrowth {
@@ -62,15 +63,24 @@ export function deriveMemoryGrowth(events: TraceEvent[], cursor: number): Memory
     return { ...EMPTY, limit };
   }
 
-  const max = recentTokens.reduce((m, t) => Math.max(m, t), 0);
-  const rows: MemoryGrowthRow[] = recent.map((pair, i) => ({
-    turn: i + 1,
-    message: pair.message,
-    answer: pair.answer,
-    tokens: recentTokens[i],
-    barWidth: max > 0 ? recentTokens[i] / max : 0,
-  }));
+  // AC5 (amended 2026-05-28) — bars are cumulative shares of the in-window
+  // total, so the panel reads as a staircase of the window filling up turn by
+  // turn (`barWidth = Σ tokens[0..i] / totalTokens`). The last row is always
+  // 1.0 by construction. Per-row `tokens` still carries the individual weight
+  // so the row tooltip can keep the original "this turn cost X" reading.
   const totalTokens = recentTokens.reduce((s, t) => s + t, 0);
+  let running = 0;
+  const rows: MemoryGrowthRow[] = recent.map((pair, i) => {
+    running += recentTokens[i];
+    return {
+      turn: i + 1,
+      message: pair.message,
+      answer: pair.answer,
+      tokens: recentTokens[i],
+      cumulativeTokens: running,
+      barWidth: totalTokens > 0 ? running / totalTokens : 0,
+    };
+  });
   const nextToFallOut = rows.length > 0 && rows.length === limit ? rows[0].turn : null;
 
   return {

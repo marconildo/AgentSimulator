@@ -75,18 +75,39 @@ describe("deriveMemoryGrowth — projection of recent + recent_tokens (AC4, AC5)
     expect(g.totalTokens).toBe(20 + 598 + 22);
   });
 
-  it("normalizes barWidth so the largest weight row reaches 1 and others scale down", () => {
+  // AC5 (amended 2026-05-28) — bars are CUMULATIVE shares of the in-window
+  // total, so the panel reads as a staircase of the window filling up turn by
+  // turn. The first cut normalized to max(tokens), which let a single long
+  // answer dominate and hid the staircase intuition users arrive at the panel
+  // with. See specs/039-memory-growth-visualization/spec.md AC5 amendment.
+  it("computes barWidth as cumulative share so the last row always reaches 1.0", () => {
     seq = 0;
     const events = dbRead(PAIRS, [20, 598, 22]);
     const g = deriveMemoryGrowth(events, events.length - 1);
-    const max = Math.max(...g.rows.map((r) => r.tokens));
-    expect(max).toBe(598);
+    const total = 20 + 598 + 22;
     const bw = g.rows.map((r) => r.barWidth);
-    expect(bw[1]).toBeCloseTo(1, 5); // the longest row maxes out
-    expect(bw[0]).toBeCloseTo(20 / 598, 5);
-    expect(bw[2]).toBeCloseTo(22 / 598, 5);
-    // Any non-zero row has a visible bar (>0).
-    expect(bw.every((w) => w > 0)).toBe(true);
+    expect(bw[0]).toBeCloseTo(20 / total, 5);
+    expect(bw[1]).toBeCloseTo((20 + 598) / total, 5);
+    expect(bw[2]).toBeCloseTo(1, 5); // last row is always 100%
+    // Monotonic non-decreasing — the staircase property.
+    expect(bw[0]).toBeLessThanOrEqual(bw[1]);
+    expect(bw[1]).toBeLessThanOrEqual(bw[2]);
+  });
+
+  it("exposes cumulativeTokens per row so the label can read 'X / total'", () => {
+    seq = 0;
+    const events = dbRead(PAIRS, [20, 598, 22]);
+    const g = deriveMemoryGrowth(events, events.length - 1);
+    expect(g.rows.map((r) => r.cumulativeTokens)).toEqual([20, 20 + 598, 20 + 598 + 22]);
+    // The last cumulative count equals totalTokens by definition.
+    expect(g.rows[g.rows.length - 1].cumulativeTokens).toBe(g.totalTokens);
+  });
+
+  it("keeps any non-zero row visible (barWidth > 0)", () => {
+    seq = 0;
+    const events = dbRead(PAIRS, [20, 598, 22]);
+    const g = deriveMemoryGrowth(events, events.length - 1);
+    expect(g.rows.map((r) => r.barWidth).every((w) => w > 0)).toBe(true);
   });
 });
 

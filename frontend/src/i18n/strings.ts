@@ -418,6 +418,11 @@ export interface Strings {
     // only the visible text carries forward; reasoning / tool calls don't.
     memoryGrowth: string;
     memoryGrowthHint: string;
+    // 039 AC5 amendment (2026-05-28) — per-row label reads as
+    // `cumulative / total` to make the staircase obvious; the per-turn weight
+    // is one mouse-over away on the row.
+    growthRowLabel: (cumulative: string, total: string) => string;
+    growthRowHint: (perTurn: string) => string;
     currentlyInWindow: (total: string) => string;
     nextToFallOut: (limit: number, turn: number) => string;
     thisTurnNotStored: string;
@@ -947,6 +952,8 @@ const en: Strings = {
     perCallNote: "Used sums every LLM round in this turn (decide + answer) — matches Usage & Cost.",
     memoryGrowth: "Memory growth",
     memoryGrowthHint: "What carries forward from each prior turn — only the visible text.",
+    growthRowLabel: (cumulative, total) => `${cumulative} / ${total}`,
+    growthRowHint: (perTurn) => `This turn added ${perTurn} tokens`,
     currentlyInWindow: (total) => `Currently in window: ${total} tokens`,
     nextToFallOut: (limit, turn) => `Next to fall out (limit ${limit}): T${turn}`,
     thisTurnNotStored: "(this turn — not yet stored)",
@@ -1474,6 +1481,8 @@ const pt: Strings = {
     perCallNote: "Usado soma todas as rodadas de LLM neste turno (decidir + responder) — confere com Usage & Cost.",
     memoryGrowth: "Crescimento da memória",
     memoryGrowthHint: "O que carrega de cada turno anterior — só o texto visível.",
+    growthRowLabel: (cumulative, total) => `${cumulative} / ${total}`,
+    growthRowHint: (perTurn) => `Este turno acrescentou ${perTurn} tokens`,
     currentlyInWindow: (total) => `Atualmente na janela: ${total} tokens`,
     nextToFallOut: (limit, turn) => `Próxima a cair (limite ${limit}): T${turn}`,
     thisTurnNotStored: "(este turno — ainda não salvo)",

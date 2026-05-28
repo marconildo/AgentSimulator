@@ -291,6 +291,17 @@ describe("memory-growth i18n (039-memory-growth-visualization AC8)", () => {
     expect(UI.en.agentDetail.nextToFallOut(5, 1)).toMatch(/5.*1|1.*5/);
     expect(UI.pt.agentDetail.nextToFallOut(5, 1)).toMatch(/5.*1|1.*5/);
   });
+
+  // AC5 amendment (2026-05-28) — the staircase row label reads as
+  // `cumulative / total`; the per-turn weight is in a hover tooltip.
+  it("has the staircase row label + per-turn hint in en and pt (interpolating their args)", () => {
+    expect(UI.en.agentDetail.growthRowLabel("81", "470")).toContain("81");
+    expect(UI.en.agentDetail.growthRowLabel("81", "470")).toContain("470");
+    expect(UI.pt.agentDetail.growthRowLabel("81", "470")).toContain("81");
+    expect(UI.pt.agentDetail.growthRowLabel("81", "470")).toContain("470");
+    expect(UI.en.agentDetail.growthRowHint("338")).toContain("338");
+    expect(UI.pt.agentDetail.growthRowHint("338")).toContain("338");
+  });
 });
 
 describe("abstain-badge i18n (021-abstain-badge)", () => {

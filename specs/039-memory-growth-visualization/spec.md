@@ -116,9 +116,20 @@ because it is not yet `db.write`-ten when the panel renders mid-turn.
    `recent` + `recent_tokens` from the latest `db.read` END ≤ cursor and returns
    `{ rows: [{turn, message, answer, tokens}], totalTokens, nextToFallOut|null,
    limit }`. Before any `db.read` it returns an empty view (no crash).
-5. **AC5 — Render order & bar widths (FE).** Rows render oldest → newest with
-   bar widths proportional to `tokens / max(tokens, 1)`; the row for the largest
-   weight has the full bar (any non-zero row has a visible bar).
+5. **AC5 — Render order & cumulative bar widths (FE).** Rows render oldest →
+   newest with bar widths proportional to **`Σ tokens[0..i] / totalTokens`**
+   (cumulative share of the in-window total). Consequence: bar widths are
+   monotonically non-decreasing and the last row always reaches the full bar;
+   the visual reads as a **staircase** of the window filling up turn by turn.
+   The per-row label shows `cumulative / total` (e.g. `419 / 470`); the per-turn
+   token weight survives as the row's hover tooltip so the original "this turn
+   cost X" reading is one mouse-over away.
+   **Amended 2026-05-28** — the first cut normalized to the *largest* turn
+   (`tokens[i] / max(tokens)`), which made a single long answer dominate the
+   bars and hid the staircase intuition users were arriving at the panel with.
+   The cumulative form keeps every datum the original carried (per-row tokens
+   are still in the row data and in the tooltip) while making the "the window
+   fills up turn by turn" lesson the headline visual.
 6. **AC6 — Limit-5 fall-out signal (FE).** When `recent.length === limit`, the
    oldest row is flagged as *next to fall out*; with fewer rows, no flag is
    shown. `limit` is read from the same `db.read` data (no FE constant).

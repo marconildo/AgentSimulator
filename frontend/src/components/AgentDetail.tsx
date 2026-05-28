@@ -304,13 +304,21 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                     <div
                       key={r.turn}
                       className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]"
+                      title={a.growthRowHint(formatTokens(r.tokens))}
                     >
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="font-mono text-[10px] text-[var(--color-muted)]">
                           T{r.turn}
                         </span>
+                        {/* 039 AC5 amendment — cumulative / total, so the row
+                            number reads as 'after this turn, X of total are
+                            in the window'. The per-turn weight (r.tokens) is
+                            preserved in the row's hover tooltip. */}
                         <span className="font-mono text-[10px] tabular-nums text-[var(--color-text-soft)]">
-                          {formatTokens(r.tokens)}
+                          {a.growthRowLabel(
+                            formatTokens(r.cumulativeTokens),
+                            formatTokens(growth.totalTokens),
+                          )}
                         </span>
                       </div>
                       <div
