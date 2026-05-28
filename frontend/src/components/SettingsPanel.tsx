@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../i18n";
 import { CloudToggle } from "./CloudToggle";
+import { SettingsIcon } from "./icons";
 import { SkillsSettings } from "./SkillsSettings";
 import { getConfig, type AppConfig, type ClearResult } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
@@ -94,14 +95,14 @@ export function SettingsPanel() {
         aria-haspopup="true"
         aria-expanded={open}
         title={s.open}
-        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition"
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border bg-[var(--color-panel-2)] px-2.5 transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
         style={{
           borderColor: open ? "var(--color-accent)" : "var(--color-line)",
           color: open ? "var(--color-indigo-soft)" : "var(--color-muted)",
         }}
       >
-        <span aria-hidden>⚙️</span>
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-wide">
+        <SettingsIcon className="h-3.5 w-3.5" />
+        <span className="font-mono text-[10.5px] font-semibold uppercase tracking-wide">
           {s.label}
         </span>
       </button>
@@ -112,7 +113,7 @@ export function SettingsPanel() {
           style={{ background: "color-mix(in srgb, var(--color-panel) 98%, transparent)" }}
         >
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-[var(--color-ink)]">
-            <span aria-hidden>⚙️</span>
+            <SettingsIcon className="h-3.5 w-3.5 text-[var(--color-sky-soft)]" />
             {s.title}
           </div>
 

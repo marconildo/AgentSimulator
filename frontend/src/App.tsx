@@ -5,6 +5,14 @@ import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
 import { FlowCanvas } from "./components/FlowCanvas";
+import {
+  BackIcon,
+  BookIcon,
+  ChatIcon,
+  InspectorIcon,
+  Logo,
+  WarnIcon,
+} from "./components/icons";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
 import { ScenarioToggle } from "./components/ScenarioToggle";
@@ -72,7 +80,7 @@ function SidePanel({
   side: "left" | "right";
   collapsed: boolean;
   onToggle: () => void;
-  icon: string;
+  icon: ReactNode;
   collapseLabel: string;
   expandLabel: string;
   width: number;
@@ -92,9 +100,9 @@ function SidePanel({
             onClick={onToggle}
             title={expandLabel}
             aria-label={expandLabel}
-            className="grid h-8 w-8 place-items-center rounded-lg text-[16px] leading-none text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-ink)]"
+            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-ink)]"
           >
-            <span aria-hidden>{icon}</span>
+            {icon}
           </button>
           <button
             onClick={onToggle}
@@ -171,23 +179,32 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-[var(--color-base)]">
-      <header className="flex items-center gap-2 border-b border-[var(--color-line)] px-4 py-2.5">
+      <header className="flex items-center gap-2.5 border-b border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-panel)_55%,transparent)] px-4 py-2.5 backdrop-blur-sm">
         {/* Brand — the group shrinks tagline-first (it truncates) so a longer PT
             string never pushes the right-hand controls off-screen; the title
-            itself never truncates (whitespace-nowrap defines the min width). */}
-        <div className="flex min-w-0 shrink items-center gap-2.5">
-          <span className="shrink-0 text-xl" aria-hidden>
-            🧭
+            itself never truncates (whitespace-nowrap defines the min width).
+            The logomark sits in a soft halo so it reads as the masthead's
+            "centerpiece" without competing with the wordmark's weight. */}
+        <a
+          href="/"
+          className="group flex min-w-0 shrink items-center gap-2.5 text-[var(--color-ink)] no-underline transition"
+        >
+          <span
+            className="relative grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] text-[var(--color-sky-soft)] transition group-hover:border-[var(--color-sky)] group-hover:text-[var(--color-sky)]"
+            aria-hidden
+          >
+            <Logo className="h-[22px] w-[22px]" />
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-[14px] font-semibold leading-tight tracking-wide text-[var(--color-ink)]">
-              AI Agent Simulator
+            <h1 className="flex items-baseline gap-1.5 truncate text-[13.5px] font-semibold leading-tight tracking-tight text-[var(--color-ink)]">
+              <span>AI Agent</span>
+              <span className="text-[var(--color-sky-soft)]">Simulator</span>
             </h1>
-            <p className="hidden truncate text-[11px] leading-tight text-[var(--color-muted)] 2xl:block">
+            <p className="hidden truncate text-[10.5px] leading-tight tracking-wide text-[var(--color-muted)] xl:block">
               {t.app.tagline}
             </p>
           </div>
-        </div>
+        </a>
 
         <Divider />
 
@@ -211,24 +228,34 @@ export default function App() {
         {/* Navigation + status. */}
         <button
           onClick={() => setPage((p) => (p === "sim" ? "learn" : "sim"))}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[12px] font-medium transition"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[12px] font-medium transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
           style={{
             borderColor: page === "learn" ? "var(--color-sky)" : "var(--color-line)",
             color: page === "learn" ? "var(--color-sky-soft)" : "var(--color-text-soft)",
           }}
         >
-          <span aria-hidden>{page === "sim" ? "📚" : "←"}</span>
+          {page === "sim" ? (
+            <BookIcon className="h-3.5 w-3.5" />
+          ) : (
+            <BackIcon className="h-3.5 w-3.5" />
+          )}
           <span className="hidden lg:inline">
             {page === "sim" ? t.app.learn : t.app.simulator}
           </span>
         </button>
         {healthStatus === "ok" && llmModel && (
           <span
-            className="hidden items-center gap-1.5 whitespace-nowrap pl-1 text-[11px] text-[var(--color-muted)] xl:inline-flex"
+            className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-[3px] text-[10.5px] text-[var(--color-muted)] xl:inline-flex"
             title={t.app.liveTitle}
           >
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-ok)]" aria-hidden />
-            <span className="font-mono">{llmModel}</span>
+            <span
+              className="relative grid h-2 w-2 shrink-0 place-items-center"
+              aria-hidden
+            >
+              <span className="absolute h-2 w-2 animate-ping rounded-full bg-[var(--color-ok)] opacity-60" />
+              <span className="relative h-1.5 w-1.5 rounded-full bg-[var(--color-ok)]" />
+            </span>
+            <span className="font-mono tracking-tight text-[var(--color-text-soft)]">{llmModel}</span>
           </span>
         )}
         <a
@@ -237,9 +264,9 @@ export default function App() {
           rel="noopener noreferrer"
           aria-label="GitHub"
           title="GitHub"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[var(--color-line)] text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] text-[var(--color-muted)] transition hover:border-[var(--color-sky)] hover:text-[var(--color-sky-soft)]"
         >
-          <GitHubIcon className="h-4 w-4" />
+          <GitHubIcon className="h-3.5 w-3.5" />
         </a>
       </header>
 
@@ -248,7 +275,7 @@ export default function App() {
           role="alert"
           className="flex items-center justify-center gap-2 border-b border-[color-mix(in_srgb,var(--color-rose)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-rose)_12%,transparent)] px-4 py-2 text-center text-[12px] text-[var(--color-rose-soft)]"
         >
-          <span aria-hidden>⚠️</span>
+          <WarnIcon className="h-3.5 w-3.5 shrink-0" />
           <span>{banner === "offline" ? t.app.offline : t.app.noKey}</span>
         </div>
       )}
@@ -260,7 +287,7 @@ export default function App() {
               side="left"
               collapsed={chatCollapsed}
               onToggle={toggleChat}
-              icon="💬"
+              icon={<ChatIcon className="h-4 w-4" />}
               collapseLabel={t.node.collapse}
               expandLabel={t.node.expand}
               width={340}
@@ -282,7 +309,7 @@ export default function App() {
               side="right"
               collapsed={inspectorCollapsed}
               onToggle={toggleInspector}
-              icon="🔍"
+              icon={<InspectorIcon className="h-4 w-4" />}
               collapseLabel={t.node.collapse}
               expandLabel={t.node.expand}
               width={372}

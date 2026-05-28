@@ -34,7 +34,15 @@ const turnEvents = (): TraceEvent[] => {
   ];
 };
 
-const msg = (id: string) => ({ id, message: "q", answer: "a", chunks: [], skills: [], created_at: 0 });
+const msg = (id: string) => ({
+  id,
+  message: "q",
+  answer: "a",
+  chunks: [],
+  skills: [],
+  documents: [],
+  created_at: 0,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

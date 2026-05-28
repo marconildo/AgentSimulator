@@ -57,6 +57,18 @@ CREATE TABLE IF NOT EXISTS documents (
     chunk_count INTEGER NOT NULL DEFAULT 0,
     created_at  REAL NOT NULL
 );
+-- 040-message-attachments: per-message attachment join. A document is linked
+-- to AT MOST ONE message (the turn that introduced it via the composer), so
+-- the chip travels with that turn instead of staying sticky in the input.
+-- Retrieval semantics are unaffected — the agent still queries vectors by
+-- session, not by message. FK cascades both ways: deleting the message or
+-- the document drops the link.
+CREATE TABLE IF NOT EXISTS message_documents (
+    message_id  TEXT NOT NULL REFERENCES messages(id)  ON DELETE CASCADE,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    created_at  REAL NOT NULL,
+    PRIMARY KEY (message_id, document_id)
+);
 -- 027-skills: the global, agent-loadable skill catalog. A skill is a named
 -- instruction bundle the agent advertises by name+description and loads on
 -- demand (the `body`) via the `load_skill` tool. `name` is unique so the model
@@ -71,6 +83,8 @@ CREATE TABLE IF NOT EXISTS skills (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_session ON documents(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_message_documents_message  ON message_documents(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_documents_document ON message_documents(document_id);
 """
 
 # The first user message labels the conversation; truncate so the sidebar list
@@ -285,6 +299,7 @@ class ConversationStore:
         answer: str,
         chunks: list[dict[str, Any]] | None,
         skills: list[str] | None,
+        attached_document_ids: list[str] | None,
     ) -> dict[str, Any]:
         now = time()
         with self._connect() as conn:
@@ -302,6 +317,33 @@ class ConversationStore:
                     now,
                 ),
             )
+            # 040-message-attachments: link uploaded docs to the turn that
+            # introduced them, in the same transaction as the message itself.
+            # Two guards keep this honest:
+            #   (a) the doc must belong to this session — stale ids from a
+            #       client racing across sessions are dropped silently (AC3);
+            #   (b) the doc must not already be linked to another message —
+            #       a doc belongs to AT MOST ONE turn (AC4). The composite PK
+            #       on (message_id, document_id) is belt-and-braces against
+            #       same-message duplicates.
+            for doc_id in attached_document_ids or []:
+                doc_row = conn.execute(
+                    "SELECT 1 FROM documents WHERE id = ? AND session_id = ?",
+                    (doc_id, session_id),
+                ).fetchone()
+                if doc_row is None:
+                    continue
+                already_linked = conn.execute(
+                    "SELECT 1 FROM message_documents WHERE document_id = ?",
+                    (doc_id,),
+                ).fetchone()
+                if already_linked is not None:
+                    continue
+                conn.execute(
+                    "INSERT INTO message_documents "
+                    "(message_id, document_id, created_at) VALUES (?, ?, ?)",
+                    (message_id, doc_id, now),
+                )
             # Bump activity (drives recent-first ordering) and label the session
             # by its first message if it has no title yet (D7).
             conn.execute(
@@ -347,6 +389,34 @@ class ConversationStore:
                 "WHERE session_id = ? ORDER BY created_at ASC",
                 (session_id,),
             ).fetchall()
+            # 040-message-attachments: load the per-message attachments in one
+            # extra query and group in Python — keeps the message read cheap
+            # and the join optional (missing → []).
+            doc_rows = conn.execute(
+                """
+                SELECT md.message_id AS message_id,
+                       d.id          AS document_id,
+                       d.filename    AS filename,
+                       d.chunk_count AS chunk_count,
+                       d.created_at  AS created_at
+                FROM message_documents md
+                JOIN documents d ON d.id = md.document_id
+                JOIN messages  m ON m.id = md.message_id
+                WHERE m.session_id = ?
+                ORDER BY md.rowid ASC
+                """,
+                (session_id,),
+            ).fetchall()
+        by_message: dict[str, list[dict[str, Any]]] = {}
+        for d in doc_rows:
+            by_message.setdefault(d["message_id"], []).append(
+                {
+                    "document_id": d["document_id"],
+                    "filename": d["filename"],
+                    "chunk_count": d["chunk_count"],
+                    "created_at": d["created_at"],
+                }
+            )
         return [
             {
                 "id": r["id"],
@@ -355,6 +425,8 @@ class ConversationStore:
                 "chunks": json.loads(r["chunks"] or "[]"),
                 # 027-skills: the skill names applied to this turn (badge source).
                 "skills": json.loads(r["skills"] or "[]"),
+                # 040-message-attachments: docs the user attached on this turn.
+                "documents": by_message.get(r["id"], []),
                 "created_at": r["created_at"],
             }
             for r in rows
@@ -435,9 +507,17 @@ class ConversationStore:
         answer: str,
         chunks: list[dict[str, Any]] | None = None,
         skills: list[str] | None = None,
+        attached_document_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         return await asyncio.to_thread(
-            self._write_message_sync, session_id, message_id, message, answer, chunks, skills
+            self._write_message_sync,
+            session_id,
+            message_id,
+            message,
+            answer,
+            chunks,
+            skills,
+            attached_document_ids,
         )
 
     # --- skills (027-skills) -------------------------------------------------

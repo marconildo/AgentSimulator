@@ -267,7 +267,11 @@ async def chat(req: ChatRequest):
                 )
 
                 # Persist the finished message + the chunks retrieved for it
-                # (D5) — separate from the RAG vector store.
+                # (D5) — separate from the RAG vector store. 040-message-
+                # attachments: pass through the composer's pending document ids
+                # so the relational link `message ↔ document` is written in the
+                # same transaction (cross-session ids and already-linked ids
+                # are filtered inside the store).
                 async with emitter.stage(Stage.DB_WRITE, "Persisting the conversation") as db_rec:
                     db_rec.data = await store.write_message(
                         session_id,
@@ -276,6 +280,7 @@ async def chat(req: ChatRequest):
                         emitter.answer,
                         chunks=_retrieved_chunks(emitter),
                         skills=_applied_skills(emitter),
+                        attached_document_ids=req.attachment_document_ids,
                     )
 
                 rec.data = {
@@ -401,6 +406,11 @@ async def upload_document(session_id: str, file: Annotated[UploadFile, File()]):
 
     store = get_store()
     await store.ensure_session(session_id)
+    # 040-message-attachments: captured by the producer below, read by the
+    # done frame so the FE composer can stage the freshly-ingested doc as a
+    # chip without a follow-up `GET /documents` round-trip. ``-1`` if the
+    # producer never reaches the ingest result (early crash).
+    ingest_result: dict[str, Any] = {"chunk_count": -1}
 
     async def producer() -> None:
         try:
@@ -434,6 +444,7 @@ async def upload_document(session_id: str, file: Annotated[UploadFile, File()]):
                 # Track the document relationally (the vectors live in Chroma).
                 await store.add_document(session_id, document_id, filename, result["chunk_count"])
                 rec.data = result
+                ingest_result["chunk_count"] = int(result["chunk_count"])
         except Exception as exc:  # noqa: BLE001 - report to the client, don't hang
             await emitter.emit(Stage.BACKEND, Phase.END, "error", {"error": str(exc)})
         finally:
@@ -453,7 +464,12 @@ async def upload_document(session_id: str, file: Annotated[UploadFile, File()]):
         yield {
             "event": "done",
             "data": json.dumps(
-                {"trace_id": trace_id, "document_id": document_id, "filename": filename}
+                {
+                    "trace_id": trace_id,
+                    "document_id": document_id,
+                    "filename": filename,
+                    "chunk_count": ingest_result["chunk_count"],
+                }
             ),
         }
 

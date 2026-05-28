@@ -20,6 +20,6 @@ export default defineConfig({
   // run fully offline (the no-hardcoded-colors guard just reads source files).
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

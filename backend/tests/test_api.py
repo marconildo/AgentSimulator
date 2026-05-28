@@ -298,3 +298,91 @@ def test_upload_document_streams_ingestion_stages_and_lists_it():
         assert resp.status_code == 200
         assert resp.json()["vectors_removed"] >= 1
         assert client.get(f"/api/sessions/{sid}/documents").json() == []
+
+
+# --- 040-message-attachments ------------------------------------------------
+
+
+def test_chat_request_validates_attachment_document_ids_bounds():
+    # AC5 (schema, keyless) — the new request field is optional, accepts a list
+    # of strings, and is bounded to 16 ids so the chip strip + the JSON body
+    # stay reasonable.
+    from app.schemas import ChatRequest
+
+    # Default is None (today's behavior preserved, the field is opt-in).
+    assert ChatRequest(message="hi").attachment_document_ids is None
+    # An empty list is fine — explicitly no attachments.
+    assert ChatRequest(message="hi", attachment_document_ids=[]).attachment_document_ids == []
+    # Up to 16 ids round-trip.
+    ids = [f"d{i}" for i in range(16)]
+    assert ChatRequest(message="hi", attachment_document_ids=ids).attachment_document_ids == ids
+
+    # 17 is rejected by Pydantic validation.
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ChatRequest(message="hi", attachment_document_ids=[f"d{i}" for i in range(17)])
+
+
+def test_list_messages_returns_documents_field_keyless():
+    # AC6 (REST surface, keyless) — /api/sessions/{sid}/messages exposes the
+    # `documents` array on every message; defaulting to [] for messages written
+    # without attachments. Bypasses the chat endpoint by writing directly to
+    # the store, so this exercises only the REST→DB read path.
+    import asyncio
+
+    from app.db.store import get_store
+
+    store = get_store()
+
+    async def _seed():
+        sid = (await store.create_session())["id"]
+        await store.add_document(sid, "doc-aa", "a.pdf", chunk_count=2)
+        await store.write_message(sid, "m-bare", "q1", "a1")
+        await store.write_message(sid, "m-att", "q2", "a2", attached_document_ids=["doc-aa"])
+        return sid
+
+    sid = asyncio.run(_seed())
+
+    with TestClient(app) as client:
+        msgs = client.get(f"/api/sessions/{sid}/messages").json()
+        by_id = {m["id"]: m for m in msgs}
+        assert by_id["m-bare"]["documents"] == []
+        attached = by_id["m-att"]["documents"]
+        assert [d["document_id"] for d in attached] == ["doc-aa"]
+        assert attached[0]["filename"] == "a.pdf"
+        assert attached[0]["chunk_count"] == 2
+
+
+@pytest.mark.openai
+def test_chat_request_attaches_documents_through_endpoint():
+    # AC5 (integration) — POST /api/chat with attachment_document_ids persists
+    # the link via db.write; list_messages then reflects it. Uses batch mode so
+    # the assertion is direct (one JSON response).
+    import asyncio
+
+    from app.db.store import get_store
+
+    store = get_store()
+
+    async def _seed_doc(sid):
+        await store.add_document(sid, "doc-z9", "z.pdf", chunk_count=1)
+
+    with TestClient(app) as client:
+        sid = client.post("/api/sessions").json()["id"]
+        asyncio.run(_seed_doc(sid))
+
+        resp = client.post(
+            "/api/chat",
+            json={
+                "message": "What is RAG?",
+                "session_id": sid,
+                "mode": "batch",
+                "attachment_document_ids": ["doc-z9"],
+            },
+        )
+        assert resp.status_code == 200
+
+        msgs = client.get(f"/api/sessions/{sid}/messages").json()
+        assert len(msgs) == 1
+        assert [d["document_id"] for d in msgs[0]["documents"]] == ["doc-z9"]

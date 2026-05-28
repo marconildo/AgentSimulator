@@ -29,6 +29,11 @@ export interface ChatMessage {
   chunks: ChatChunk[];
   // 027-skills: names of the skills the agent loaded for this turn (badge source).
   skills: string[];
+  // 040-message-attachments: documents the user attached to this specific turn
+  // (the composer's pending list at send time). Empty for turns sent without
+  // any attached file; survives reload/replay because it's persisted in the
+  // `message_documents` join.
+  documents: DocumentMeta[];
   created_at: number;
 }
 
@@ -43,6 +48,10 @@ export interface UploadDone {
   trace_id: string;
   document_id: string;
   filename: string;
+  // 040-message-attachments: backend returns the freshly-ingested chunk count
+  // so the composer can stage the new doc as a `DocumentMeta` chip without a
+  // round-trip back to `listDocuments` for that single field.
+  chunk_count: number;
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

@@ -20,7 +20,9 @@ def test_no_tokens_costs_nothing():
 
 
 def test_usage_metrics_shape():
-    m = usage_metrics("gpt-4o-mini", TokenUsage(prompt_tokens=1000, completion_tokens=500, total_tokens=1500))
+    m = usage_metrics(
+        "gpt-4o-mini", TokenUsage(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
+    )
     assert m["prompt_tokens"] == 1000.0
     assert m["completion_tokens"] == 500.0
     assert m["total_tokens"] == 1500.0

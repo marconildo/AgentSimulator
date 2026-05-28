@@ -237,8 +237,12 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
   const t = useT();
   const lang = useLang((s) => s.lang);
   const messages = useChat((s) => s.messages);
-  const documents = useChat((s) => s.documents);
+  // 040-message-attachments: chips in the composer = pendingDocuments (next
+  // send); chips on a sent user bubble = message.documents (persisted join).
+  const pendingDocuments = useChat((s) => s.pendingDocuments);
   const pending = useChat((s) => s.pending);
+  // The optimistic-bubble chip snapshot (captured at send time).
+  const pendingAttachments = useChat((s) => s.pendingAttachments);
   const input = useChat((s) => s.input);
   const sending = useChat((s) => s.sending);
   const cancelled = useChat((s) => s.cancelled);
@@ -319,7 +323,13 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
             ))}
             {pending && (
               <div className="space-y-3">
-                <UserMessage text={pending} t={t} lang={lang} ts={null} />
+                <UserMessage
+                  text={pending}
+                  documents={pendingAttachments}
+                  t={t}
+                  lang={lang}
+                  ts={null}
+                />
                 <AgentMessage t={t} lang={lang} ts={null}>
                   {bubble.kind === "answer" ? (
                     <>
@@ -363,7 +373,7 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
       <Composer
         input={input}
         sending={sending}
-        documents={documents}
+        pendingDocuments={pendingDocuments}
         onChange={setInput}
         onSend={() => void send()}
         t={t}
@@ -417,7 +427,15 @@ function Exchange({
 }) {
   return (
     <div className="space-y-3">
-      <UserMessage text={message.message} t={t} lang={lang} ts={message.created_at} />
+      <UserMessage
+        text={message.message}
+        // 040-message-attachments: the chip row, if any, lives on the user
+        // bubble (the persisted turn that introduced the files).
+        documents={message.documents}
+        t={t}
+        lang={lang}
+        ts={message.created_at}
+      />
       <AgentMessage
         t={t}
         lang={lang}
@@ -450,21 +468,36 @@ function Stamp({ ts, lang, t }: { ts: number | null; lang: Lang; t: Strings }) {
 
 function UserMessage({
   text,
+  documents,
   t,
   lang,
   ts,
 }: {
   text: string;
+  // 040-message-attachments: docs the user attached to this specific turn
+  // (the composer's pending list at send time). Omitted/empty = no chip row.
+  documents?: DocumentMeta[];
   t: Strings;
   lang: Lang;
   ts: number | null;
 }) {
+  const chips = documents ?? [];
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-end gap-0.5"
+      className="flex flex-col items-end gap-1"
     >
+      {chips.length > 0 && (
+        <div
+          className="flex max-w-[85%] flex-wrap justify-end gap-1.5"
+          title={t.chat.attachedToThisMessage}
+        >
+          {chips.map((d) => (
+            <MessageAttachmentChip key={d.document_id} doc={d} />
+          ))}
+        </div>
+      )}
       <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[var(--color-sky-strong)] px-3 py-2 text-[13px] leading-relaxed text-[var(--color-on-accent)] shadow-sm">
         {text}
       </div>
@@ -472,6 +505,25 @@ function UserMessage({
         <Stamp ts={ts} lang={lang} t={t} />
       </span>
     </motion.div>
+  );
+}
+
+// 040-message-attachments: a committed chip on a sent user message. Mirrors
+// the composer's DocChip layout (icon · filename · chunk count) but has no
+// remove control — the file's link to this turn is the persisted answer to
+// "which message introduced it", and removing it would break that audit.
+function MessageAttachmentChip({ doc }: { doc: DocumentMeta }) {
+  return (
+    <span
+      data-testid="attached-doc-chip"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] px-2 py-1 text-[11px]"
+    >
+      <FileIcon className="h-3.5 w-3.5 shrink-0 text-[var(--color-ok-soft)]" />
+      <span className="min-w-0 max-w-[130px] truncate text-[var(--color-ink)]">{doc.filename}</span>
+      <span className="shrink-0 font-mono text-[9.5px] text-[var(--color-muted)]">
+        {doc.chunk_count}
+      </span>
+    </span>
   );
 }
 
@@ -627,14 +679,18 @@ function Sources({ chunks, t }: { chunks: ChatChunk[]; t: Strings }) {
 function Composer({
   input,
   sending,
-  documents,
+  pendingDocuments,
   onChange,
   onSend,
   t,
 }: {
   input: string;
   sending: boolean;
-  documents: DocumentMeta[];
+  // 040-message-attachments: composer-staged chips that will travel with the
+  // NEXT send. Each chip is removable here (the file/blob/vectors are wiped
+  // by the existing delete endpoint); once the user sends, the chip moves to
+  // the user bubble (no remove control there).
+  pendingDocuments: DocumentMeta[];
   onChange: (value: string) => void;
   onSend: () => void;
   t: Strings;
@@ -679,16 +735,21 @@ function Composer({
         }}
         className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2.5 py-2 shadow-sm transition focus-within:border-[color-mix(in_srgb,var(--color-sky)_60%,transparent)] focus-within:ring-2 focus-within:ring-[color-mix(in_srgb,var(--color-sky)_20%,transparent)]"
       >
-        {documents.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {documents.map((d) => (
-              <DocChip
-                key={d.document_id}
-                doc={d}
-                onRemove={() => void removeDocument(d.document_id)}
-                t={t}
-              />
-            ))}
+        {pendingDocuments.length > 0 && (
+          <div className="mb-2 flex flex-col gap-1">
+            <span className="px-1 text-[10.5px] text-[var(--color-faint)]">
+              {t.chat.pendingAttachmentsHint}
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {pendingDocuments.map((d) => (
+                <DocChip
+                  key={d.document_id}
+                  doc={d}
+                  onRemove={() => void removeDocument(d.document_id)}
+                  t={t}
+                />
+              ))}
+            </div>
           </div>
         )}
 
@@ -798,6 +859,7 @@ function PreSendHint({ text, t }: { text: string; t: Strings }) {
 function DocChip({ doc, onRemove, t }: { doc: DocumentMeta; onRemove: () => void; t: Strings }) {
   return (
     <span
+      data-testid="pending-doc-chip"
       className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] py-1 pl-2 pr-1 text-[11px]"
       title={t.chat.chunksStored(doc.chunk_count)}
     >

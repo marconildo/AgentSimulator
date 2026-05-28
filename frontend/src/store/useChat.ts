@@ -4,7 +4,6 @@ import {
   clearData,
   createSession,
   deleteDocument,
-  listDocuments,
   listMessages,
   listSessions,
   uploadDocument,
@@ -28,11 +27,19 @@ interface ChatState {
   sessions: SessionMeta[];
   activeSessionId: string | null;
   messages: ChatMessage[];
-  documents: DocumentMeta[];
+  // 040-message-attachments: documents the composer is holding for the NEXT
+  // send. A transient draft list — not the session-wide doc inventory.
+  // Cleared synchronously on send (the snapshot travels with the request and
+  // is rendered on the persisted user bubble) and on context switches
+  // (openSession / newChat / clearAll).
+  pendingDocuments: DocumentMeta[];
   // The just-sent user message, shown optimistically while the agent runs.
   pending: string | null;
+  // 040-message-attachments: pending → snapshot at send time so the optimistic
+  // user bubble shows the same chips that will land on the persisted message.
+  pendingAttachments: DocumentMeta[];
   input: string;
-  loading: boolean; // loading a thread's messages/documents
+  loading: boolean; // loading a thread's messages
   sending: boolean; // a chat round-trip is in flight
   uploading: boolean; // a PDF is being ingested
   // 016-cancel-stream: transient flag — the last run was cancelled by the user.
@@ -106,8 +113,9 @@ export const useChat = create<ChatState>((set, get) => ({
   sessions: [],
   activeSessionId: null,
   messages: [],
-  documents: [],
+  pendingDocuments: [],
   pending: null,
+  pendingAttachments: [],
   input: "",
   loading: false,
   sending: false,
@@ -160,13 +168,18 @@ export const useChat = create<ChatState>((set, get) => ({
       view: "thread",
       loading: true,
       pending: null,
+      // 040-message-attachments: session-context switch — the composer's
+      // pending list is per-draft, never carried across conversations. Past
+      // uploads in this session live on the messages they were attached to.
+      pendingDocuments: [],
+      pendingAttachments: [],
       cancelled: false,
       loadedTraceId: null,
       traceExpired: false,
     });
     try {
-      const [messages, documents] = await Promise.all([listMessages(id), listDocuments(id)]);
-      set({ messages, documents });
+      const messages = await listMessages(id);
+      set({ messages });
       // 022: never leave the canvas dead — auto-load the latest turn's trace
       // (messages are oldest-first, so the newest is last). An evicted latest
       // trace falls back to the click-to-load hint via `traceExpired`.
@@ -209,7 +222,9 @@ export const useChat = create<ChatState>((set, get) => ({
       view: "thread",
       activeSessionId: null,
       messages: [],
-      documents: [],
+      // 040-message-attachments: new draft starts with a clean composer.
+      pendingDocuments: [],
+      pendingAttachments: [],
       pending: null,
       input: "",
       cancelled: false,
@@ -241,6 +256,15 @@ export const useChat = create<ChatState>((set, get) => ({
     const message = (text ?? get().input).trim();
     if (!message || get().sending) return;
 
+    // 040-message-attachments: snapshot the composer's pending attachments
+    // *atomically*, BEFORE any await, then clear the composer in the same
+    // commit. This way an upload that finishes mid-send (uploadPdf appends to
+    // pendingDocuments) goes onto the *next* turn's snapshot, not this one
+    // (AC9). The snapshot rides along with the request (attachment_document_ids)
+    // and also feeds the optimistic in-flight user bubble (pendingAttachments).
+    const attachmentSnapshot = get().pendingDocuments;
+    const attachmentIds = attachmentSnapshot.map((d) => d.document_id);
+
     // First message of a draft persists the conversation (lazy creation).
     const sessionId = await get().ensureSession();
     if (!sessionId) return;
@@ -250,11 +274,25 @@ export const useChat = create<ChatState>((set, get) => ({
     const overrides = overridesFor(sessionId);
     const sim = useSimulator.getState();
     const signal = sim.beginRun();
-    set({ sending: true, pending: message, input: "", error: null, cancelled: false });
+    set({
+      sending: true,
+      pending: message,
+      pendingAttachments: attachmentSnapshot,
+      pendingDocuments: [],
+      input: "",
+      error: null,
+      cancelled: false,
+    });
 
     try {
       if (mode === "batch") {
-        const summary = await batchChat(message, signal, sessionId, overrides);
+        const summary = await batchChat(
+          message,
+          signal,
+          sessionId,
+          overrides,
+          attachmentIds,
+        );
         useSimulator.getState().playBatch(summary.events);
       } else {
         await streamChat(
@@ -266,6 +304,7 @@ export const useChat = create<ChatState>((set, get) => ({
           signal,
           sessionId,
           overrides,
+          attachmentIds,
         );
       }
       // Reload from the system of record so the thread shows the persisted
@@ -276,13 +315,21 @@ export const useChat = create<ChatState>((set, get) => ({
       await waitForFlowSettled(signal);
       if (signal.aborted) return; // a newer run took over — don't clobber its state
       // The canvas is showing this just-finished turn's live trace; mark it as
-      // the loaded turn so the revisit affordance (022) stays coherent.
+      // the loaded turn so the revisit affordance (022) stays coherent. The
+      // persisted message carries the attachment chips from now on; drop the
+      // in-flight snapshot since the real bubble is rendered.
       const newest = messages[messages.length - 1];
-      set({ messages, sessions, pending: null, loadedTraceId: newest?.id ?? null });
+      set({
+        messages,
+        sessions,
+        pending: null,
+        pendingAttachments: [],
+        loadedTraceId: newest?.id ?? null,
+      });
     } catch (err) {
       if (isAbort(err)) return;
       useSimulator.getState().failRun((err as Error).message);
-      set({ error: (err as Error).message, pending: null });
+      set({ error: (err as Error).message, pending: null, pendingAttachments: [] });
     } finally {
       set({ sending: false });
     }
@@ -298,7 +345,9 @@ export const useChat = create<ChatState>((set, get) => ({
   cancel: () => {
     if (!get().sending) return;
     useSimulator.getState().cancelRun();
-    set({ sending: false, cancelled: true, pending: null });
+    // 040-message-attachments: drop the optimistic in-flight chip snapshot
+    // too — the cancelled turn was never persisted, so nothing carries them.
+    set({ sending: false, cancelled: true, pending: null, pendingAttachments: [] });
   },
 
   uploadPdf: async (file) => {
@@ -312,16 +361,33 @@ export const useChat = create<ChatState>((set, get) => ({
     set({ uploading: true, error: null });
 
     try {
+      // 040-message-attachments: the upload endpoint's `done` frame already
+      // carries every field DocumentMeta needs (id, filename, chunk_count) —
+      // append the new doc directly to `pendingDocuments` instead of
+      // refetching the whole session list. The chip shows up in the composer
+      // and stays there until the user sends (or removes) it.
       await uploadDocument(
         sessionId,
         file,
         {
           onTrace: (e) => useSimulator.getState().pushTrace(e),
-          onDone: () => useSimulator.getState().endRun(),
+          onDone: (done) => {
+            useSimulator.getState().endRun();
+            set((s) => ({
+              pendingDocuments: [
+                ...s.pendingDocuments,
+                {
+                  document_id: done.document_id,
+                  filename: done.filename,
+                  chunk_count: done.chunk_count,
+                  created_at: Date.now() / 1000,
+                },
+              ],
+            }));
+          },
         },
         signal,
       );
-      set({ documents: await listDocuments(sessionId) });
     } catch (err) {
       if (isAbort(err)) return;
       useSimulator.getState().failRun((err as Error).message);
@@ -335,8 +401,14 @@ export const useChat = create<ChatState>((set, get) => ({
     const sessionId = get().activeSessionId;
     if (!sessionId) return;
     try {
+      // 040-message-attachments: removal happens while the chip is still
+      // pending (composer-staged). The backend wipes vectors + the stored
+      // blob + the row; the FE just splices the chip out of `pendingDocuments`.
+      // (Chips on already-persisted messages have no X — see ChatPanel.)
       await deleteDocument(sessionId, documentId);
-      set({ documents: await listDocuments(sessionId) });
+      set((s) => ({
+        pendingDocuments: s.pendingDocuments.filter((d) => d.document_id !== documentId),
+      }));
     } catch (err) {
       set({ error: (err as Error).message });
     }

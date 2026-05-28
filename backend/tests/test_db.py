@@ -137,3 +137,66 @@ async def test_ensure_session_is_lazy(tmp_path):
     again = await store.ensure_session("client-chosen-id")
     assert again["id"] == "client-chosen-id"
     assert len(await store.list_sessions()) == 1
+
+
+# --- 040-message-attachments ------------------------------------------------
+
+
+async def test_message_documents_round_trip(tmp_path):
+    # AC2 — a message can carry an ordered list of attached documents that
+    # round-trips through list_messages. Without the param, documents is [].
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    sid = (await store.create_session())["id"]
+    await store.add_document(sid, "d1", "a.pdf", chunk_count=3)
+    await store.add_document(sid, "d2", "b.pdf", chunk_count=7)
+
+    await store.write_message(sid, "m1", "q", "a", attached_document_ids=["d1", "d2"])
+    await store.write_message(sid, "m2", "q2", "a2")  # no attachments
+
+    msgs = await store.list_messages(sid)
+    assert len(msgs) == 2
+
+    m1 = next(m for m in msgs if m["id"] == "m1")
+    # Insertion order preserved; each entry mirrors DocumentMeta.
+    assert [d["document_id"] for d in m1["documents"]] == ["d1", "d2"]
+    by_id = {d["document_id"]: d for d in m1["documents"]}
+    assert by_id["d1"]["filename"] == "a.pdf"
+    assert by_id["d1"]["chunk_count"] == 3
+    assert by_id["d2"]["filename"] == "b.pdf"
+    assert by_id["d2"]["chunk_count"] == 7
+    assert all("created_at" in d for d in m1["documents"])
+
+    m2 = next(m for m in msgs if m["id"] == "m2")
+    assert m2["documents"] == []
+
+
+async def test_cross_session_document_ids_are_filtered(tmp_path):
+    # AC3 — a stale id from another session is silently dropped, not 5xx'd.
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    s1 = (await store.create_session())["id"]
+    s2 = (await store.create_session())["id"]
+    await store.add_document(s1, "d1", "a.pdf", chunk_count=3)
+    await store.add_document(s2, "d2", "b.pdf", chunk_count=4)
+
+    # No exception even though d2 lives in s2.
+    await store.write_message(s1, "m1", "q", "a", attached_document_ids=["d1", "d2"])
+
+    msgs = await store.list_messages(s1)
+    assert [d["document_id"] for d in msgs[0]["documents"]] == ["d1"]
+
+
+async def test_document_attaches_to_at_most_one_message(tmp_path):
+    # AC4 — a doc already linked to m1 is a no-op when re-attached to m2.
+    # m1 keeps its chip; m2 gets none.
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    sid = (await store.create_session())["id"]
+    await store.add_document(sid, "d1", "a.pdf", chunk_count=3)
+
+    await store.write_message(sid, "m1", "q1", "a1", attached_document_ids=["d1"])
+    await store.write_message(sid, "m2", "q2", "a2", attached_document_ids=["d1"])
+
+    msgs = await store.list_messages(sid)
+    m1 = next(m for m in msgs if m["id"] == "m1")
+    m2 = next(m for m in msgs if m["id"] == "m2")
+    assert [d["document_id"] for d in m1["documents"]] == ["d1"]
+    assert m2["documents"] == []

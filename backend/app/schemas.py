@@ -149,6 +149,14 @@ class ChatRequest(BaseModel):
     # degrade. Request-only, bounded enum; ``none`` (default) is unchanged.
     simulate_failure: SimulateFailure = SimulateFailure.NONE
 
+    # --- Message attachments (040-message-attachments) -----------------------
+    # Documents the composer was holding when the user pressed Send — the
+    # backend links each (after a per-session validity check) to the message
+    # persisted by ``db.write``, so the chip travels with the turn that
+    # introduced it. Optional; omitting it reproduces today's behavior (no
+    # link, no chip). Capped to bound the request size + chip-strip overflow.
+    attachment_document_ids: list[str] | None = Field(default=None, max_length=16)
+
 
 class SkillIn(BaseModel):
     """Create/update payload for a catalog skill (027-skills).

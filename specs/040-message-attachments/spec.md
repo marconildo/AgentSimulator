@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 040-message-attachments |
-| **Status** | clarified |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-28 |
 

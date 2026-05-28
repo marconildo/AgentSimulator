@@ -54,7 +54,8 @@ beforeEach(() => {
     sessions: [],
     activeSessionId: null,
     messages: [],
-    documents: [],
+    pendingDocuments: [],
+    pendingAttachments: [],
     pending: null,
     input: "",
     loading: false,
@@ -79,8 +80,18 @@ describe("useChat — clearAll (025-clear-databases)", () => {
     useChat.setState({
       sessions: [session("a"), session("b")],
       activeSessionId: "a",
-      messages: [{ id: "m", message: "hi", answer: "yo", chunks: [], skills: [], created_at: 0 }],
-      documents: [{ document_id: "d", filename: "x.pdf", chunk_count: 3, created_at: 0 }],
+      messages: [
+        {
+          id: "m",
+          message: "hi",
+          answer: "yo",
+          chunks: [],
+          skills: [],
+          documents: [],
+          created_at: 0,
+        },
+      ],
+      pendingDocuments: [{ document_id: "d", filename: "x.pdf", chunk_count: 3, created_at: 0 }],
     });
     // A leftover run on the canvas must be wiped too.
     useSimulator.setState({ events: [staleEvent], cursor: 0, status: "done" });
@@ -94,7 +105,8 @@ describe("useChat — clearAll (025-clear-databases)", () => {
     expect(s.sessions).toEqual([]);
     expect(s.activeSessionId).toBeNull();
     expect(s.messages).toEqual([]);
-    expect(s.documents).toEqual([]);
+    expect(s.pendingDocuments).toEqual([]);
+    expect(s.pendingAttachments).toEqual([]);
 
     const sim = useSimulator.getState();
     expect(sim.events).toEqual([]);

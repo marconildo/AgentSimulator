@@ -185,6 +185,15 @@ describe("chat cancel i18n (016-cancel-stream)", () => {
   });
 });
 
+describe("message-attachments i18n (040-message-attachments AC10)", () => {
+  it("has the composer hint + the attached-chip tooltip in en and pt", () => {
+    for (const key of ["pendingAttachmentsHint", "attachedToThisMessage"] as const) {
+      expect(UI.en.chat[key]?.trim()).toBeTruthy();
+      expect(UI.pt.chat[key]?.trim()).toBeTruthy();
+    }
+  });
+});
+
 describe("failure-injection i18n (017-failure-injection)", () => {
   it("has the selector label + hint in both languages", () => {
     for (const k of ["label", "hint"] as const) {

@@ -59,13 +59,26 @@ export async function streamChat(
   signal?: AbortSignal,
   sessionId?: string | null,
   overrides?: ChatOverrides,
+  // 040-message-attachments: documents the composer was holding at the moment
+  // of send. Forwarded as `attachment_document_ids` so the backend can link
+  // them to the persisted message in the same `db.write` transaction. Omit
+  // (or pass `[]`) to reproduce today's behavior.
+  attachmentDocumentIds?: string[],
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // Undefined override fields are dropped by JSON.stringify, so a default
     // (untouched) experiment sends nothing extra — today's behavior (AC5).
-    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "stream", ...overrides }),
+    body: JSON.stringify({
+      message,
+      session_id: sessionId ?? null,
+      mode: "stream",
+      ...overrides,
+      ...(attachmentDocumentIds && attachmentDocumentIds.length > 0
+        ? { attachment_document_ids: attachmentDocumentIds }
+        : {}),
+    }),
     signal,
   });
   await consumeEventStream(resp, (type, payload) => {
@@ -82,11 +95,20 @@ export async function batchChat(
   signal?: AbortSignal,
   sessionId?: string | null,
   overrides?: ChatOverrides,
+  attachmentDocumentIds?: string[],
 ): Promise<TraceSummary> {
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId ?? null, mode: "batch", ...overrides }),
+    body: JSON.stringify({
+      message,
+      session_id: sessionId ?? null,
+      mode: "batch",
+      ...overrides,
+      ...(attachmentDocumentIds && attachmentDocumentIds.length > 0
+        ? { attachment_document_ids: attachmentDocumentIds }
+        : {}),
+    }),
     signal,
   });
   if (!resp.ok) throw new Error(`Chat request failed: ${resp.status}`);

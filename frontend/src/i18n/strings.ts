@@ -62,6 +62,10 @@ export interface Strings {
     // 027-skills: the "skills applied" badge on an answer (count + hover list).
     skillsApplied: (n: number) => string;
     skillsBadge: string;
+    // 040-message-attachments: inline hint above the composer's pending chips
+    // + the hover/title on chips already committed to a sent user message.
+    pendingAttachmentsHint: string;
+    attachedToThisMessage: string;
   };
   // 022-message-trace-link: revisit a past turn's trace on the canvas.
   trace: {
@@ -541,6 +545,8 @@ const en: Strings = {
     cancelled: "Run cancelled",
     skillsApplied: (n) => `${n} ${n === 1 ? "skill" : "skills"} applied in this response`,
     skillsBadge: "Skills applied",
+    pendingAttachmentsHint: "Pending attachments — will travel with your next message.",
+    attachedToThisMessage: "Attached to this message",
   },
   trace: {
     clickToLoad: "Click a message to load its trace",
@@ -1070,6 +1076,8 @@ const pt: Strings = {
     cancelled: "Execução cancelada",
     skillsApplied: (n) => `${n} ${n === 1 ? "skill aplicada" : "skills aplicadas"} nesta resposta`,
     skillsBadge: "Skills aplicadas",
+    pendingAttachmentsHint: "Anexos pendentes — vão junto com sua próxima mensagem.",
+    attachedToThisMessage: "Anexado a esta mensagem",
   },
   trace: {
     clickToLoad: "Clique numa mensagem para carregar seu trace",

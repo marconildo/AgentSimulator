@@ -61,7 +61,7 @@ const resetStore = () =>
     sessions: [],
     activeSessionId: null,
     messages: [],
-    documents: [],
+    pendingDocuments: [],
     pending: null,
     input: "",
     loading: false,
@@ -69,6 +69,13 @@ const resetStore = () =>
     uploading: false,
     error: null,
   });
+
+const docMeta = (document_id: string, filename = `${document_id}.pdf`) => ({
+  document_id,
+  filename,
+  chunk_count: 3,
+  created_at: 0,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -82,7 +89,17 @@ describe("useChat — lazy session creation", () => {
     useChat.setState({
       sessions: [session("old")],
       activeSessionId: "old",
-      messages: [{ id: "m", message: "hi", answer: "yo", chunks: [], skills: [], created_at: 0 }],
+      messages: [
+        {
+          id: "m",
+          message: "hi",
+          answer: "yo",
+          chunks: [],
+          skills: [],
+          documents: [],
+          created_at: 0,
+        },
+      ],
     });
 
     await useChat.getState().newChat();
@@ -274,7 +291,15 @@ describe("useChat — chat stays in lockstep with the paced flow", () => {
 
   it("holds the persisted swap until the flow settles", async () => {
     vi.mocked(chatApi.listMessages).mockResolvedValue([
-      { id: "m", message: "hi", answer: "Hello.", chunks: [], skills: [], created_at: 1 },
+      {
+        id: "m",
+        message: "hi",
+        answer: "Hello.",
+        chunks: [],
+        skills: [],
+        documents: [],
+        created_at: 1,
+      },
     ]);
     vi.mocked(chatApi.listSessions).mockResolvedValue([session("s")]);
     // The stream resolves on the network WITHOUT calling onDone, so the run is
@@ -305,5 +330,103 @@ describe("useChat — chat stays in lockstep with the paced flow", () => {
     await p;
     expect(useChat.getState().pending).toBeNull();
     expect(useChat.getState().messages).toHaveLength(1);
+  });
+});
+
+// 040-message-attachments: pending chips are a transient draft list. Send must
+// snapshot them atomically, ship the snapshot in the request, and reset the
+// composer's pending list — so a chip uploaded mid-send queues for the *next*
+// turn instead of smearing across two.
+describe("useChat — pending attachments travel with the message", () => {
+  it("send clears pending attachments + input and ships the snapshot ids", async () => {
+    // AC1 + part of AC5 (FE side) — seed pendingDocuments + input, send,
+    // assert both reset and the streamChat call carries the snapshot ids.
+    vi.mocked(chatApi.createSession).mockResolvedValue(session("created"));
+    vi.mocked(chatApi.listMessages).mockResolvedValue([]);
+    vi.mocked(chatApi.listSessions).mockResolvedValue([session("created")]);
+    vi.mocked(sse.streamChat).mockImplementation(async (_m, handlers) => {
+      handlers.onDone({ trace_id: "t", answer: "", session_id: "created" });
+    });
+    useChat.setState({
+      input: "Sobre qual curso fala?",
+      activeSessionId: "created",
+      pendingDocuments: [docMeta("d1"), docMeta("d2")],
+    });
+
+    await useChat.getState().send();
+
+    const s = useChat.getState();
+    expect(s.pendingDocuments).toEqual([]);
+    expect(s.input).toBe("");
+
+    const call = vi.mocked(sse.streamChat).mock.calls[0];
+    // Sixth positional arg is attachmentDocumentIds (after message, handlers,
+    // signal, sessionId, overrides). The snapshot is in insertion order.
+    expect(call[5]).toEqual(["d1", "d2"]);
+  });
+
+  it("an upload while a send is in flight queues for the NEXT turn (AC9)", async () => {
+    // Set up a streamChat stub that defers onDone until we release it; this
+    // mirrors the real race where ingestion finishes mid-stream.
+    let releaseStream: () => void = () => {};
+    const streamGate = new Promise<void>((resolve) => {
+      releaseStream = resolve;
+    });
+    vi.mocked(sse.streamChat).mockImplementation(async (_m, handlers) => {
+      await streamGate;
+      handlers.onDone({ trace_id: "t", answer: "", session_id: "active" });
+    });
+    vi.mocked(chatApi.listMessages).mockResolvedValue([]);
+    vi.mocked(chatApi.listSessions).mockResolvedValue([session("active")]);
+    // Upload resolves immediately, calling onDone with the new doc payload.
+    vi.mocked(chatApi.uploadDocument).mockImplementation(
+      async (_sid, _file, handlers) => {
+        handlers.onDone({
+          trace_id: "u",
+          document_id: "d-late",
+          filename: "late.pdf",
+          chunk_count: 5,
+        });
+      },
+    );
+
+    useChat.setState({
+      input: "First message",
+      activeSessionId: "active",
+      pendingDocuments: [docMeta("d-early")],
+    });
+
+    const sendPromise = useChat.getState().send();
+
+    // The snapshot must already be the in-flight payload + the composer must
+    // already be cleared, BEFORE we release the network. Otherwise a mid-send
+    // upload could smear into the wrong turn.
+    await vi.waitFor(() => expect(sse.streamChat).toHaveBeenCalled());
+    expect(useChat.getState().pendingDocuments).toEqual([]);
+
+    // Now a fresh upload arrives while the previous send is still pending.
+    const file = new File(["%PDF-"], "late.pdf", { type: "application/pdf" });
+    await useChat.getState().uploadPdf(file);
+
+    // The late upload is parked for the NEXT turn, not the in-flight one.
+    expect(useChat.getState().pendingDocuments.map((d) => d.document_id)).toEqual([
+      "d-late",
+    ]);
+    // The in-flight send still carries only the snapshot (d-early), unchanged.
+    const call = vi.mocked(sse.streamChat).mock.calls[0];
+    expect(call[5]).toEqual(["d-early"]);
+
+    // Drain the in-flight stream so send() can settle cleanly.
+    // The chat panel holds the persisted swap until the playhead drains; set
+    // the simulator into a "settled" state so the await resolves.
+    const evs = useSimulator.getState().events;
+    useSimulator.setState({
+      status: "done",
+      playing: false,
+      following: true,
+      cursor: evs.length - 1,
+    });
+    releaseStream();
+    await sendPromise;
   });
 });
