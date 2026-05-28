@@ -28,6 +28,18 @@ vi.mock("../lib/chatApi", () => {
     ],
     default_model: "gpt-4o-mini",
   };
+  const defaultAgent = {
+    id: "default-agent",
+    name: "Agent Simulator",
+    description: "default",
+    system_prompt: "GUARDRAILS",
+    agent_prompt: "ROLE",
+    model: "gpt-4o-mini",
+    enabled_tools: [],
+    is_default: true,
+    created_at: 0,
+    updated_at: 0,
+  };
   return {
     getConfig: () => Promise.resolve(config),
     getCorpus: () => Promise.resolve({ files: [] }),
@@ -39,6 +51,14 @@ vi.mock("../lib/chatApi", () => {
     uploadDocument: () => Promise.resolve(),
     deleteDocument: () => Promise.resolve({}),
     patchSession: () => Promise.resolve({}),
+    // 044-shared-agent-catalog: the dialog uses these for the sidebar and the
+    // useActiveAgent fallback when there's no session-bound agent.
+    listAgents: () => Promise.resolve([defaultAgent]),
+    patchAgent: () => Promise.resolve(defaultAgent),
+    createAgent: () => Promise.resolve(defaultAgent),
+    deleteAgent: () =>
+      Promise.resolve({ deleted: true, id: "x", sessions_repointed: 0, default_agent_id: defaultAgent.id }),
+    setSessionAgent: () => Promise.resolve(null),
     ApiError: class extends Error {
       constructor(public status: number, message: string) {
         super(message);

@@ -35,16 +35,15 @@ async def test_clear_all_wipes_all_relational_history(tmp_path):
 
     result = await store.clear_all()
 
-    # 027-skills extends the clear contract with `skills_deleted` (0 here — this
-    # test seeds no skills); 043-persisted-agent adds `agents_deleted` (2 cloned
-    # agents from the two sessions + the seed default = 3, all wiped — the
-    # default is then immediately re-seeded so future `create_session` works).
+    # 044-shared-agent-catalog: no per-session clones anymore — the test creates
+    # 2 sessions but they share the single default agent, so `agents_deleted` is
+    # 1 (the default itself is wiped and immediately re-seeded after).
     assert result == {
         "sessions_deleted": 2,
         "messages_deleted": 3,
         "documents_deleted": 1,
         "skills_deleted": 0,
-        "agents_deleted": 3,
+        "agents_deleted": 1,
     }
     assert await store.list_sessions() == []
     assert await store.list_messages(s1) == []

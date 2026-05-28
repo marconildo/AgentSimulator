@@ -90,11 +90,32 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const listSessions = () => api<SessionMeta[]>("/api/sessions");
 export const createSession = () => api<SessionMeta>("/api/sessions", { method: "POST" });
-// 043-persisted-agent: edit the agent attached to a conversation. The backend
-// validates bounds and the `model` allowlist (returns 422 otherwise). The PATCH
-// is partial — only the keys in `body` are touched.
+// 043-persisted-agent: edit an agent (shared by every session pointing to it
+// in 044). The backend validates bounds and the `model` allowlist (422). The
+// PATCH is partial — only the keys in `body` are touched.
 export const patchAgent = (id: string, body: AgentPatchBody) =>
   jsonApi<AgentMeta>(`/api/agents/${id}`, "PATCH", body);
+
+// 044-shared-agent-catalog: the catalog surface used by the dialog header.
+export const listAgents = () => api<AgentMeta[]>("/api/agents");
+export interface AgentCreateBody {
+  name?: string;
+  description?: string;
+  clone_from?: string;
+}
+export const createAgent = (body: AgentCreateBody = {}) =>
+  jsonApi<AgentMeta>("/api/agents", "POST", body);
+export interface AgentDeleteResult {
+  deleted: boolean;
+  id: string;
+  sessions_repointed: number;
+  default_agent_id: string;
+}
+export const deleteAgent = (id: string) =>
+  jsonApi<AgentDeleteResult>(`/api/agents/${id}`, "DELETE");
+/** Switch which agent a session uses (044). */
+export const setSessionAgent = (sessionId: string, agentId: string) =>
+  jsonApi<SessionMeta>(`/api/sessions/${sessionId}`, "PATCH", { agent_id: agentId });
 
 // 025-clear-databases: the global reset. Counts of what was removed from both
 // stores — relational rows + user-imported vectors (the built-in corpus is kept).

@@ -179,6 +179,24 @@ class DuplicateSkillName(ValueError):
     """
 
 
+class CannotDeleteDefaultAgent(ValueError):
+    """Raised when ``DELETE /api/agents/{id}`` targets the seed default row.
+
+    044-shared-agent-catalog: the default is the always-there fallback when
+    a session's agent is deleted; allowing its deletion would orphan every
+    conversation. The REST layer maps this to a 409.
+    """
+
+
+class UnknownAgentId(ValueError):
+    """Raised when ``set_session_agent`` is called with an agent_id that
+    doesn't exist in the catalog (044). The REST layer maps this to a 422."""
+
+    def __init__(self, agent_id: str) -> None:
+        super().__init__(f"agent '{agent_id}' does not exist")
+        self.agent_id = agent_id
+
+
 class ConversationStore:
     """Session-scoped conversation store backed by SQLite."""
 
@@ -200,77 +218,82 @@ class ConversationStore:
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
         if "skills" not in cols:
             conn.execute("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'")
-        # 042-agent-anatomy initially added `sessions.agent_name` (a single
-        # column). 043-persisted-agent supersedes that with the `agents` table
-        # + `sessions.agent_id`. The migration steps below are each idempotent
-        # so re-runs are no-ops:
-        #   1. add `agent_id` column if missing
-        #   2. seed the default agent row if missing (uses the GUARDRAILS +
-        #      AGENT prompts and the configured model)
-        #   3. backfill every session lacking an `agent_id` with a fresh
-        #      clone of the default
-        #   4. copy any non-null legacy `agent_name` into the clone's name
-        #   5. drop the legacy `agent_name` column (SQLite 3.35+ DROP COLUMN)
+        # 042 → 043 → 044 timeline:
+        #   042 added `sessions.agent_name` (a single column).
+        #   043 promoted the agent to the `agents` table + per-session clone,
+        #     adding `sessions.agent_id` and dropping `agent_name`.
+        #   044 flips 043's 1:1 model to a SHARED catalog: every conversation
+        #     points to the same default agent (and the user can create more
+        #     named agents in a follow-up UI). Per-session clones are deleted
+        #     and their sessions re-pointed to the default.
+        # The migration steps below are each idempotent so re-runs are no-ops.
         session_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
         if "agent_id" not in session_cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN agent_id TEXT REFERENCES agents(id)")
 
-        # Steps 2–4 only run once the `agents` table exists (which it does
-        # because the schema in _SCHEMA created it before _migrate was called).
+        # Seed the default first — every other step assumes it exists.
         _seed_default_agent_sync(conn)
-        ConversationStore._backfill_sessions_with_agents(conn)
-        # Step 5 — drop the legacy column once data is safely in `agents.name`.
+        ConversationStore._migrate_to_shared_catalog(conn)
+        # Drop the legacy 042 column once any data is in agents.name.
         session_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
         if "agent_name" in session_cols:
             try:
                 conn.execute("ALTER TABLE sessions DROP COLUMN agent_name")
             except sqlite3.OperationalError:
-                # Older SQLite (< 3.35) can't drop columns; leave the column in
-                # place. Reads ignore it; the new code never writes to it.
+                # SQLite < 3.35 — leave it in place; new code never writes it.
                 pass
 
+    # 044-shared-agent-catalog: bumped to mark that the one-shot clone drop
+    # has happened. Without this flag the migration would re-run on every
+    # boot and delete every named agent the user later created via the
+    # catalog UI (every non-default row would look like a 043 clone).
+    _SCHEMA_VERSION_SHARED_CATALOG = 1
+
     @staticmethod
-    def _backfill_sessions_with_agents(conn: sqlite3.Connection) -> None:
-        """One-time migration: every existing session without an `agent_id`
-        gets a fresh clone of the default agent. Idempotent — re-running is
-        a no-op once every session has one.
+    def _migrate_to_shared_catalog(conn: sqlite3.Connection) -> None:
+        """One-shot 044 migration: drop the 043 per-session clones and
+        re-point every session to the seed default.
 
-        Carries the legacy `sessions.agent_name` (042) onto the clone's
-        `agents.name` when present, so the user's prior name survives the
-        schema swap.
+        Gated by ``PRAGMA user_version`` so it runs exactly once per database.
+        After the version bump, subsequent boots are no-ops — preserving any
+        named agents the user later creates via the catalog UI.
         """
-        # Detect the legacy column once; the second migration run won't have it.
-        session_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
-        has_legacy_name = "agent_name" in session_cols
-        select_cols = "id, agent_name" if has_legacy_name else "id, NULL AS agent_name"
-
-        rows = conn.execute(f"SELECT {select_cols} FROM sessions WHERE agent_id IS NULL").fetchall()
-        if not rows:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version >= ConversationStore._SCHEMA_VERSION_SHARED_CATALOG:
             return
-        default = conn.execute("SELECT * FROM agents WHERE is_default = 1 LIMIT 1").fetchone()
+
+        default = conn.execute("SELECT id FROM agents WHERE is_default = 1 LIMIT 1").fetchone()
         if default is None:
             return  # _seed_default_agent_sync should have run first
-        for row in rows:
-            agent_id = uuid.uuid4().hex
-            now = time()
-            name = row["agent_name"] or default["name"]
-            conn.execute(
-                "INSERT INTO agents (id, name, description, system_prompt, "
-                "agent_prompt, model, enabled_tools, is_default, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
-                (
-                    agent_id,
-                    name,
-                    default["description"],
-                    default["system_prompt"],
-                    default["agent_prompt"],
-                    default["model"],
-                    default["enabled_tools"],
-                    now,
-                    now,
-                ),
-            )
-            conn.execute("UPDATE sessions SET agent_id = ? WHERE id = ?", (agent_id, row["id"]))
+        default_id = default["id"]
+
+        # 042 → 043 carried `sessions.agent_name` onto the clones' name; before
+        # we drop those clones, fold any user-set name back into the default
+        # so the upgrade doesn't lose the rename (best-effort: if multiple
+        # sessions had different names, the most recently updated one wins).
+        session_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+        has_legacy_name = "agent_name" in session_cols
+        if has_legacy_name:
+            last_named = conn.execute(
+                "SELECT agent_name FROM sessions WHERE agent_name IS NOT NULL "
+                "ORDER BY updated_at DESC LIMIT 1"
+            ).fetchone()
+            if last_named and last_named["agent_name"]:
+                conn.execute(
+                    "UPDATE agents SET name = ?, updated_at = ? WHERE id = ?",
+                    (last_named["agent_name"], time(), default_id),
+                )
+
+        # Point every session at the default.
+        conn.execute(
+            "UPDATE sessions SET agent_id = ? WHERE agent_id IS NULL OR agent_id != ?",
+            (default_id, default_id),
+        )
+        # Drop every non-default row (the 043 clones).
+        conn.execute("DELETE FROM agents WHERE is_default = 0")
+        # Mark the migration as done so future boots leave user-created
+        # agents alone.
+        conn.execute(f"PRAGMA user_version = {ConversationStore._SCHEMA_VERSION_SHARED_CATALOG}")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
@@ -283,57 +306,35 @@ class ConversationStore:
     # --- sessions ------------------------------------------------------------
 
     def _create_session_sync(self, session_id: str | None, title: str | None) -> dict[str, Any]:
-        """Create a session AND its cloned agent (043-persisted-agent).
+        """Create a session linked to the default agent (044-shared-agent-catalog).
 
-        Each conversation owns its own agent row. We clone the seed default at
-        creation time so edits in this conversation don't surprise others.
+        The agent is **shared** across conversations: this just points the new
+        session at the existing default row (no clone). Editing the agent in
+        any conversation affects every conversation that uses it; new agents
+        are created via ``POST /api/agents`` from the catalog header.
         """
         sid = session_id or uuid.uuid4().hex
         now = time()
         with self._connect() as conn:
-            agent_id = self._clone_default_agent_sync(conn)
+            # Defense in depth: re-seed if the default was wiped — the lifespan
+            # and the clear handler also do this, but we never want a chat to
+            # find a session with a dangling agent_id.
+            _seed_default_agent_sync(conn)
+            default = conn.execute("SELECT * FROM agents WHERE is_default = 1 LIMIT 1").fetchone()
+            if default is None:
+                raise RuntimeError("default agent missing — seeding failed")
             conn.execute(
                 "INSERT INTO sessions (id, title, agent_id, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (sid, title, agent_id, now, now),
+                (sid, title, default["id"], now, now),
             )
-            agent_row = conn.execute("SELECT * FROM agents WHERE id = ?", (agent_id,)).fetchone()
         return {
             "id": sid,
             "title": title,
             "created_at": now,
             "updated_at": now,
-            "agent": _agent_row(agent_row) if agent_row else None,
+            "agent": _agent_row(default),
         }
-
-    @staticmethod
-    def _clone_default_agent_sync(conn: sqlite3.Connection) -> str:
-        """Insert a fresh, non-default agent row by cloning the seed default.
-        Returns the new agent id. Re-seeds the default first if it was wiped
-        (defense in depth — the lifespan + clear handler also seed it)."""
-        _seed_default_agent_sync(conn)
-        default = conn.execute("SELECT * FROM agents WHERE is_default = 1 LIMIT 1").fetchone()
-        if default is None:
-            raise RuntimeError("default agent missing — seeding failed")
-        new_id = uuid.uuid4().hex
-        now = time()
-        conn.execute(
-            "INSERT INTO agents (id, name, description, system_prompt, "
-            "agent_prompt, model, enabled_tools, is_default, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
-            (
-                new_id,
-                default["name"],
-                default["description"],
-                default["system_prompt"],
-                default["agent_prompt"],
-                default["model"],
-                default["enabled_tools"],
-                now,
-                now,
-            ),
-        )
-        return new_id
 
     def _ensure_session_sync(self, session_id: str) -> dict[str, Any]:
         existing = self._get_session_sync(session_id)
@@ -401,21 +402,15 @@ class ConversationStore:
         ]
 
     def _delete_session_sync(self, session_id: str) -> dict[str, Any]:
-        """Delete a session + its cloned agent (043-persisted-agent).
+        """Delete a session row + its messages/documents (FK cascade).
 
-        The seed default agent is preserved (the agent we delete here is the
-        clone created in `_create_session_sync` — it carries `is_default=0`).
+        044-shared-agent-catalog: the agent is **shared** across conversations,
+        so this does NOT touch the `agents` table — the same row backs every
+        other conversation that uses it. The Lumis-style catalog UI is the
+        only path that removes agents (``DELETE /api/agents/{id}``).
         """
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT agent_id FROM sessions WHERE id = ?", (session_id,)
-            ).fetchone()
             cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-            if row is not None and row["agent_id"]:
-                conn.execute(
-                    "DELETE FROM agents WHERE id = ? AND is_default = 0",
-                    (row["agent_id"],),
-                )
         # Embeddings are intentionally left in the vector store (D6); only the
         # relational rows (and, by FK cascade, this session's messages/documents)
         # are removed here.
@@ -465,6 +460,105 @@ class ConversationStore:
             if cur.rowcount == 0:
                 return None
         return self._get_agent_sync(agent_id)
+
+    def _list_agents_sync(self) -> list[dict[str, Any]]:
+        """The full catalog (044-shared-agent-catalog). Default first, then
+        user-created agents alphabetically."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM agents ORDER BY is_default DESC, name ASC, created_at ASC"
+            ).fetchall()
+        return [_agent_row(r) for r in rows]
+
+    def _create_agent_sync(
+        self,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        clone_from: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new agent in the catalog (044).
+
+        Cloned from ``clone_from`` when provided, else from the default. The
+        new row carries ``is_default=0`` regardless. ``name`` defaults to
+        ``"<source>.name (cópia)"`` so consecutive clones are visually unique.
+        """
+        with self._connect() as conn:
+            _seed_default_agent_sync(conn)
+            source = None
+            if clone_from:
+                source = conn.execute("SELECT * FROM agents WHERE id = ?", (clone_from,)).fetchone()
+            if source is None:
+                source = conn.execute(
+                    "SELECT * FROM agents WHERE is_default = 1 LIMIT 1"
+                ).fetchone()
+            if source is None:
+                raise RuntimeError("default agent missing — seeding failed")
+            new_id = uuid.uuid4().hex
+            now = time()
+            final_name = name if (name and name.strip()) else f"{source['name']} (cópia)"
+            final_desc = description if description is not None else source["description"]
+            conn.execute(
+                "INSERT INTO agents (id, name, description, system_prompt, "
+                "agent_prompt, model, enabled_tools, is_default, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                (
+                    new_id,
+                    final_name[:60],
+                    final_desc[:240] if isinstance(final_desc, str) else "",
+                    source["system_prompt"],
+                    source["agent_prompt"],
+                    source["model"],
+                    source["enabled_tools"],
+                    now,
+                    now,
+                ),
+            )
+            new_row = conn.execute("SELECT * FROM agents WHERE id = ?", (new_id,)).fetchone()
+        return _agent_row(new_row)
+
+    def _delete_agent_sync(self, agent_id: str) -> dict[str, Any] | None:
+        """Delete a non-default agent (044). Returns the count of sessions
+        re-pointed to the default. Returns ``None`` if the id is unknown;
+        raises :class:`CannotDeleteDefaultAgent` for the default row."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, is_default FROM agents WHERE id = ?", (agent_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            if row["is_default"]:
+                raise CannotDeleteDefaultAgent(
+                    "the default agent cannot be deleted; create another and switch to it"
+                )
+            default = conn.execute("SELECT id FROM agents WHERE is_default = 1 LIMIT 1").fetchone()
+            if default is None:
+                raise RuntimeError("default agent missing — seeding failed")
+            cur = conn.execute(
+                "UPDATE sessions SET agent_id = ? WHERE agent_id = ?",
+                (default["id"], agent_id),
+            )
+            conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+        return {
+            "deleted": True,
+            "id": agent_id,
+            "sessions_repointed": cur.rowcount,
+            "default_agent_id": default["id"],
+        }
+
+    def _set_session_agent_sync(self, session_id: str, agent_id: str) -> dict[str, Any] | None:
+        """Point a session at a different agent (044). Returns the updated
+        session (with the new inline agent), or ``None`` on unknown ids."""
+        with self._connect() as conn:
+            agent_row = conn.execute("SELECT id FROM agents WHERE id = ?", (agent_id,)).fetchone()
+            if agent_row is None:
+                raise UnknownAgentId(agent_id)
+            cur = conn.execute(
+                "UPDATE sessions SET agent_id = ? WHERE id = ?", (agent_id, session_id)
+            )
+            if cur.rowcount == 0:
+                return None
+            return self._read_session_with_agent(conn, session_id)
 
     def _clear_all_sync(self) -> dict[str, Any]:
         """Wipe the entire relational store (025-clear-databases).
@@ -804,6 +898,29 @@ class ConversationStore:
 
     async def update_agent(self, agent_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
         return await asyncio.to_thread(self._update_agent_sync, agent_id, patch)
+
+    async def list_agents(self) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_agents_sync)
+
+    async def create_agent(
+        self,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        clone_from: str | None = None,
+    ) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            self._create_agent_sync,
+            name=name,
+            description=description,
+            clone_from=clone_from,
+        )
+
+    async def delete_agent(self, agent_id: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._delete_agent_sync, agent_id)
+
+    async def set_session_agent(self, session_id: str, agent_id: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._set_session_agent_sync, session_id, agent_id)
 
     async def clear_all(self) -> dict[str, Any]:
         return await asyncio.to_thread(self._clear_all_sync)

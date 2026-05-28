@@ -25,7 +25,12 @@ from .agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from .agent.tools import agent_tool_specs
 from .config import get_settings
 from .db.seed import seed_default_agent, seed_skills
-from .db.store import DuplicateSkillName, get_store
+from .db.store import (
+    CannotDeleteDefaultAgent,
+    DuplicateSkillName,
+    UnknownAgentId,
+    get_store,
+)
 from .llm.context import history_pair_tokens
 from .llm.models import model_ids, models_payload
 from .mcp.client import get_registry
@@ -480,7 +485,7 @@ async def delete_session(session_id: str):
 
 
 class AgentPatch(BaseModel):
-    """Body of ``PATCH /api/agents/{id}`` (043-persisted-agent).
+    """Body of ``PATCH /api/agents/{id}``.
 
     Partial update: every field is optional. The PATCH only touches the columns
     actually present in the request — sending ``{"name": "X"}`` leaves the
@@ -501,6 +506,35 @@ class AgentPatch(BaseModel):
     enabled_tools: list[str] | None = Field(default=None)
 
 
+class AgentCreate(BaseModel):
+    """Body of ``POST /api/agents`` (044-shared-agent-catalog).
+
+    Every field optional. ``clone_from`` picks the source agent (defaults to
+    the seed default when absent). ``name`` defaults to ``"<source> (cópia)"``
+    so consecutive clicks of "+ Novo" produce visually unique entries.
+    """
+
+    name: str | None = Field(default=None, max_length=60)
+    description: str | None = Field(default=None, max_length=240)
+    clone_from: str | None = Field(default=None)
+
+
+class SessionPatch(BaseModel):
+    """Body of ``PATCH /api/sessions/{id}`` (044-shared-agent-catalog).
+
+    Today only the agent link is editable. Future fields go here (color,
+    pinned, etc.) — they would be additive."""
+
+    agent_id: str | None = Field(default=None)
+
+
+@app.get("/api/agents")
+async def list_agents():
+    """The full agent catalog (044-shared-agent-catalog). Default first, then
+    user-created agents alphabetically. The dialog header strip renders this."""
+    return await get_store().list_agents()
+
+
 @app.get("/api/agents/{agent_id}")
 async def get_agent(agent_id: str):
     """Direct read of an agent row (convenience). Sessions already include
@@ -511,14 +545,59 @@ async def get_agent(agent_id: str):
     return row
 
 
+@app.post("/api/agents")
+async def create_agent(body: AgentCreate):
+    """Create a new agent in the catalog (044-shared-agent-catalog).
+
+    Cloned from ``body.clone_from`` (or the default when absent). The new
+    row is non-default (``is_default=0``). The FE typically follows up with
+    a ``PATCH /api/sessions/{id}`` to point the active conversation at it.
+    """
+    name = body.name.strip() if isinstance(body.name, str) else None
+    desc = body.description.strip() if isinstance(body.description, str) else None
+    return await get_store().create_agent(name=name, description=desc, clone_from=body.clone_from)
+
+
+@app.delete("/api/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    """Delete a non-default agent and re-point any sessions using it to the
+    default (044-shared-agent-catalog).
+
+    409 when the target is the default (the always-there fallback); 404 when
+    the id is unknown.
+    """
+    try:
+        result = await get_store().delete_agent(agent_id)
+    except CannotDeleteDefaultAgent as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return result
+
+
+@app.patch("/api/sessions/{session_id}")
+async def patch_session(session_id: str, body: SessionPatch):
+    """Update per-conversation metadata. Today: just the agent link
+    (044-shared-agent-catalog). Future additive fields land here.
+    """
+    if body.agent_id is None:
+        raise HTTPException(status_code=422, detail="agent_id is required")
+    try:
+        row = await get_store().set_session_agent(session_id, body.agent_id)
+    except UnknownAgentId as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return row
+
+
 @app.patch("/api/agents/{agent_id}")
 async def patch_agent(agent_id: str, body: AgentPatch):
-    """Partial-update an agent (043-persisted-agent).
+    """Partial-update an agent (044-shared-agent-catalog).
 
-    Each conversation owns its own agent row (clone-on-create), so this PATCH
-    is conversation-scoped in practice — there is no shared catalog to surprise.
-    Validates `model` against the curated allowlist; over-cap text is already
-    rejected by pydantic at validation time (422).
+    The agent is shared across every conversation that points to it, so this
+    PATCH propagates immediately (the FE patches its in-memory session list
+    on success). Validates ``model`` against the curated allowlist.
     """
     patch = body.model_dump(exclude_unset=True)
     # Validate `model` against the same allowlist used by /api/chat (defense in

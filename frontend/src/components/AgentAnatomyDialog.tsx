@@ -6,6 +6,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { AgentCatalogSidebar } from "../agent-anatomy/AgentCatalogSidebar";
 import { Identity } from "../agent-anatomy/Identity";
 import { SystemPromptSection } from "../agent-anatomy/SystemPromptSection";
 import { AgentPromptSection } from "../agent-anatomy/AgentPromptSection";
@@ -64,7 +65,7 @@ export function AgentAnatomyDialog() {
         aria-modal="true"
         aria-label={t.dialogTitle}
         data-testid="agent-anatomy-dialog"
-        className="relative flex max-h-[88vh] w-[min(92vw,820px)] flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] shadow-2xl"
+        className="relative flex max-h-[88vh] w-[min(95vw,1040px)] flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] shadow-2xl"
       >
         <header className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-3">
           <div className="flex items-center gap-2 text-[13.5px] font-semibold text-[var(--color-ink)]">
@@ -82,6 +83,10 @@ export function AgentAnatomyDialog() {
         </header>
 
         <div className="flex min-h-0 flex-1">
+          {/* 044-shared-agent-catalog: leftmost rail — pick/clone/delete agent
+              from the catalog (Lumis-style). Sits before the section nav so
+              the agent identity is the first thing the user sees. */}
+          <AgentCatalogSidebar />
           {/* Left rail — section anchors. */}
           <nav className="hidden w-44 shrink-0 border-r border-[var(--color-line)] bg-[var(--color-panel-2)] p-3 sm:block">
             <ul className="flex flex-col gap-0.5">

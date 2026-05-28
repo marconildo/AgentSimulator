@@ -497,6 +497,22 @@ export interface Strings {
     // 043-persisted-agent — Settings page's pointer to this dialog.
     settingsRedirect: string;
     openFromSettings: string;
+    // 044-shared-agent-catalog — the catalog sidebar inside the dialog.
+    catalog: {
+      label: string;
+      loading: string;
+      empty: string;
+      more: string;
+      draftHint: string;
+      defaultSuffix: string;
+      newLabel: string;
+      newTooltip: string;
+      deleteLabel: string;
+      deleteTooltip: string;
+      confirm: string;
+      confirmYes: string;
+      confirmCancel: string;
+    };
     identity: {
       title: string;
       nameLabel: string;
@@ -1088,6 +1104,21 @@ const en: Strings = {
     settingsRedirect:
       "The agent's name, prompts, model and tools live in the Agent Anatomy dialog now — edits persist per conversation.",
     openFromSettings: "Open Agent Anatomy",
+    catalog: {
+      label: "Agents",
+      loading: "Loading…",
+      empty: "No agents yet.",
+      more: "more",
+      draftHint: "Send a message first to switch this conversation's agent.",
+      defaultSuffix: "default",
+      newLabel: "New",
+      newTooltip: "Clone the current agent into a new one",
+      deleteLabel: "Delete",
+      deleteTooltip: "Delete this agent",
+      confirm: "Delete this agent? Conversations using it will fall back to the default.",
+      confirmYes: "Yes, delete",
+      confirmCancel: "Cancel",
+    },
     identity: {
       title: "Identity",
       nameLabel: "Name",
@@ -1681,6 +1712,22 @@ const pt: Strings = {
     settingsRedirect:
       "O nome do agente, prompts, modelo e ferramentas agora ficam no diálogo Anatomia do agente — edições persistem por conversa.",
     openFromSettings: "Abrir Anatomia do agente",
+    catalog: {
+      label: "Agentes",
+      loading: "Carregando…",
+      empty: "Nenhum agente ainda.",
+      more: "mais",
+      draftHint: "Envie uma mensagem primeiro para trocar o agente desta conversa.",
+      defaultSuffix: "padrão",
+      newLabel: "Novo",
+      newTooltip: "Clonar o agente atual em um novo",
+      deleteLabel: "Apagar",
+      deleteTooltip: "Apagar este agente",
+      confirm:
+        "Apagar este agente? Conversas que o usam voltarão para o agente padrão.",
+      confirmYes: "Sim, apagar",
+      confirmCancel: "Cancelar",
+    },
     identity: {
       title: "Identidade",
       nameLabel: "Nome",
