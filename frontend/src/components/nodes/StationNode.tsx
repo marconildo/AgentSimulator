@@ -88,9 +88,9 @@ export function StationNode(props: NodeProps) {
         <div className="flex items-center gap-2.5">
           <span className="text-xl leading-none">{meta.icon}</span>
           <div className="min-w-0 flex-1">
-            {/* Titles/subtitles can exceed the node width (e.g. "RAG · Vector DB",
-                "Model Context Protocol"); clip with ellipsis but reveal the full
-                text on hover via the native title tooltip. */}
+            {/* Titles/subtitles can exceed the node width (e.g. "Model Context
+                Protocol", "Ingestion / Indexer"); clip with ellipsis but reveal
+                the full text on hover via the native title tooltip. */}
             <div title={meta.title} className="truncate text-[13px] font-semibold text-[var(--color-ink)]">
               {meta.title}
             </div>

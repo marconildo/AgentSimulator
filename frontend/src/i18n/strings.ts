@@ -759,6 +759,7 @@ const en: Strings = {
     "Multi-agent":
       "Multi-agent — several specialized agents that coordinate (e.g. an orchestrator delegating to sub-agents) instead of one monolithic loop. (Planned — not yet implemented.)",
     SQL: "SQL — the query language of the relational database that stores the conversation.",
+    RAG: "RAG (Retrieval-Augmented Generation) — embed the query, pull the closest chunks from the vector DB, and ground the answer in them.",
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
     stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
@@ -1294,6 +1295,7 @@ const pt: Strings = {
     "Multi-agent":
       "Multi-agente — vários agentes especializados que se coordenam (ex.: um orquestrador delegando a subagentes) em vez de um único loop monolítico. (Planejado — ainda não implementado.)",
     SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
+    RAG: "RAG (Retrieval-Augmented Generation) — embeda a pergunta, busca os trechos mais próximos no vector DB e fundamenta a resposta neles.",
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
     stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",

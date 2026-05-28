@@ -452,11 +452,11 @@ const STATIONS_SRC: StationSrc[] = [
   {
     id: "rag",
     tier: "services",
-    title: "RAG · Vector DB",
+    title: "Vector DB",
     subtitle: "Chroma",
     icon: "📚",
     accent: "var(--color-ok)",
-    tag: "cosine",
+    tag: "RAG",
     blurb: {
       en: "Embeds the query and runs an approximate nearest-neighbor search over the knowledge base using cosine similarity, returning the most relevant top-k chunks as grounding context. It also ingests user-uploaded PDFs — chunk → embed → store — so the agent can ground answers on your own documents.",
       pt: "Gera o embedding da consulta e executa uma busca aproximada por vizinhos mais próximos na base de conhecimento usando similaridade de cosseno, retornando os top-k trechos mais relevantes como contexto de fundamentação. Também faz a ingestão de PDFs enviados pelo usuário — dividir → incorporar → armazenar — para o agente fundamentar respostas nos seus próprios documentos.",
