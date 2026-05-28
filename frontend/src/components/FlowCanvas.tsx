@@ -14,6 +14,7 @@ import type { Strings } from "../i18n/strings";
 import { cloudValue, useCloud } from "../lib/cloud";
 import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView, StationRuntime, UsageTotals } from "../lib/derive";
+import { hasUploadActivity } from "../lib/derive";
 import { computeLayout } from "../lib/layout";
 import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
@@ -53,11 +54,15 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const scenario = useScenario((s) => s.scenario);
   const mode = useSettings((s) => s.mode);
   const expanded = useSimulator((s) => s.expanded);
+  const events = useSimulator((s) => s.events);
   const t = useT();
+  // 035-conditional-upload-nodes — reveal the write-path nodes only when the
+  // current trace shows an upload (pure projection of the event log).
+  const showUpload = useMemo(() => hasUploadActivity(events), [events]);
   // Scenario-scoped visual model: only the active rung's stations/tiers/hops.
-  const stations = visibleStationsFor(lang, scenario);
+  const stations = visibleStationsFor(lang, scenario, showUpload);
   const tiers = visibleTiersFor(lang, scenario);
-  const hops = visibleHopsFor(lang, scenario);
+  const hops = visibleHopsFor(lang, scenario, showUpload);
   const boundary = boundaryFor(lang);
   const publicFrontier = publicBoundaryFor(lang);
   const stationById = stationByIdFor(lang);
@@ -65,7 +70,10 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const comms = t.comms;
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
-  const layout = useMemo(() => computeLayout(expandedSet, scenario), [expandedSet, scenario]);
+  const layout = useMemo(
+    () => computeLayout(expandedSet, scenario, showUpload),
+    [expandedSet, scenario, showUpload],
+  );
 
   const nodes: Node[] = useMemo(() => {
     // The private-network boundary sits behind everything (inserted first).

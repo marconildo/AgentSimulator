@@ -1163,14 +1163,31 @@ function relabelAgentForScenario(s: StationMeta, lang: Lang, scenario: Scenario)
   return override ? { ...s, title: r(override.title, lang), tag: override.tag } : s;
 }
 
-export function visibleStationsFor(lang: Lang, scenario: Scenario): StationMeta[] {
+// 035-conditional-upload-nodes — the write-path nodes only matter during a PDF
+// upload, so they (and any hop touching them) are hidden unless the current trace
+// shows an upload (`showUpload`, derived from the event log by `hasUploadActivity`).
+// They stay **real** stations (not `comingSoon`); this is render-gating only.
+export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["storage", "ingestion"]);
+
+function isUploadOnlyHop(h: { source: StationId; target: StationId }): boolean {
+  return UPLOAD_ONLY_STATIONS.has(h.source) || UPLOAD_ONLY_STATIONS.has(h.target);
+}
+
+export function visibleStationsFor(
+  lang: Lang,
+  scenario: Scenario,
+  showUpload = false,
+): StationMeta[] {
   return stationsFor(lang)
     .filter((s) => s.scenarios.includes(scenario))
+    .filter((s) => showUpload || !UPLOAD_ONLY_STATIONS.has(s.id))
     .map((s) => relabelAgentForScenario(s, lang, scenario));
 }
 
-export function visibleHopsFor(lang: Lang, scenario: Scenario): HopMeta[] {
-  return hopsFor(lang).filter((h) => h.scenarios.includes(scenario));
+export function visibleHopsFor(lang: Lang, scenario: Scenario, showUpload = false): HopMeta[] {
+  return hopsFor(lang)
+    .filter((h) => h.scenarios.includes(scenario))
+    .filter((h) => showUpload || !isUploadOnlyHop(h));
 }
 
 export function visibleTiersFor(lang: Lang, scenario: Scenario): TierMeta[] {
@@ -1178,8 +1195,8 @@ export function visibleTiersFor(lang: Lang, scenario: Scenario): TierMeta[] {
 }
 
 /** Lang-independent visible station ids for a scenario — used by the layout. */
-export function visibleStationIdsFor(scenario: Scenario): StationId[] {
-  return STATIONS_SRC.filter((s) => (s.scenarios ?? ALL_SCENARIOS).includes(scenario)).map(
-    (s) => s.id,
-  );
+export function visibleStationIdsFor(scenario: Scenario, showUpload = false): StationId[] {
+  return STATIONS_SRC.filter((s) => (s.scenarios ?? ALL_SCENARIOS).includes(scenario))
+    .filter((s) => showUpload || !UPLOAD_ONLY_STATIONS.has(s.id))
+    .map((s) => s.id);
 }

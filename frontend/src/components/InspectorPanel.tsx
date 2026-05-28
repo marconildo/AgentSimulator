@@ -5,6 +5,7 @@ import type { Strings } from "../i18n/strings";
 import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import { formatTokens, formatTps, formatUsd } from "../lib/cost";
 import type { DerivedView, UsageTotals } from "../lib/derive";
+import { hasUploadActivity } from "../lib/derive";
 import { useHealth } from "../lib/health";
 import { useScenario } from "../lib/scenario";
 import { useSettings } from "../lib/settings";
@@ -17,6 +18,7 @@ import {
   type StationMeta,
 } from "../lib/stations";
 import { formatLatency } from "../lib/time";
+import { useSimulator } from "../store/useSimulator";
 import type { JsonRpcFrames, Phase, RequestBody, Stage, TraceEvent } from "../types/events";
 import { TimingPanel } from "./TimingPanel";
 
@@ -31,8 +33,12 @@ interface InspectorPanelProps {
 export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps) {
   const lang = useLang((s) => s.lang);
   const scenario = useScenario((s) => s.scenario);
+  const events = useSimulator((s) => s.events);
   const t = useT();
   const i = t.inspector;
+  // 035 — the Overview catalog matches the canvas: list the upload nodes only
+  // when an upload is in scope, so a listed node is never off-canvas.
+  const showUpload = hasUploadActivity(events);
 
   // Open every station at the top. Without this the panel keeps the previous
   // station's scroll offset when you click another node, which reads as a
@@ -44,7 +50,9 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
   }, [selected]);
 
   if (!selected)
-    return <Overview onSelect={onSelect} stations={visibleStationsFor(lang, scenario)} i={i} />;
+    return (
+      <Overview onSelect={onSelect} stations={visibleStationsFor(lang, scenario, showUpload)} i={i} />
+    );
 
   const meta = stationByIdFor(lang)[selected];
   const rt = view.stations[selected];

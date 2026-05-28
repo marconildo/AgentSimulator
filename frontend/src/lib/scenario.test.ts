@@ -14,20 +14,20 @@ import {
 
 const STORAGE_KEY = "agentsim.scenario";
 
-// The set of stations the app renders today (the `simple` rung must match this).
-// 033-ingestion-node adds `ingestion`; 034-storage-ingestion-flow adds `storage`
-// — both real stations, visible in every scenario.
-const TODAY_STATIONS = [
+// The always-visible base stations (the `simple` rung renders exactly these by
+// default). 035-conditional-upload-nodes: `storage` + `ingestion` are real but
+// rendered only during an upload, so they're a separate bucket — not in the base
+// set and not `comingSoon` previews either.
+const BASE_STATIONS = [
   "frontend",
   "backend",
   "agent",
   "database",
-  "storage",
   "rag",
-  "ingestion",
   "mcp",
   "llm",
 ];
+const UPLOAD_STATIONS = ["storage", "ingestion"];
 
 async function freshStore(stored?: string) {
   localStorage.clear();
@@ -81,17 +81,26 @@ describe("canSend — send is gated to executable rungs (AC4)", () => {
 });
 
 describe("scenario-scoped visual model (AC3, AC4)", () => {
-  it("the simple rung renders exactly today's stations (AC3)", () => {
-    expect(new Set(visibleStationIdsFor("simple"))).toEqual(new Set(TODAY_STATIONS));
+  it("the simple rung renders exactly the base stations by default (AC3, 035 AC1)", () => {
+    expect(new Set(visibleStationIdsFor("simple"))).toEqual(new Set(BASE_STATIONS));
+  });
+
+  it("reveals the upload nodes only when an upload is in scope (035 AC2)", () => {
+    expect(new Set(visibleStationIdsFor("simple", true))).toEqual(
+      new Set([...BASE_STATIONS, ...UPLOAD_STATIONS]),
+    );
   });
 
   it("the simple rung renders only hops between visible stations (AC3)", () => {
-    const ids = new Set(visibleStationIdsFor("simple"));
-    const hops = visibleHopsFor("en", "simple");
-    expect(hops.length).toBeGreaterThan(0);
-    for (const h of hops) {
-      expect(ids.has(h.source)).toBe(true);
-      expect(ids.has(h.target)).toBe(true);
+    // Both states: hops must only reference currently-visible stations.
+    for (const showUpload of [false, true]) {
+      const ids = new Set(visibleStationIdsFor("simple", showUpload));
+      const hops = visibleHopsFor("en", "simple", showUpload);
+      expect(hops.length).toBeGreaterThan(0);
+      for (const h of hops) {
+        expect(ids.has(h.source)).toBe(true);
+        expect(ids.has(h.target)).toBe(true);
+      }
     }
   });
 
@@ -107,15 +116,25 @@ describe("scenario-scoped visual model (AC3, AC4)", () => {
 
   it("upper-rung stations are flagged comingSoon and never carry a live stage (AC4)", () => {
     const adv = visibleStationsFor("en", "advanced");
-    const previews = adv.filter((s) => !TODAY_STATIONS.includes(s.id));
+    const previews = adv.filter((s) => !BASE_STATIONS.includes(s.id));
     expect(previews.length).toBeGreaterThan(0);
     for (const s of previews) {
       expect(s.comingSoon).toBe(true);
       // No TraceEvent stage maps to a non-executing preview node — §3.
       expect(s.stages).toEqual([]);
     }
-    // The today-stations stay live (not coming soon).
-    for (const s of adv.filter((x) => TODAY_STATIONS.includes(x.id))) {
+    // The base stations stay live (not coming soon).
+    for (const s of adv.filter((x) => BASE_STATIONS.includes(x.id))) {
+      expect(s.comingSoon ?? false).toBe(false);
+      expect(s.stages.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("the upload nodes are real (not comingSoon) when revealed (035 AC7)", () => {
+    const adv = visibleStationsFor("en", "advanced", true);
+    for (const id of UPLOAD_STATIONS) {
+      const s = adv.find((x) => x.id === id)!;
+      expect(s, id).toBeDefined();
       expect(s.comingSoon ?? false).toBe(false);
       expect(s.stages.length).toBeGreaterThan(0);
     }
@@ -125,7 +144,8 @@ describe("scenario-scoped visual model (AC3, AC4)", () => {
 describe("bilingual + cloud map for every element (AC6)", () => {
   for (const lang of ["en", "pt"] as const) {
     it(`every station has non-empty ${lang} prose + a full cloud map`, () => {
-      for (const s of visibleStationsFor(lang, "advanced")) {
+      // showUpload=true so the conditional upload nodes are covered too.
+      for (const s of visibleStationsFor(lang, "advanced", true)) {
         expect(s.title.length).toBeGreaterThan(0);
         expect(s.subtitle.length).toBeGreaterThan(0);
         expect(s.blurb.length).toBeGreaterThan(0);

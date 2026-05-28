@@ -128,10 +128,13 @@ export function heightOf(id: StationId, expanded: ReadonlySet<StationId>): numbe
 export function computeLayout(
   expanded: ReadonlySet<StationId>,
   scenario: Scenario,
+  // 035-conditional-upload-nodes — when false (default), the upload write-path
+  // nodes (storage, ingestion) are excluded so the data column reflows shorter.
+  showUpload = false,
 ): LayoutResult {
   const positions = {} as Record<StationId, { x: number; y: number }>;
   const heights = {} as Record<StationId, number>;
-  const visible = new Set(visibleStationIdsFor(scenario));
+  const visible = new Set(visibleStationIdsFor(scenario, showUpload));
 
   for (const col of COLUMNS) {
     let y = TOP;

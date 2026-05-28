@@ -10,10 +10,23 @@ import type { Scenario } from "./scenario";
 
 const SCENARIOS: Scenario[] = ["simple", "intermediate", "advanced"];
 
-describe("storage write-path placement (034-storage-ingestion-flow AC7)", () => {
+describe("upload nodes hidden by default (035-conditional-upload-nodes AC5)", () => {
+  for (const scenario of SCENARIOS) {
+    it(`omits storage + ingestion from the layout in ${scenario} with no upload`, () => {
+      const layout = computeLayout(new Set(), scenario);
+      expect(layout.positions.storage).toBeUndefined();
+      expect(layout.positions.ingestion).toBeUndefined();
+      // the query-path data nodes are still laid out
+      expect(layout.positions.rag).toBeDefined();
+      expect(layout.positions.database).toBeDefined();
+    });
+  }
+});
+
+describe("storage write-path placement (034 AC7 · shown with showUpload)", () => {
   for (const scenario of SCENARIOS) {
     it(`stacks storage → ingestion → rag downward inside the services tier in ${scenario}`, () => {
-      const layout = computeLayout(new Set(), scenario);
+      const layout = computeLayout(new Set(), scenario, true);
       const { positions, heights, tierBoxes } = layout;
 
       // All three present and stacked in write-path order so the upload edges

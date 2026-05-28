@@ -70,10 +70,11 @@ describe("ingestion station (033-ingestion-node)", () => {
     }
   });
 
-  // AC1 — visible in every scenario (ingestion is real everywhere).
-  it("is visible in simple, intermediate and advanced", () => {
+  // AC1 — present in every scenario when an upload is in scope (035: the node is
+  // real everywhere but rendered only during an upload).
+  it("is visible in simple, intermediate and advanced during an upload", () => {
     for (const sc of ["simple", "intermediate", "advanced"] as const) {
-      expect(visibleStationIdsFor(sc)).toContain("ingestion");
+      expect(visibleStationIdsFor(sc, true)).toContain("ingestion");
     }
   });
 
@@ -104,10 +105,11 @@ describe("storage station + write-path (034-storage-ingestion-flow)", () => {
     }
   });
 
-  // AC1 — visible in every scenario (the upload path is real everywhere).
-  it("is visible in simple, intermediate and advanced", () => {
+  // AC1 — present in every scenario when an upload is in scope (035: real
+  // everywhere but rendered only during an upload).
+  it("is visible in simple, intermediate and advanced during an upload", () => {
     for (const sc of ["simple", "intermediate", "advanced"] as const) {
-      expect(visibleStationIdsFor(sc)).toContain("storage");
+      expect(visibleStationIdsFor(sc, true)).toContain("storage");
     }
   });
 

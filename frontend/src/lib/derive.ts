@@ -61,6 +61,18 @@ function hopId(source: StationId, target: StationId): string {
   return `${source}-${target}`;
 }
 
+/**
+ * 035-conditional-upload-nodes — is a PDF upload in scope in this event log?
+ * True iff the trace carries the object-storage write (`storage.upload`) or any
+ * offline-indexing stage (`rag.ingest.*`). Pure: the canvas uses this to reveal
+ * the Storage + Ingestion nodes only during an upload (hidden on a plain chat).
+ */
+export function hasUploadActivity(events: TraceEvent[]): boolean {
+  return events.some(
+    (e) => e.stage === "storage.upload" || e.stage.startsWith("rag.ingest."),
+  );
+}
+
 // Undirected adjacency over the real network edges. The 6 hops form a tree
 // (backend and agent are the hubs), so there is exactly one path between any
 // two stations — found with a plain BFS.
