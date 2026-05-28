@@ -2,6 +2,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AgentAnatomyDialog } from "./components/AgentAnatomyDialog";
+import { AgentConfigToggle } from "./components/AgentConfigToggle";
 import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
@@ -224,9 +225,14 @@ export default function App() {
         {/* Push preferences + nav to the right; collapses to nothing when tight. */}
         <div className="min-w-1 flex-1" />
 
-        {/* Preferences + architecture options. */}
+        {/* Preferences + architecture options. The "Configure agent" toggle
+            opens the agent-anatomy dialog directly — it lives next to ⚙ Config
+            because both shape "what this run does", but stays a distinct
+            affordance (different icon, different scope) so it doesn't read as
+            a sub-option of platform settings. */}
         <ThemeToggle />
         <LanguageToggle />
+        <AgentConfigToggle />
         <ConfigToggle page={page} setPage={setPage} />
 
         <Divider />
@@ -290,6 +296,12 @@ export default function App() {
         </div>
       )}
 
+      {/* The "Configure agent" dialog now lives at the App root (not under
+          <main>) so the header button can open it from Sim / Learn / Settings
+          alike. The dialog is `position: fixed` and renders null when closed,
+          so the mount point is purely about availability, not layout. */}
+      <AgentAnatomyDialog />
+
       {page === "settings" ? (
         <SettingsPage />
       ) : page === "learn" ? (
@@ -317,7 +329,6 @@ export default function App() {
                 <TourCaption />
               </ReactFlowProvider>
               {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
-              <AgentAnatomyDialog />
             </main>
 
             <SidePanel

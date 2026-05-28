@@ -501,6 +501,9 @@ export interface Strings {
   // English-only by design.
   agentAnatomy: {
     openButton: string;
+    // Short label for the header button (the long "Configure agent" stays in
+    // tooltip/aria-label; this is what fits next to the icon at wide widths).
+    headerLabel: string;
     editIdentity: string;
     dialogTitle: string;
     close: string;
@@ -1118,6 +1121,7 @@ const en: Strings = {
   },
   agentAnatomy: {
     openButton: "Configure agent",
+    headerLabel: "Agent",
     editIdentity: "Edit agent identity",
     dialogTitle: "Agent anatomy",
     close: "Close",
@@ -1737,6 +1741,7 @@ const pt: Strings = {
   },
   agentAnatomy: {
     openButton: "Configurar agente",
+    headerLabel: "Agente",
     editIdentity: "Editar identidade do agente",
     dialogTitle: "Anatomia do agente",
     close: "Fechar",

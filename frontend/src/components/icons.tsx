@@ -170,6 +170,36 @@ export function SettingsIcon({ className }: IconProps) {
   );
 }
 
+// "Configure agent" header button — a robotic head with antenna and a single
+// eye-circuit. Kept distinct from SettingsIcon (cog) so users read it as
+// "configure THIS AGENT", not "platform settings". Strokes match the family
+// (1.75 weight, rounded caps).
+export function BrainIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {/* antenna */}
+      <path d="M12 3v2.2" />
+      <circle cx="12" cy="3" r="0.7" fill="currentColor" stroke="none" />
+      {/* head */}
+      <rect x="5" y="5.2" width="14" height="13" rx="3" />
+      {/* eyes */}
+      <circle cx="9.5" cy="11" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="14.5" cy="11" r="1.1" fill="currentColor" stroke="none" />
+      {/* mouth strip */}
+      <path d="M9 15.2h6" />
+    </svg>
+  );
+}
+
 // Theme toggle — crescent moon (currently-light wants dark) ...
 export function MoonIcon({ className }: IconProps) {
   return (

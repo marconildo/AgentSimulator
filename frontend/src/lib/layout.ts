@@ -16,6 +16,14 @@ import type { StationId, TierId } from "./stations";
 export const NODE_WIDTH = 212;
 
 const COLLAPSED_H = 108;
+// Some stations carry a permanent affordance below the readout in their
+// collapsed body (currently only "Open full view" on stations with a drill-in
+// detail view — i.e. the Agent). They get a taller collapsed height so the
+// button doesn't overflow. Kept as a sparse override map so a future detail
+// view (e.g. LLM with token charts) can opt in without touching the default.
+const COLLAPSED_H_OVERRIDE: Partial<Record<StationId, number>> = {
+  agent: 140,
+};
 // Expanded heights are tuned per station to fit their inner content. The
 // 008-scenario-framework preview nodes are collapsed-only (no expanded body),
 // so they keep the collapsed height.
@@ -122,7 +130,7 @@ export interface LayoutResult {
 }
 
 export function heightOf(id: StationId, expanded: ReadonlySet<StationId>): number {
-  return expanded.has(id) ? EXPANDED_H[id] : COLLAPSED_H;
+  return expanded.has(id) ? EXPANDED_H[id] : (COLLAPSED_H_OVERRIDE[id] ?? COLLAPSED_H);
 }
 
 export function computeLayout(

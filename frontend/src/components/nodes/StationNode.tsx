@@ -176,36 +176,6 @@ export function StationNode(props: NodeProps) {
         {expanded ? (
           <div className="mt-2 flex min-h-0 flex-1 flex-col">
             <ExpandedBody meta={meta} rt={runtime} usage={usage} />
-            {HAS_DETAIL[meta.id] && (
-              <div className="mt-auto flex flex-col gap-1.5">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDetail(meta.id);
-                  }}
-                  className="w-full rounded-lg border px-2 py-1 text-[10.5px] font-semibold transition hover:bg-[var(--color-panel-2)]"
-                  style={{ borderColor: accent, color: accent }}
-                >
-                  {t.node.openFull} ▸
-                </button>
-                {isAgent && (
-                  // 042-agent-anatomy — secondary affordance: open the "Configure
-                  // agent" dialog (identity, prompts, model, tools, KB, skills).
-                  // Distinct from "Open full view", which is the runtime drill-in.
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openAnatomy();
-                    }}
-                    data-testid="open-agent-anatomy"
-                    className="w-full rounded-lg border border-dashed px-2 py-1 text-[10.5px] font-semibold text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-ink)]"
-                    style={{ borderColor: `color-mix(in srgb, ${accent} 35%, transparent)` }}
-                  >
-                    ⚙️ {t.agentAnatomy.openButton}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         ) : (
           <div
@@ -215,6 +185,24 @@ export function StationNode(props: NodeProps) {
           >
             {readout || "·"}
           </div>
+        )}
+        {/* "Open full view" lives outside the expand ternary now — it's just
+            as useful in the collapsed card (no reason to expand the node just
+            to find this button). The "Configure agent" secondary button moved
+            to the masthead's AgentConfigToggle (header-agent-config), where
+            it's discoverable from any page. The expand layout reserves a fixed
+            slot for this button via EXPANDED_H / COLLAPSED_H in layout.ts. */}
+        {HAS_DETAIL[meta.id] && !comingSoon && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openDetail(meta.id);
+            }}
+            className="mt-auto w-full rounded-lg border px-2 py-1 text-[10.5px] font-semibold transition hover:bg-[var(--color-panel-2)]"
+            style={{ borderColor: accent, color: accent }}
+          >
+            {t.node.openFull} ▸
+          </button>
         )}
       </div>
     </motion.div>
