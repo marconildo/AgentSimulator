@@ -148,15 +148,31 @@ export interface Skill {
 }
 export type SkillInput = { name: string; description: string; body: string };
 
-/** An HTTP error carrying its status so callers can branch (e.g. 409 = name taken). */
+/** An HTTP error carrying its status + optional parsed JSON body so callers
+ *  can branch (e.g. 409 = name taken, 409 = agent_locked, …). The body is
+ *  attached when the server returned valid JSON with a `detail` field; that
+ *  lets a structured detail like `{detail: "agent_locked", message_count: 3}`
+ *  flow through to the FE without a separate fetch. */
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public body?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** 045-composer-agent-selector: typed predicate for the lock 409. Stable
+ *  surface so call-sites stay readable: `if (isAgentLockedError(e)) …`. */
+export function isAgentLockedError(e: unknown): e is ApiError {
+  if (!(e instanceof ApiError) || e.status !== 409) return false;
+  const detail = (e.body as { detail?: unknown } | undefined)?.detail;
+  if (typeof detail === "object" && detail !== null) {
+    return (detail as { detail?: string }).detail === "agent_locked";
+  }
+  return false;
 }
 
 async function jsonApi<T>(path: string, method: string, body?: unknown): Promise<T> {
@@ -165,7 +181,18 @@ async function jsonApi<T>(path: string, method: string, body?: unknown): Promise
     headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!resp.ok) throw new ApiError(resp.status, `${method} ${path} failed: ${resp.status}`);
+  if (!resp.ok) {
+    // Try to surface the structured `detail` body (e.g. 409 agent_locked) so
+    // callers can branch on it without a second round-trip. Best-effort: if
+    // the body isn't JSON, we still raise with status alone.
+    let parsed: unknown;
+    try {
+      parsed = await resp.json();
+    } catch {
+      parsed = undefined;
+    }
+    throw new ApiError(resp.status, `${method} ${path} failed: ${resp.status}`, parsed);
+  }
   return (await resp.json()) as T;
 }
 

@@ -27,10 +27,23 @@ const MAX_VISIBLE = 10;
 
 export function AgentCatalogSidebar() {
   const t = useT().agentAnatomy.catalog;
+  // 045-composer-agent-selector: the lock string is shared with the composer
+  // chip; live under `chat.agentSelector` rather than the dialog's own slot
+  // because both surfaces are in sync.
+  const lockedString = useT().chat.agentSelector.locked;
   const activeAgent = useChat((c) => {
     const id = c.activeSessionId;
     if (!id) return null;
     return c.sessions.find((s) => s.id === id)?.agent ?? null;
+  });
+  // 045-composer-agent-selector: locked if the active conversation has at
+  // least one persisted message. Drives the row disabled state below and
+  // mirrors the composer chip — both lock together, in sync.
+  const locked = useChat((c) => {
+    const id = c.activeSessionId;
+    if (!id) return false;
+    const count = c.sessions.find((s) => s.id === id)?.message_count ?? 0;
+    return count > 0;
   });
   const replaceSession = useChat((c) => c.replaceSession);
   const ensureSession = useChat((c) => c.ensureSession);
@@ -74,6 +87,11 @@ export function AgentCatalogSidebar() {
 
   async function onSelect(nextId: string) {
     if (!nextId || nextId === activeId) return;
+    // 045-composer-agent-selector: defensive client-side gate. The chip
+    // already disables, and the server returns 409, but if a row's disabled
+    // attr is somehow bypassed (a11y tools, programmatic dispatch), we still
+    // refuse to re-link a started conversation.
+    if (locked) return;
     setBusy(true);
     try {
       // Lazy-persist the conversation if the user is still on a draft. Picking
@@ -167,9 +185,10 @@ export function AgentCatalogSidebar() {
                 <li key={a.id}>
                   <button
                     onClick={() => void onSelect(a.id)}
-                    disabled={busy}
+                    disabled={busy || locked}
+                    aria-disabled={locked || undefined}
                     data-testid={`agent-catalog-row-${a.id}`}
-                    title={a.name}
+                    title={locked ? lockedString : a.name}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-[var(--color-ink)] transition hover:bg-[var(--color-panel)] disabled:cursor-not-allowed disabled:opacity-60"
                     style={{
                       background: isActive ? "var(--color-panel)" : "transparent",

@@ -120,11 +120,22 @@ async def test_document_add_list_delete(tmp_path):
     assert {d["document_id"] for d in await store.list_documents(sid)} == {"d2"}
 
 
-async def test_write_message_is_idempotent_per_id(tmp_path):
+async def test_write_message_rejects_duplicate_id(tmp_path):
+    # 047-db-integrity-constraints: turns are immutable. A duplicate
+    # message id is a real bug (the FE generates a fresh UUID per turn),
+    # so a second `write_message` with the same id must fail loud
+    # instead of silently rewriting the row (which bypassed the
+    # message_documents cascade).
+    import sqlite3
+
+    import pytest
+
     store = ConversationStore(tmp_path / "app.sqlite3")
     sid = (await store.create_session())["id"]
     await store.write_message(sid, "dup", "hi", "a")
-    await store.write_message(sid, "dup", "hi", "b")  # same id replaces, not appends
+    with pytest.raises(sqlite3.IntegrityError):
+        await store.write_message(sid, "dup", "hi", "b")
+    # The first row stays untouched.
     assert (await store.read_history(sid))["total_rows"] == 1
 
 

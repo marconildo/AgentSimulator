@@ -116,3 +116,4 @@ CI (`.github/workflows/ci.yml`) runs `ruff check` + `pytest` (Python 3.12) and `
 
 - `docs/architecture.md` and `docs/how-it-works.md` — long-form walkthroughs of the running system (kept in sync with the code above).
 - `docs/development-workflow.md` — how to build here (SDD + TDD), the contributor-facing companion to `.specify/constitution.md` and `specs/README.md`.
+- `docs/data-model.md` — canonical schema reference for the SQLite relational store: ERD + per-table columns + cascade rules + "what's NOT a table" (tools / configs / vectors / objects). The schema-audit test (`backend/tests/test_schema_audit.py`) keeps this in sync with the code.

@@ -51,8 +51,15 @@ interface ChatState {
   loadedTraceId: string | null;
   traceExpired: boolean;
   error: string | null;
+  // 045-composer-agent-selector: transient note when the server says
+  // `agent_locked` on PATCH (e.g. stale tab). The composer chip + the 044
+  // catalog sidebar show this string and the chip flips locked on next render.
+  agentLockedNote: string | null;
 
   setInput: (value: string) => void;
+  // 045-composer-agent-selector: surface the lock note + auto-clear after a
+  // short delay (consistent with other transient notes in this store).
+  setAgentLockedNote: (note: string | null) => void;
   showList: () => Promise<void>;
   init: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
@@ -128,8 +135,21 @@ export const useChat = create<ChatState>((set, get) => ({
   loadedTraceId: null,
   traceExpired: false,
   error: null,
+  agentLockedNote: null,
 
   setInput: (value) => set({ input: value }),
+  setAgentLockedNote: (note) => {
+    set({ agentLockedNote: note });
+    if (note) {
+      // Auto-clear after 6s so the note doesn't linger; matches the rough
+      // cadence of other transient notes (e.g. cancelled, uploadFailed).
+      window.setTimeout(() => {
+        if (useChat.getState().agentLockedNote === note) {
+          set({ agentLockedNote: null });
+        }
+      }, 6000);
+    }
+  },
 
   showList: async () => {
     // Refresh on the way back so titles / counts reflect the latest activity.

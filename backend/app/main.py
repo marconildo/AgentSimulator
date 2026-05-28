@@ -26,6 +26,7 @@ from .agent.tools import agent_tool_specs
 from .config import get_settings
 from .db.seed import seed_default_agent, seed_skills
 from .db.store import (
+    AgentLocked,
     CannotDeleteDefaultAgent,
     DuplicateSkillName,
     UnknownAgentId,
@@ -478,6 +479,18 @@ async def list_sessions():
     return await get_store().list_sessions()
 
 
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Single session lookup including the inlined agent + `message_count`
+    (045-composer-agent-selector). The FE composer chip derives the lock
+    state from `message_count`; this endpoint lets it refetch a single
+    session after a 409 without listing the whole catalog."""
+    row = await get_store().get_session(session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return row
+
+
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a conversation + its messages (keeps PDF embeddings — D6, AC4)."""
@@ -586,6 +599,15 @@ async def patch_session(session_id: str, body: SessionPatch):
         row = await get_store().set_session_agent(session_id, body.agent_id)
     except UnknownAgentId as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AgentLocked as exc:
+        # 045-composer-agent-selector: the conversation is started; swapping
+        # the agent at this point would break "one agent per chat". Structured
+        # detail so a stale FE tab can recover gracefully (it shows the lock
+        # tooltip + refreshes the session list to flip the chip locked).
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": "agent_locked", "message_count": exc.message_count},
+        ) from exc
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
     return row

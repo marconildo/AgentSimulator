@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | **ID** | 033-ingestion-node |
-| **Status** | planned |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-27 |
 
-> Status: **done**. Option A — a real station that owns the `rag.ingest.*` stages,
+> Shipped as **Option A** — a real station that owns the `rag.ingest.*` stages,
 > visible in **all** scenarios. See below.
 
 ## Problem / motivation

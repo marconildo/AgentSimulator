@@ -68,6 +68,18 @@ export interface Strings {
     // + the hover/title on chips already committed to a sent user message.
     pendingAttachmentsHint: string;
     attachedToThisMessage: string;
+    // 045-composer-agent-selector: the composer's mini agent picker (left of
+    // 📎). Locked state engages once a turn lands (`message_count > 0`); the
+    // 044 dialog catalog sidebar reuses the same `locked` string. The aria
+    // labels are functions because they include the agent's name.
+    agentSelector: {
+      label: string;
+      menuHeading: string;
+      ariaLabel: (agentName: string) => string;
+      locked: string;
+      lockedAriaLabel: (agentName: string) => string;
+      lockedInlineNote: string;
+    };
   };
   // 022-message-trace-link: revisit a past turn's trace on the canvas.
   trace: {
@@ -629,6 +641,16 @@ const en: Strings = {
     skillsBadge: "Skills applied",
     pendingAttachmentsHint: "Pending attachments — will travel with your next message.",
     attachedToThisMessage: "Attached to this message",
+    agentSelector: {
+      label: "Agent",
+      menuHeading: "Choose an agent",
+      ariaLabel: (name) => `Active agent: ${name}. Click to change.`,
+      locked:
+        "Agent locked after the conversation's first message. Start a new chat to use a different agent.",
+      lockedAriaLabel: (name) => `Active agent: ${name}. Locked after the first message.`,
+      lockedInlineNote:
+        "The agent is locked because this conversation already has messages.",
+    },
   },
   trace: {
     clickToLoad: "Click a message to load its trace",
@@ -1237,6 +1259,17 @@ const pt: Strings = {
     skillsBadge: "Skills aplicadas",
     pendingAttachmentsHint: "Anexos pendentes — vão junto com sua próxima mensagem.",
     attachedToThisMessage: "Anexado a esta mensagem",
+    agentSelector: {
+      label: "Agente",
+      menuHeading: "Escolher um agente",
+      ariaLabel: (name) => `Agente ativo: ${name}. Clique para trocar.`,
+      locked:
+        "Agente travado após a primeira mensagem da conversa. Inicie um novo chat para usar outro agente.",
+      lockedAriaLabel: (name) =>
+        `Agente ativo: ${name}. Travado após a primeira mensagem.`,
+      lockedInlineNote:
+        "O agente está travado porque esta conversa já tem mensagens.",
+    },
   },
   trace: {
     clickToLoad: "Clique numa mensagem para carregar seu trace",

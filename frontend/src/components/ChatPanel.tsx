@@ -5,7 +5,16 @@ import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { CancelButton } from "./CancelButton";
 import { ConversationHud } from "./ConversationHud";
-import type { ChatChunk, ChatMessage, DocumentMeta, SessionMeta } from "../lib/chatApi";
+import {
+  isAgentLockedError,
+  listAgents,
+  setSessionAgent,
+  type AgentMeta,
+  type ChatChunk,
+  type ChatMessage,
+  type DocumentMeta,
+  type SessionMeta,
+} from "../lib/chatApi";
 import type { PendingBubble } from "../lib/chatStatus";
 import { formatTokens, formatUsd } from "../lib/cost";
 import { useHealth } from "../lib/health";
@@ -126,6 +135,43 @@ function FileIcon({ className }: IconProps) {
     >
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
       <path d="M14 3v5h5" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      data-testid="composer-agent-chevron"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+// 045-composer-agent-selector: small "🤖" mark on the agent chip.
+function BrainIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-1 5.6V16a3 3 0 0 0 4 2.83V20a2 2 0 0 0 4 0V4a2 2 0 0 0-4 0z" />
+      <path d="M15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 1 5.6V16a3 3 0 0 1-4 2.83" />
     </svg>
   );
 }
@@ -375,6 +421,10 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
           ⏳ {t.trace.expired}
         </p>
       )}
+
+      {/* 045-composer-agent-selector: transient note after a stale-tab 409.
+          Auto-clears via the store's setAgentLockedNote timeout. */}
+      <AgentLockNote />
 
       <Composer
         input={input}
@@ -788,6 +838,11 @@ function Composer({
         />
 
         <div className="mt-1 flex items-center gap-2">
+          {/* 045-composer-agent-selector: agent chip + dropdown, to the LEFT
+              of 📎. Locks itself when the conversation has any persisted
+              message (one agent per chat — to swap, start a new chat). */}
+          <ComposerAgentChip t={t} />
+
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -895,6 +950,155 @@ function DocChip({ doc, onRemove, t }: { doc: DocumentMeta; onRemove: () => void
       >
         <CloseIcon className="h-3 w-3" />
       </button>
+    </span>
+  );
+}
+
+// 045-composer-agent-selector: transient "agent locked" note after a stale-tab
+// 409. Auto-cleared by the store after a short timeout.
+function AgentLockNote() {
+  const note = useChat((s) => s.agentLockedNote);
+  if (!note) return null;
+  return (
+    <p className="mx-3 mb-1.5 rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1.5 text-[11px] text-[var(--color-muted)]">
+      🔒 {note}
+    </p>
+  );
+}
+
+// 045-composer-agent-selector: mini agent picker (chip + dropdown) that sits
+// to the LEFT of 📎 in the composer toolbar. The chip shows the active agent's
+// name; clicking opens a floating menu listing every agent in the catalog
+// (lazy-loaded on first open). Locks itself the moment the active conversation
+// has at least one persisted turn — locked state renders disabled, hides the
+// chevron, and surfaces the lock tooltip. The 044 dialog catalog sidebar
+// follows the same lock (see `AgentCatalogSidebar.tsx`).
+function ComposerAgentChip({ t }: { t: Strings }) {
+  const activeSessionId = useChat((s) => s.activeSessionId);
+  const session = useChat((s) =>
+    activeSessionId ? s.sessions.find((row) => row.id === activeSessionId) : null,
+  );
+  const replaceSession = useChat((s) => s.replaceSession);
+  const setLockedNote = useChat((s) => s.setAgentLockedNote);
+
+  const agent = session?.agent;
+  const messageCount = session?.message_count ?? 0;
+  const locked = messageCount > 0;
+
+  // Catalog is lazy-loaded on first menu open and refreshed on each subsequent
+  // open so a new agent created elsewhere (044 dialog) shows up here too.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [catalog, setCatalog] = useState<AgentMeta[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const name = agent?.name ?? "—";
+  const tooltip = locked
+    ? t.chat.agentSelector.locked
+    : t.chat.agentSelector.ariaLabel(name);
+
+  async function openMenu() {
+    if (locked || busy) return;
+    setMenuOpen(true);
+    try {
+      setCatalog(await listAgents());
+    } catch {
+      setCatalog([]);
+    }
+  }
+
+  async function onSelect(nextId: string) {
+    if (!activeSessionId || !agent || nextId === agent.id) {
+      setMenuOpen(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await setSessionAgent(activeSessionId, nextId);
+      if (updated) replaceSession(updated);
+      setMenuOpen(false);
+    } catch (err) {
+      // 045 AC12 — server-side lock fired (stale tab). Don't mutate the
+      // session's agent; surface the lock and refresh sessions so the chip
+      // flips locked on the next render.
+      if (isAgentLockedError(err)) {
+        setLockedNote(t.chat.agentSelector.lockedInlineNote);
+        await useChat.getState().showList();
+      }
+      setMenuOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The button itself: text label + chevron when unlocked, no chevron when
+  // locked. Native `disabled` blocks clicks correctly; `title=` shows the
+  // bilingual tooltip on hover/focus.
+  return (
+    <span className="relative">
+      <button
+        type="button"
+        onClick={() => void openMenu()}
+        disabled={locked || busy}
+        aria-disabled={locked || undefined}
+        aria-label={
+          locked
+            ? t.chat.agentSelector.lockedAriaLabel(name)
+            : t.chat.agentSelector.ariaLabel(name)
+        }
+        title={tooltip}
+        data-testid="composer-agent-chip"
+        className="inline-flex h-8 max-w-[160px] items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] px-2 text-[11.5px] text-[var(--color-ink)] transition enabled:hover:bg-[var(--color-panel-2)] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <BrainIcon className="h-3.5 w-3.5 shrink-0 text-[var(--color-sky-strong)]" />
+        <span className="min-w-0 truncate">{name}</span>
+        {!locked && <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />}
+      </button>
+
+      {menuOpen && !locked && (
+        <div
+          data-testid="composer-agent-menu"
+          role="menu"
+          className="absolute bottom-full left-0 mb-1 min-w-[180px] max-w-[260px] rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] py-1 text-[12px] shadow-lg"
+        >
+          <div className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+            {t.chat.agentSelector.menuHeading}
+          </div>
+          {catalog === null ? (
+            <div className="px-2.5 py-1.5 text-[var(--color-muted)]">…</div>
+          ) : catalog.length === 0 ? (
+            <div className="px-2.5 py-1.5 italic text-[var(--color-label)]">—</div>
+          ) : (
+            catalog.map((a) => {
+              const isActive = a.id === agent?.id;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void onSelect(a.id)}
+                  disabled={busy}
+                  data-testid={`composer-agent-menu-row-${a.id}`}
+                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition enabled:hover:bg-[var(--color-panel-2)] disabled:opacity-50"
+                  style={{
+                    background: isActive ? "var(--color-panel-2)" : "transparent",
+                  }}
+                >
+                  <BrainIcon className="h-3.5 w-3.5 shrink-0 text-[var(--color-sky-strong)]" />
+                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                  {a.is_default && (
+                    <span
+                      className="shrink-0 rounded border border-[var(--color-line)] px-1 py-px font-mono text-[8.5px] uppercase text-[var(--color-muted)]"
+                      title={a.name}
+                    >
+                      ★
+                    </span>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
     </span>
   );
 }

@@ -1,5 +1,10 @@
 """The application's relational database (its system of record).
 
+Canonical schema reference: ``docs/data-model.md`` (ERD + per-table columns +
+cascade rules + "what's NOT a table"). The schema-audit test
+(``backend/tests/test_schema_audit.py``) pins the documented table set against
+``sqlite_master`` so doc + code can't drift apart.
+
 A small, **real** SQLite-backed store — not a mock. It exists so the simulator
 can show a genuine relational database next to the RAG vector store: the
 backend loads recent history (a read) and persists every conversation (a
@@ -97,7 +102,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- 042-agent-anatomy added `agent_name`; 043-persisted-agent promotes the
     -- agent to its own row and points here via `agent_id`. The `agent_name`
     -- column is dropped by the 043 migration after backfilling into agents.name.
-    agent_id   TEXT REFERENCES agents(id),
+    -- 047-db-integrity-constraints: ON DELETE SET NULL — deleting an agent
+    -- never silently wipes conversations; the app code path re-points to the
+    -- default first (better UX), this is the schema-level backstop.
+    agent_id   TEXT REFERENCES agents(id) ON DELETE SET NULL,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -105,6 +113,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- conversation owns its own row (clone-on-create from the default row, which is
 -- preserved across `clear_all` by re-seeding). Edits PATCH this row directly;
 -- conversations are insulated from each other.
+-- 047-db-integrity-constraints: is_default carries a CHECK so an out-of-domain
+-- integer is rejected at the DB level (pydantic already validates on the way in;
+-- the CHECK is belt-and-braces against raw SQL or future code paths).
 CREATE TABLE IF NOT EXISTS agents (
     id            TEXT PRIMARY KEY,
     name          TEXT NOT NULL,
@@ -113,7 +124,7 @@ CREATE TABLE IF NOT EXISTS agents (
     agent_prompt  TEXT NOT NULL,
     model         TEXT NOT NULL,
     enabled_tools TEXT NOT NULL DEFAULT '[]', -- JSON list[str]; [] = no tools
-    is_default    INTEGER NOT NULL DEFAULT 0,
+    is_default    INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
     created_at    REAL NOT NULL,
     updated_at    REAL NOT NULL
 );
@@ -129,11 +140,14 @@ CREATE TABLE IF NOT EXISTS messages (
     skills     TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL
 );
+-- 047-db-integrity-constraints: chunk_count >= 0 enforced at DB level. A
+-- negative count would be nonsense (and would have slipped past pydantic if
+-- the value came from a future code path or raw SQL).
 CREATE TABLE IF NOT EXISTS documents (
     id          TEXT PRIMARY KEY,
     session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     filename    TEXT NOT NULL,
-    chunk_count INTEGER NOT NULL DEFAULT 0,
+    chunk_count INTEGER NOT NULL DEFAULT 0 CHECK (chunk_count >= 0),
     created_at  REAL NOT NULL
 );
 -- 040-message-attachments: per-message attachment join. A document is linked
@@ -197,6 +211,23 @@ class UnknownAgentId(ValueError):
         self.agent_id = agent_id
 
 
+class AgentLocked(ValueError):
+    """Raised when ``set_session_agent`` tries to swap the agent on a
+    session that has already produced at least one persisted turn
+    (045-composer-agent-selector).
+
+    The visualizer's "one agent per chat" invariant: a started
+    conversation locks its agent. The REST layer maps this to a 409
+    Conflict with a structured body (`{detail: "agent_locked",
+    message_count: <n>}`) so the FE can surface the lock to a stale
+    tab gracefully.
+    """
+
+    def __init__(self, message_count: int) -> None:
+        super().__init__(f"agent is locked: conversation already has {message_count} message(s)")
+        self.message_count = message_count
+
+
 class ConversationStore:
     """Session-scoped conversation store backed by SQLite."""
 
@@ -206,6 +237,12 @@ class ConversationStore:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
             self._migrate(conn)
+        # 047-db-integrity-constraints: the rebuild-and-copy migration needs
+        # `PRAGMA foreign_keys = OFF` for the duration, which can't toggle
+        # mid-transaction — run it on its own dedicated connection AFTER the
+        # outer one is committed and closed. Gated by `PRAGMA user_version`
+        # so re-boots are no-ops.
+        ConversationStore._migrate_to_integrity_constraints(self.path)
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection) -> None:
@@ -248,6 +285,10 @@ class ConversationStore:
     # boot and delete every named agent the user later created via the
     # catalog UI (every non-default row would look like a 043 clone).
     _SCHEMA_VERSION_SHARED_CATALOG = 1
+    # 047-db-integrity-constraints: bumped to mark that the per-table rebuild
+    # for the new CHECKs + `ON DELETE SET NULL` has happened. Idempotent
+    # across boots; existing dev DBs upgrade once on next start.
+    _SCHEMA_VERSION_INTEGRITY_CONSTRAINTS = 2
 
     @staticmethod
     def _migrate_to_shared_catalog(conn: sqlite3.Connection) -> None:
@@ -295,6 +336,148 @@ class ConversationStore:
         # agents alone.
         conn.execute(f"PRAGMA user_version = {ConversationStore._SCHEMA_VERSION_SHARED_CATALOG}")
 
+    @staticmethod
+    def _migrate_to_integrity_constraints(path: Path) -> None:
+        """047-db-integrity-constraints: outer guard. Checks the schema
+        version and calls :meth:`_rebuild_for_integrity_constraints` only
+        when an upgrade is needed.
+
+        Two layers so AC9's spy can pin "the rebuild ran exactly once" —
+        the outer is called every boot, but only the inner does the
+        table-rebuild dance.
+        """
+        target = ConversationStore._SCHEMA_VERSION_INTEGRITY_CONSTRAINTS
+        with sqlite3.connect(path) as conn:
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+        if current >= target:
+            return
+        ConversationStore._rebuild_for_integrity_constraints(path)
+
+    @staticmethod
+    def _rebuild_for_integrity_constraints(path: Path) -> None:
+        """Do the actual SQLite table-rebuild dance.
+
+        SQLite has no ``ALTER TABLE ADD CONSTRAINT``; the canonical workaround
+        is to rebuild each table and copy the rows. Wrapped in one transaction
+        with FK enforcement temporarily disabled (the only way to drop a
+        parent table without tripping child FKs), then ``foreign_key_check``
+        validates the result before commit.
+
+        Opens its own connection because ``PRAGMA foreign_keys`` is a no-op
+        inside a transaction — the outer ``__init__`` connection might be in
+        one (legacy implicit-transaction mode), so we need a fresh handle.
+        """
+        target = ConversationStore._SCHEMA_VERSION_INTEGRITY_CONSTRAINTS
+        conn = sqlite3.connect(path)
+        try:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("BEGIN")
+            # --- sessions: add ON DELETE SET NULL to the agent_id FK ----------
+            conn.execute(
+                """
+                CREATE TABLE sessions_new (
+                    id         TEXT PRIMARY KEY,
+                    title      TEXT,
+                    agent_id   TEXT REFERENCES agents(id) ON DELETE SET NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO sessions_new (id, title, agent_id, created_at, updated_at) "
+                "SELECT id, title, agent_id, created_at, updated_at FROM sessions"
+            )
+            conn.execute("DROP TABLE sessions")
+            conn.execute("ALTER TABLE sessions_new RENAME TO sessions")
+
+            # --- agents: add CHECK (is_default IN (0, 1)) ---------------------
+            conn.execute(
+                """
+                CREATE TABLE agents_new (
+                    id            TEXT PRIMARY KEY,
+                    name          TEXT NOT NULL,
+                    description   TEXT NOT NULL DEFAULT '',
+                    system_prompt TEXT NOT NULL,
+                    agent_prompt  TEXT NOT NULL,
+                    model         TEXT NOT NULL,
+                    enabled_tools TEXT NOT NULL DEFAULT '[]',
+                    is_default    INTEGER NOT NULL DEFAULT 0
+                                  CHECK (is_default IN (0, 1)),
+                    created_at    REAL NOT NULL,
+                    updated_at    REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO agents_new (id, name, description, system_prompt, "
+                "agent_prompt, model, enabled_tools, is_default, created_at, updated_at) "
+                "SELECT id, name, description, system_prompt, agent_prompt, model, "
+                "enabled_tools, is_default, created_at, updated_at FROM agents"
+            )
+            conn.execute("DROP TABLE agents")
+            conn.execute("ALTER TABLE agents_new RENAME TO agents")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_is_default ON agents(is_default)")
+
+            # --- documents: add CHECK (chunk_count >= 0) ----------------------
+            conn.execute(
+                """
+                CREATE TABLE documents_new (
+                    id          TEXT PRIMARY KEY,
+                    session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                    filename    TEXT NOT NULL,
+                    chunk_count INTEGER NOT NULL DEFAULT 0
+                                CHECK (chunk_count >= 0),
+                    created_at  REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO documents_new (id, session_id, filename, chunk_count, created_at) "
+                "SELECT id, session_id, filename, chunk_count, created_at FROM documents"
+            )
+            conn.execute("DROP TABLE documents")
+            conn.execute("ALTER TABLE documents_new RENAME TO documents")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_documents_session "
+                "ON documents(session_id, created_at)"
+            )
+            # message_documents indexes survive (the table itself is untouched),
+            # but recreate defensively in case a future variant changes that.
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_message_documents_message "
+                "ON message_documents(message_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_message_documents_document "
+                "ON message_documents(document_id)"
+            )
+
+            # --- one-shot orphan cleanup on message_documents -----------------
+            # The pre-047 `INSERT OR REPLACE INTO messages` could leave join
+            # rows pointing at the (replaced) id intact because the message_id
+            # didn't change — bypassing the join's `ON DELETE CASCADE`. Sweep
+            # any such orphans now so the next foreign_key_check passes.
+            conn.execute(
+                "DELETE FROM message_documents WHERE message_id NOT IN (SELECT id FROM messages)"
+            )
+            conn.execute(
+                "DELETE FROM message_documents WHERE document_id NOT IN (SELECT id FROM documents)"
+            )
+
+            # Sanity-check before flipping the version.
+            offenders = conn.execute("PRAGMA foreign_key_check").fetchall()
+            if offenders:
+                raise RuntimeError(f"047 migration left FK violations: {offenders!r}")
+            conn.execute(f"PRAGMA user_version = {target}")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.close()
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
@@ -333,6 +516,9 @@ class ConversationStore:
             "title": title,
             "created_at": now,
             "updated_at": now,
+            # 045-composer-agent-selector: fresh session = 0 turns; the FE chip
+            # uses this to render itself unlocked on a brand-new conversation.
+            "message_count": 0,
             "agent": _agent_row(default),
         }
 
@@ -357,11 +543,18 @@ class ConversationStore:
             if row["agent_id"]
             else None
         )
+        # 045-composer-agent-selector: expose `message_count` on every single-
+        # session read too (the list endpoint already had it), so the FE chip
+        # can derive the lock without a follow-up `GET /api/sessions`.
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", (session_id,)
+        ).fetchone()["n"]
         return {
             "id": row["id"],
             "title": row["title"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "message_count": int(count),
             "agent": _agent_row(agent_row) if agent_row else None,
         }
 
@@ -548,11 +741,32 @@ class ConversationStore:
 
     def _set_session_agent_sync(self, session_id: str, agent_id: str) -> dict[str, Any] | None:
         """Point a session at a different agent (044). Returns the updated
-        session (with the new inline agent), or ``None`` on unknown ids."""
+        session (with the new inline agent), or ``None`` on unknown ids.
+
+        045-composer-agent-selector: a session with ≥1 persisted message
+        locks its agent — swapping to a *different* one raises
+        :class:`AgentLocked` (the REST layer maps that to 409). A PATCH
+        that names the SAME agent the session already has is treated as a
+        no-op (200) so the FE can dispatch unconditionally.
+        """
         with self._connect() as conn:
             agent_row = conn.execute("SELECT id FROM agents WHERE id = ?", (agent_id,)).fetchone()
             if agent_row is None:
                 raise UnknownAgentId(agent_id)
+            # Lock check — only fires when the requested agent differs from
+            # the one already linked. Same-id PATCH is a harmless no-op.
+            current = conn.execute(
+                "SELECT agent_id FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if current is None:
+                return None
+            if current["agent_id"] != agent_id:
+                count = conn.execute(
+                    "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()["n"]
+                if count > 0:
+                    raise AgentLocked(int(count))
             cur = conn.execute(
                 "UPDATE sessions SET agent_id = ? WHERE id = ?", (agent_id, session_id)
             )
@@ -695,8 +909,13 @@ class ConversationStore:
     ) -> dict[str, Any]:
         now = time()
         with self._connect() as conn:
+            # 047-db-integrity-constraints: plain INSERT (was INSERT OR REPLACE).
+            # Turns are immutable: a duplicate id is a real bug, not a race to
+            # paper over. Letting REPLACE rewrite a row also bypassed
+            # `message_documents.ON DELETE CASCADE` (the id is unchanged, so the
+            # cascade never fired), which could orphan the join. Fail loud now.
             conn.execute(
-                "INSERT OR REPLACE INTO messages "
+                "INSERT INTO messages "
                 "(id, session_id, message, answer, chunks, skills, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (

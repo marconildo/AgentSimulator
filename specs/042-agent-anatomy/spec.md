@@ -3,9 +3,25 @@
 | | |
 |---|---|
 | **ID** | 042-agent-anatomy |
-| **Status** | done |
+| **Status** | done · *persistence superseded by 043+044* |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-28 |
+
+> ⚠️ **Follow-up note (2026-05-28).** The *dialog* and the *seven sections*
+> shipped here are still alive and exactly as designed. Two of the
+> persistence-layer choices below were **superseded** the same week:
+>
+> - The **in-memory Zustand store** that held system_prompt / agent_prompt /
+>   model / enabled_tools was promoted to SQLite by
+>   [043-persisted-agent](../043-persisted-agent/spec.md) (table `agents`).
+> - The `PATCH /api/sessions/{id}` endpoint with the `agent_name` body
+>   was removed by 043; agent edits now PATCH `/api/agents/{id}` directly,
+>   and 044-shared-agent-catalog made those edits **shared** across every
+>   conversation that uses the same agent row.
+>
+> Everything else (the 7-section dialog, the two prompt layers, the model
+> dropdown, the `ChatRequest.agent_prompt` + `model` overrides, the curated
+> allowlist) stayed.
 
 > The HOW is in `plan.md`. This spec introduces an **"Anatomia do Agente"**
 > dialog opened from the Agent station that exposes — and lets the user edit —
@@ -471,8 +487,10 @@ chrome (the same way `SYSTEM_PROMPT` ships in English today). The UI
 
 ## Out of scope / deferred
 
-- A **global agent registry** with multiple named agents, an
-  agent picker in the header, switching between agents mid-session.
+- ~~A **global agent registry** with multiple named agents, an
+  agent picker in the header, switching between agents mid-session.~~
+  **Shipped later as [044-shared-agent-catalog](../044-shared-agent-catalog/spec.md)**
+  (catalog header strip with selector + clone + delete).
 - **Avatar picker** and the SaaS-only tabs (groups, scheduling,
   learnings).
 - A **non-OpenAI provider** dropdown (would require touching the

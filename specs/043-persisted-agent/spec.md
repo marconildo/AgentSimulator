@@ -3,9 +3,31 @@
 | | |
 |---|---|
 | **ID** | 043-persisted-agent |
-| **Status** | done |
+| **Status** | done · *partially superseded by 044-shared-agent-catalog* |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-05-28 |
+
+> ⚠️ **Direction correction — read this first.** Two of the headline invariants
+> below were **deliberately reverted** by [044-shared-agent-catalog](../044-shared-agent-catalog/spec.md)
+> on 2026-05-28, the day this spec shipped, after the user reported that the
+> 1:1 model was the wrong mental model. The 043 schema (the `agents` table,
+> the `sessions.agent_id` FK, the live-edit dialog flow, the persisted
+> default seed, the chat-bubble name, the `PATCH /api/agents/{id}` endpoint)
+> all stay — what changed is the relationship cardinality and lifecycle:
+>
+> - **Clone-on-create is GONE.** `POST /api/sessions` no longer clones the
+>   default agent into a fresh row; it **links** the session to the existing
+>   default. Sessions now share the same agent row (N sessions : 1 agent).
+> - **Delete-session no longer cascades to the agent.** The agent survives;
+>   the catalog is the single owner of agent lifecycle.
+> - The 044 migration (gated by `PRAGMA user_version = 1`) drops every
+>   `is_default=0` row this spec created and re-points every session to the
+>   default.
+>
+> See `specs/044-shared-agent-catalog/spec.md` for the new contract.
+> The Goals/AC text below is kept verbatim as a historical record of what
+> 043 originally shipped; everything *except* the clone semantics and the
+> delete-session cascade is still in force.
 
 > Follow-up to 042-agent-anatomy. The Agent Anatomy dialog already exposed the
 > seven items that compose an agent, but four of them (system prompt, agent
