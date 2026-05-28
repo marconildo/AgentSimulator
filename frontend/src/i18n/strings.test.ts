@@ -272,6 +272,27 @@ describe("context-window-budget i18n (036-context-window-budget AC10)", () => {
   });
 });
 
+describe("memory-growth i18n (039-memory-growth-visualization AC8)", () => {
+  it("has every new memory-growth label in en and pt, non-empty", () => {
+    for (const k of [
+      "memoryGrowth",
+      "memoryGrowthHint",
+      "thisTurnNotStored",
+      "memoryLesson",
+    ] as const) {
+      expect(UI.en.agentDetail[k]?.trim()).toBeTruthy();
+      expect(UI.pt.agentDetail[k]?.trim()).toBeTruthy();
+    }
+  });
+
+  it("has the currentlyInWindow + nextToFallOut builders in en and pt (interpolating their args)", () => {
+    expect(UI.en.agentDetail.currentlyInWindow("618")).toContain("618");
+    expect(UI.pt.agentDetail.currentlyInWindow("618")).toContain("618");
+    expect(UI.en.agentDetail.nextToFallOut(5, 1)).toMatch(/5.*1|1.*5/);
+    expect(UI.pt.agentDetail.nextToFallOut(5, 1)).toMatch(/5.*1|1.*5/);
+  });
+});
+
 describe("abstain-badge i18n (021-abstain-badge)", () => {
   it("has the badge + hint in en and pt", () => {
     for (const k of ["badge", "hint"] as const) {

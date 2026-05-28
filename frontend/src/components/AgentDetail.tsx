@@ -11,6 +11,7 @@ import { CELL_COUNT, deriveBudget, gridCells, type GridSlice } from "../lib/cont
 import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView } from "../lib/derive";
 import { abstained } from "../lib/abstain";
+import { deriveMemoryGrowth } from "../lib/memoryGrowth";
 import { loadTrace, type TraceLoad } from "../lib/traceCache";
 import {
   contextSections,
@@ -162,6 +163,10 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const sections = useMemo(() => contextSections(visible), [visible]);
   const legend = budget.categories.filter((c) => c.tokens > 0);
 
+  // 039-memory-growth-visualization: per-turn weights of the long-term memory
+  // currently in the model's window. Pure projection of `db.read` END data.
+  const growth = useMemo(() => deriveMemoryGrowth(events, cursor), [events, cursor]);
+
   // 019-inline-citations: honest, sentence-level provenance over the settled
   // answer, composed from this turn's tool results + retrieved chunks.
   const sources = useMemo(() => sourcesFromEvents(visible), [visible]);
@@ -289,6 +294,57 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                 ))}
               </div>
             </Labeled>
+            {/* 039-memory-growth-visualization: per-turn weights of what the
+                model actually re-reads from prior conversation. Hidden on
+                pre-039 traces (graceful fallback). */}
+            {growth.available && growth.rows.length > 0 && (
+              <Labeled label={a.memoryGrowth}>
+                <div className="space-y-1" title={a.memoryGrowthHint}>
+                  {growth.rows.map((r) => (
+                    <div
+                      key={r.turn}
+                      className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-mono text-[10px] text-[var(--color-muted)]">
+                          T{r.turn}
+                        </span>
+                        <span className="font-mono text-[10px] tabular-nums text-[var(--color-text-soft)]">
+                          {formatTokens(r.tokens)}
+                        </span>
+                      </div>
+                      <div
+                        className="mt-1 h-1.5 rounded-full"
+                        style={{
+                          width: `${Math.max(r.barWidth * 100, 2)}%`,
+                          background: "var(--color-blue)",
+                        }}
+                      />
+                      <div className="mt-1 truncate text-[10px] text-[var(--color-muted)]">
+                        🧑 {truncate(r.message, 60)}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Placeholder row for the in-progress turn (not yet stored). */}
+                  <div className="rounded-md border border-dashed border-[var(--color-line)] px-2 py-1 text-[10px] italic text-[var(--color-label)]">
+                    T{growth.rows.length + 1} {a.thisTurnNotStored}
+                  </div>
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[10px] text-[var(--color-muted)]">
+                  <span className="font-mono tabular-nums">
+                    {a.currentlyInWindow(formatTokens(growth.totalTokens))}
+                  </span>
+                  {growth.nextToFallOut !== null && (
+                    <span className="font-mono tabular-nums text-[var(--color-warn)]">
+                      {a.nextToFallOut(growth.limit, growth.nextToFallOut)}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-[10px] italic text-[var(--color-muted)]">
+                  ℓ {a.memoryLesson}
+                </p>
+              </Labeled>
+            )}
           </Panel>
 
           {/* Context window — a /context-style budget against the model's real

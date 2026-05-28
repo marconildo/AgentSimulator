@@ -414,6 +414,14 @@ export interface Strings {
     estimatedNote: string;
     // The window is one model call; Usage & Cost sums every round of the turn.
     perCallNote: string;
+    // 039-memory-growth-visualization — the per-turn growth of long-term memory:
+    // only the visible text carries forward; reasoning / tool calls don't.
+    memoryGrowth: string;
+    memoryGrowthHint: string;
+    currentlyInWindow: (total: string) => string;
+    nextToFallOut: (limit: number, turn: number) => string;
+    thisTurnNotStored: string;
+    memoryLesson: string;
   };
   // 019-inline-citations — provenance chips on the settled answer. Chrome only;
   // tool args / chunk snippets / proper nouns stay verbatim (not translated).
@@ -937,6 +945,13 @@ const en: Strings = {
     windowHint: "The model's finite context window — used vs. free this turn.",
     estimatedNote: "Per-category split is an estimate; used/max is the real billed total.",
     perCallNote: "Used sums every LLM round in this turn (decide + answer) — matches Usage & Cost.",
+    memoryGrowth: "Memory growth",
+    memoryGrowthHint: "What carries forward from each prior turn — only the visible text.",
+    currentlyInWindow: (total) => `Currently in window: ${total} tokens`,
+    nextToFallOut: (limit, turn) => `Next to fall out (limit ${limit}): T${turn}`,
+    thisTurnNotStored: "(this turn — not yet stored)",
+    memoryLesson:
+      "Only your message + the assistant's final answer carries forward; reasoning, tool calls and observations don't.",
   },
   citation: {
     sources: "sources",
@@ -1457,6 +1472,13 @@ const pt: Strings = {
     windowHint: "A janela de contexto finita do modelo — usado × livre neste turno.",
     estimatedNote: "A divisão por categoria é uma estimativa; usado/máx é o total real cobrado.",
     perCallNote: "Usado soma todas as rodadas de LLM neste turno (decidir + responder) — confere com Usage & Cost.",
+    memoryGrowth: "Crescimento da memória",
+    memoryGrowthHint: "O que carrega de cada turno anterior — só o texto visível.",
+    currentlyInWindow: (total) => `Atualmente na janela: ${total} tokens`,
+    nextToFallOut: (limit, turn) => `Próxima a cair (limite ${limit}): T${turn}`,
+    thisTurnNotStored: "(este turno — ainda não salvo)",
+    memoryLesson:
+      "Só sua mensagem + a resposta final do assistente carrega; raciocínio, tool calls e observações não.",
   },
   citation: {
     sources: "fontes",

@@ -25,6 +25,7 @@ from .agent.tools import agent_tool_specs
 from .config import get_settings
 from .db.seed import seed_skills
 from .db.store import DuplicateSkillName, get_store
+from .llm.context import history_pair_tokens
 from .mcp.client import get_registry
 from .rag.ingest import build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
@@ -235,7 +236,14 @@ async def chat(req: ChatRequest):
                     {"table": "messages", "session_id": session_id},
                 ) as db_rec:
                     history = await store.read_history(session_id)
-                    db_rec.data = history
+                    # 039-memory-growth-visualization: per-pair token counts so
+                    # the Agent's Long-term-Memory panel can draw the honest
+                    # turn-by-turn growth of what re-enters the model's window
+                    # next turn (only the visible text — never the compute).
+                    db_rec.data = {
+                        **history,
+                        "recent_tokens": history_pair_tokens(history["recent"]),
+                    }
 
                 # 027-skills: advertise the global catalog to the agent by
                 # name + description (the body is loaded on demand via load_skill).

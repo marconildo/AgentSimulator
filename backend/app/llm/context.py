@@ -144,6 +144,19 @@ def _message_text(content: Any) -> str:
     return str(content) if content else ""
 
 
+def history_pair_tokens(history: Sequence[Mapping[str, str]]) -> list[int]:
+    """Per-``{message, answer}``-pair token counts (039-memory-growth-visualization).
+
+    Each pair is rendered with the same framing as :func:`_render_history`
+    (``"- user: …\\n  assistant: …"``) and tokenized with the same encoder as the
+    ``memory`` slice in :func:`context_budget`, so the per-pair sum reconciles
+    with that slice within a tiny ±2-token BPE boundary effect across the
+    inter-pair newline join. An empty pair still costs the framing prefix — the
+    growth panel shows abstained / empty-answer turns honestly, not as 0.
+    """
+    return [_count(_render_history([p])) for p in history]
+
+
 def context_budget(
     *,
     system: str,

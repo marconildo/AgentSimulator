@@ -25,6 +25,11 @@ vi.mock("../lib/sse", () => ({
 
 import type { TraceEvent } from "../types/events";
 import * as chatApi from "../lib/chatApi";
+import {
+  clearDraftPending,
+  isDraftPending,
+  markDraftPending,
+} from "../lib/draftSession";
 import * as sse from "../lib/sse";
 import { useChat } from "./useChat";
 import { useSimulator } from "./useSimulator";
@@ -69,6 +74,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
   useSimulator.getState().reset();
+  clearDraftPending();
 });
 
 describe("useChat — lazy session creation", () => {
@@ -173,6 +179,52 @@ describe("useChat — lazy session creation", () => {
     expect(
       (useChat.getState() as unknown as Record<string, unknown>).clearConversation,
     ).toBeUndefined();
+  });
+});
+
+// Regression: clicking "New conversation" then refreshing the page used to dump
+// the user back into the most recent session because draft state was purely
+// in-memory. A tiny localStorage flag survives the reload so init() honors the
+// explicit intent to start fresh.
+describe("useChat — a refresh in draft state stays in the draft", () => {
+  it("newChat marks the draft flag (so a refresh remembers the intent)", async () => {
+    await useChat.getState().newChat();
+    expect(isDraftPending()).toBe(true);
+  });
+
+  it("init with the draft flag set shows a draft, even when sessions exist", async () => {
+    markDraftPending();
+    vi.mocked(chatApi.listSessions).mockResolvedValue([session("a"), session("b")]);
+
+    await useChat.getState().init();
+
+    const s = useChat.getState();
+    expect(s.activeSessionId).toBeNull();
+    expect(s.view).toBe("thread");
+    expect(s.messages).toEqual([]);
+    // listMessages must not be called — we never opened a real session.
+    expect(chatApi.listMessages).not.toHaveBeenCalled();
+    // The sidebar list is still populated so the user can return to a thread.
+    expect(s.sessions.map((x) => x.id)).toEqual(["a", "b"]);
+  });
+
+  it("opening a session from the sidebar clears the draft flag", async () => {
+    markDraftPending();
+    vi.mocked(chatApi.listMessages).mockResolvedValue([]);
+    vi.mocked(chatApi.listDocuments).mockResolvedValue([]);
+
+    await useChat.getState().openSession("a");
+
+    expect(isDraftPending()).toBe(false);
+  });
+
+  it("ensureSession (first send / upload) clears the draft flag", async () => {
+    markDraftPending();
+    vi.mocked(chatApi.createSession).mockResolvedValue(session("created"));
+
+    await useChat.getState().ensureSession();
+
+    expect(isDraftPending()).toBe(false);
   });
 });
 

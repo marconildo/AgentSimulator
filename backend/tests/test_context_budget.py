@@ -222,3 +222,103 @@ def test_retrieval_and_skill_observations_are_excluded_from_messages():
     assert with_obs["messages"] == plain["messages"]
     # The loaded-skill body DID land in Skills.
     assert with_obs["skills"] > plain["skills"]
+
+
+# --- 039-memory-growth-visualization: per-pair token counts -------------------
+
+
+def test_history_pair_tokens_empty_list_returns_empty():
+    """AC1 — `[]` in → `[]` out (no zero-length scan; pure projection)."""
+    from app.llm.context import history_pair_tokens
+
+    assert history_pair_tokens([]) == []
+
+
+def test_history_pair_tokens_returns_one_count_per_pair_positive():
+    """AC1 — N pairs → N positive ints, in order."""
+    from app.llm.context import history_pair_tokens
+
+    pairs = [
+        {"message": "Ola", "answer": "Olá! Como posso ajudar você hoje?"},
+        {
+            "message": "Quanto é 30+5?",
+            "answer": "Vamos imaginar 30 maçãs em uma cesta e mais 5 chegando.",
+        },
+        {"message": "obrigado", "answer": "De nada — fico feliz em ajudar."},
+    ]
+    counts = history_pair_tokens(pairs)
+    assert len(counts) == len(pairs)
+    assert all(isinstance(c, int) and c > 0 for c in counts)
+    # The longest pair (turn 2) should carry the most tokens of the three.
+    assert counts[1] == max(counts)
+
+
+def test_history_pair_tokens_empty_pair_counts_the_framing_not_zero():
+    """AC1 — an empty `{message: "", answer: ""}` pair still counts the framing
+    prefix (the `- user: ... / assistant: ...` scaffolding is real text the
+    model sees), so the count is non-zero. This keeps abstained / empty-answer
+    turns honest in the growth panel."""
+    from app.llm.context import history_pair_tokens
+
+    counts = history_pair_tokens([{"message": "", "answer": ""}])
+    assert len(counts) == 1
+    assert counts[0] > 0  # framing prefix tokens
+
+
+def test_history_pair_tokens_sum_reconciles_with_memory_budget_slice():
+    """AC2 — Σ per-pair counts ≈ `context_budget(history=pairs).memory` ±2.
+
+    The Memory slice tokenizes `_render_history(pairs)` as one joined string;
+    summing per-pair counts can differ by a tiny BPE boundary effect across
+    the inter-pair `\\n`. ±2 tokens is the documented tolerance.
+    """
+    from app.llm.context import context_budget, history_pair_tokens
+
+    pairs = [
+        {"message": "Ola", "answer": "Olá! Como posso ajudar?"},
+        {"message": "What is RAG?", "answer": "Retrieval-Augmented Generation is …"},
+        {"message": "obrigado", "answer": "De nada."},
+    ]
+    per_pair_sum = sum(history_pair_tokens(pairs))
+    memory_slice = context_budget(
+        system="",
+        tools=[],
+        skills="",
+        history=pairs,
+        retrieved="",
+        thread=[],
+    )["memory"]
+    assert abs(per_pair_sum - memory_slice) <= 2
+
+
+# --- AC3: db.read END data carries `recent_tokens` aligned with `recent` ------
+
+
+async def test_db_read_emit_data_aligns_recent_tokens_with_recent(tmp_path):
+    """AC3 — the data we put on the `db.read` END (the contract `main.py`
+    composes) has `recent_tokens` of the same length as `recent`, in the same
+    order, with one count per turn. Keyless: the wiring is structural."""
+    from app.db.store import ConversationStore
+    from app.llm.context import history_pair_tokens
+
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    sid = (await store.create_session())["id"]
+    # Two turns, in chronological order.
+    await store.write_message(sid, "m1", "Ola", "Olá! Como posso ajudar?")
+    await store.write_message(
+        sid,
+        "m2",
+        "Quanto é 30+5?",
+        "Vamos imaginar 30 maçãs em uma cesta e mais 5 chegando.",
+    )
+    history = await store.read_history(sid)
+    # The literal recipe `main.py` uses on the db.read END `rec.data`.
+    data = {**history, "recent_tokens": history_pair_tokens(history["recent"])}
+
+    assert "recent_tokens" in data
+    assert isinstance(data["recent_tokens"], list)
+    # One count per recent pair, in the same order.
+    assert len(data["recent_tokens"]) == len(data["recent"])
+    assert all(isinstance(t, int) and t > 0 for t in data["recent_tokens"])
+    # Longer turn → larger count (turn 2 has the longer answer here).
+    assert data["recent_tokens"][1] > data["recent_tokens"][0]

@@ -95,7 +95,10 @@ class TraceEvent(BaseModel):
     036-context-window-budget, ``context_window`` (int) + ``context_budget`` (a
     per-category token map: ``system``/``tool_defs``/``skills``/``memory``/
     ``retrieved``/``messages``). Mirrored by ``PromptPreview`` in
-    ``frontend/src/types/events.ts``.
+    ``frontend/src/types/events.ts``. The ``db.read`` END carries ``recent`` +
+    ``limit`` and, since 039-memory-growth-visualization, ``recent_tokens``: a
+    list of per-pair tiktoken counts aligned with ``recent`` (same order/length)
+    that powers the Agent's turn-by-turn Memory growth panel.
     """
 
     trace_id: str

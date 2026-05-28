@@ -14,6 +14,7 @@ import {
   type SessionMeta,
 } from "../lib/chatApi";
 import { isFlowSettled } from "../lib/chatStatus";
+import { clearDraftPending, isDraftPending, markDraftPending } from "../lib/draftSession";
 import { overridesFor, useExperiment } from "../lib/experiment";
 import { useSettings } from "../lib/settings";
 import { batchChat, streamChat } from "../lib/sse";
@@ -133,11 +134,12 @@ export const useChat = create<ChatState>((set, get) => ({
     try {
       const sessions = await listSessions();
       set({ sessions });
-      if (sessions.length > 0) {
-        await get().openSession(sessions[0].id);
-      } else {
-        // No history yet — open an empty draft instead of persisting a session.
+      // If the user clicked "New conversation" and then refreshed, honor that
+      // intent — the draft flag survives the reload and pins the empty thread.
+      if (sessions.length === 0 || isDraftPending()) {
         await get().newChat();
+      } else {
+        await get().openSession(sessions[0].id);
       }
     } catch (err) {
       set({ error: (err as Error).message });
@@ -150,6 +152,9 @@ export const useChat = create<ChatState>((set, get) => ({
     // A different conversation — wipe the visualizer so it doesn't keep
     // animating the previous run's trace under the newly-opened thread.
     useSimulator.getState().reset();
+    // Opening a real session cancels any pending-draft intent (so a later
+    // refresh stays on this thread, not on an empty draft).
+    clearDraftPending();
     set({
       activeSessionId: id,
       view: "thread",
@@ -193,9 +198,13 @@ export const useChat = create<ChatState>((set, get) => ({
     // (sending a message or uploading a PDF), so a bare "New chat" click never
     // leaves an empty conversation in the history.
     //
+    // Persist the draft intent in localStorage so a page refresh stays on the
+    // empty thread instead of silently reopening the last session.
+    //
     // A new conversation starts from a blank canvas — wipe any prior run's
     // trace, cursor and selection from the visualizer.
     useSimulator.getState().reset();
+    markDraftPending();
     set({
       view: "thread",
       activeSessionId: null,
@@ -218,6 +227,8 @@ export const useChat = create<ChatState>((set, get) => ({
       // Carry any experiment settings the user tuned on the draft over to the
       // now-persisted conversation (AC7).
       useExperiment.getState().adopt(null, created.id);
+      // The draft just became a real session — drop the pending-draft flag.
+      clearDraftPending();
       set((s) => ({ sessions: [created, ...s.sessions], activeSessionId: created.id }));
       return created.id;
     } catch (err) {
