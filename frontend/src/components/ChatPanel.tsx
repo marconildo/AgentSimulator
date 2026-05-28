@@ -978,11 +978,19 @@ function ComposerAgentChip({ t }: { t: Strings }) {
   const session = useChat((s) =>
     activeSessionId ? s.sessions.find((row) => row.id === activeSessionId) : null,
   );
+  // 045 draft fix: in a draft (no `activeSessionId`), there is no session row
+  // to read the agent from yet. Fall back to the draftAgent seeded by `init` /
+  // `newChat` (the catalog default) so the chip never goes blank and the user
+  // can switch it before the first send.
+  const draftAgent = useChat((s) => s.draftAgent);
   const replaceSession = useChat((s) => s.replaceSession);
+  const setDraftAgent = useChat((s) => s.setDraftAgent);
   const setLockedNote = useChat((s) => s.setAgentLockedNote);
 
-  const agent = session?.agent;
+  const agent = session?.agent ?? draftAgent;
   const messageCount = session?.message_count ?? 0;
+  // A draft never has messages yet, so it can never be locked. The lock only
+  // bites once the session is persisted and a turn has landed.
   const locked = messageCount > 0;
 
   // Catalog is lazy-loaded on first menu open and refreshed on each subsequent
@@ -1007,7 +1015,19 @@ function ComposerAgentChip({ t }: { t: Strings }) {
   }
 
   async function onSelect(nextId: string) {
-    if (!activeSessionId || !agent || nextId === agent.id) {
+    // 045 draft fix: in a draft (no `activeSessionId`), nothing to PATCH yet —
+    // remember the choice locally so the chip reflects it; `ensureSession`
+    // will switch the freshly-created session to this agent on the first send.
+    // Done BEFORE the same-id check so the draft path still works during the
+    // brief window where the catalog has loaded but `draftAgent` hasn't been
+    // seeded yet (init race).
+    if (!activeSessionId) {
+      const picked = (catalog ?? []).find((a) => a.id === nextId) ?? null;
+      if (picked) setDraftAgent(picked);
+      setMenuOpen(false);
+      return;
+    }
+    if (!agent || nextId === agent.id) {
       setMenuOpen(false);
       return;
     }

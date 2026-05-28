@@ -13,6 +13,8 @@ vi.mock("../lib/chatApi", () => ({
   listSessions: vi.fn(),
   listMessages: vi.fn(),
   listDocuments: vi.fn(),
+  listAgents: vi.fn(),
+  setSessionAgent: vi.fn(),
   uploadDocument: vi.fn(),
 }));
 
@@ -68,6 +70,9 @@ const resetStore = () =>
     sending: false,
     uploading: false,
     error: null,
+    // 045 draft fix: reset between tests so a previously-seeded BOB doesn't
+    // bleed into a test that expects the default-linked agent (null).
+    draftAgent: null,
   });
 
 const docMeta = (document_id: string, filename = `${document_id}.pdf`) => ({
@@ -82,6 +87,9 @@ beforeEach(() => {
   resetStore();
   useSimulator.getState().reset();
   clearDraftPending();
+  // Quiet default for the catalog prefetch — most tests don't care about the
+  // draft chip, and the helper is wrapped in try/catch anyway.
+  vi.mocked(chatApi.listAgents).mockResolvedValue([]);
 });
 
 describe("useChat — lazy session creation", () => {
@@ -154,6 +162,55 @@ describe("useChat — lazy session creation", () => {
 
     expect(id).toBe("old");
     expect(chatApi.createSession).not.toHaveBeenCalled();
+  });
+
+  // 045 draft fix: a non-default draftAgent picked on the chip before any send
+  // must be applied to the session ensureSession just created — otherwise the
+  // very first turn runs against the catalog default the backend wired up.
+  it("ensureSession patches the freshly-created session to the draft agent", async () => {
+    const ALICE = {
+      id: "a1",
+      name: "Alice",
+      description: "",
+      system_prompt: "g",
+      agent_prompt: "a",
+      model: "gpt-4o-mini",
+      enabled_tools: [],
+      is_default: true,
+      created_at: 0,
+      updated_at: 0,
+    };
+    const BOB = { ...ALICE, id: "a2", name: "Bob", is_default: false };
+    vi.mocked(chatApi.createSession).mockResolvedValue({ ...session("new"), agent: ALICE });
+    vi.mocked(chatApi.setSessionAgent).mockResolvedValue({ ...session("new"), agent: BOB });
+    useChat.setState({ draftAgent: BOB, activeSessionId: null, sessions: [] });
+
+    const id = await useChat.getState().ensureSession();
+
+    expect(id).toBe("new");
+    expect(chatApi.setSessionAgent).toHaveBeenCalledWith("new", "a2");
+    expect(useChat.getState().sessions[0].agent?.id).toBe("a2");
+  });
+
+  it("ensureSession skips the patch when draftAgent already matches the created session", async () => {
+    const ALICE = {
+      id: "a1",
+      name: "Alice",
+      description: "",
+      system_prompt: "g",
+      agent_prompt: "a",
+      model: "gpt-4o-mini",
+      enabled_tools: [],
+      is_default: true,
+      created_at: 0,
+      updated_at: 0,
+    };
+    vi.mocked(chatApi.createSession).mockResolvedValue({ ...session("new"), agent: ALICE });
+    useChat.setState({ draftAgent: ALICE, activeSessionId: null, sessions: [] });
+
+    await useChat.getState().ensureSession();
+
+    expect(chatApi.setSessionAgent).not.toHaveBeenCalled();
   });
 
   it("sending the first message in a draft creates the session", async () => {

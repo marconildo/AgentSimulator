@@ -271,4 +271,61 @@ describe("ChatPanel — composer agent selector (045)", () => {
     rerender(<ChatPanel bubble={bubble} />);
     expect(screen.getByTestId("composer-agent-chip").hasAttribute("disabled")).toBe(true);
   });
+
+  // --- Draft-state regression: a fresh `+ New chat` (no session row yet) ---
+  // The two bugs reported on 2026-05-28:
+  //   1) Chip showed "—" instead of the catalog's default agent.
+  //   2) Selecting from the menu was a no-op because onSelect early-returned
+  //      on `!activeSessionId`.
+  // Both fixed by seeding `draftAgent` in init/newChat + treating selection on
+  // a draft as a local mutation that `ensureSession` applies on first send.
+  describe("draft state (no activeSessionId yet)", () => {
+    const seedDraft = (draftAgent: AgentMeta | null) => {
+      useChat.setState({
+        view: "thread",
+        activeSessionId: null,
+        sessions: [],
+        messages: [],
+        pendingDocuments: [],
+        pendingAttachments: [],
+        pending: null,
+        input: "",
+        loading: false,
+        sending: false,
+        uploading: false,
+        cancelled: false,
+        loadedTraceId: null,
+        traceExpired: false,
+        error: null,
+        draftAgent,
+      });
+    };
+
+    it("shows the default agent on the chip (not '—') and is unlocked", () => {
+      seedDraft(ALICE);
+      render(<ChatPanel bubble={bubble} />);
+      const chip = screen.getByTestId("composer-agent-chip");
+      expect(within(chip).getByText("Alice")).toBeTruthy();
+      expect(chip.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("lets the user pick a different agent — updates draftAgent without an API call", async () => {
+      seedDraft(ALICE);
+      render(<ChatPanel bubble={bubble} />);
+      fireEvent.click(screen.getByTestId("composer-agent-chip"));
+      const bobRow = await screen.findByTestId(`composer-agent-menu-row-${BOB.id}`);
+      fireEvent.click(bobRow);
+
+      await vi.waitFor(() => {
+        expect(useChat.getState().draftAgent?.id).toBe(BOB.id);
+      });
+      // No PATCH in draft state — the session doesn't exist yet.
+      expect(chatApi.setSessionAgent).not.toHaveBeenCalled();
+      // The chip now reflects the new choice.
+      await vi.waitFor(() => {
+        const chip = screen.getByTestId("composer-agent-chip");
+        expect(within(chip).getByText("Bob")).toBeTruthy();
+      });
+    });
+  });
 });

@@ -4,9 +4,12 @@ import {
   clearData,
   createSession,
   deleteDocument,
+  listAgents,
   listMessages,
   listSessions,
+  setSessionAgent,
   uploadDocument,
+  type AgentMeta,
   type ChatMessage,
   type ClearResult,
   type DocumentMeta,
@@ -55,11 +58,23 @@ interface ChatState {
   // `agent_locked` on PATCH (e.g. stale tab). The composer chip + the 044
   // catalog sidebar show this string and the chip flips locked on next render.
   agentLockedNote: string | null;
+  // 045-composer-agent-selector / draft fix: the agent to use for the NEXT
+  // draft conversation (when `activeSessionId` is null — i.e. right after a
+  // `+ Novo chat` click, before the session row is lazily created). Seeded
+  // from the catalog's default in `init()` / `newChat()` so the composer chip
+  // never reads as blank in the draft state. Picking a different agent in the
+  // chip while drafting only mutates this field (no API call); when the user
+  // finally sends, `ensureSession` patches the freshly-created session to it.
+  draftAgent: AgentMeta | null;
 
   setInput: (value: string) => void;
   // 045-composer-agent-selector: surface the lock note + auto-clear after a
   // short delay (consistent with other transient notes in this store).
   setAgentLockedNote: (note: string | null) => void;
+  // 045 draft fix: explicitly set the draft agent (chip selection while no
+  // session is active). Pass `null` to reset back to whatever the catalog
+  // currently flags as default — a quiet refetch fills it in.
+  setDraftAgent: (agent: AgentMeta | null) => void;
   showList: () => Promise<void>;
   init: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
@@ -104,6 +119,21 @@ function settledOrAborted(
   return state.events.length === 0 && state.status !== "streaming";
 }
 
+// 045 draft fix: pull the catalog and seed `draftAgent` with whichever entry
+// the server flags as default — falls back to the first row if no `is_default`,
+// and to `null` on a missing/failed catalog (the chip degrades to its "—" hint
+// until the catalog loads). Best-effort by design: a draft chip read with no
+// default yet is preferable to crashing init().
+async function refreshDraftDefault(): Promise<void> {
+  try {
+    const agents = await listAgents();
+    const next = agents.find((a) => a.is_default) ?? agents[0] ?? null;
+    useChat.setState({ draftAgent: next });
+  } catch {
+    /* keep whatever draftAgent we had; the chip's "—" fallback is fine */
+  }
+}
+
 function waitForFlowSettled(signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (settledOrAborted(signal, useSimulator.getState())) {
@@ -136,8 +166,10 @@ export const useChat = create<ChatState>((set, get) => ({
   traceExpired: false,
   error: null,
   agentLockedNote: null,
+  draftAgent: null,
 
   setInput: (value) => set({ input: value }),
+  setDraftAgent: (agent) => set({ draftAgent: agent }),
   setAgentLockedNote: (note) => {
     set({ agentLockedNote: note });
     if (note) {
@@ -164,6 +196,10 @@ export const useChat = create<ChatState>((set, get) => ({
   init: async () => {
     set({ loading: true, error: null });
     try {
+      // Prefetch the catalog so the draft composer chip never reads as blank
+      // (045 draft fix). Best-effort: a failure leaves draftAgent null and the
+      // chip falls back to "—" until the catalog loads later.
+      void refreshDraftDefault();
       const sessions = await listSessions();
       set({ sessions });
       // If the user clicked "New conversation" and then refreshed, honor that
@@ -255,14 +291,34 @@ export const useChat = create<ChatState>((set, get) => ({
       loadedTraceId: null,
       traceExpired: false,
       error: null,
+      // 045 draft fix: every new draft starts from the catalog's current
+      // default (which may have changed since boot if 044's dialog tagged a
+      // different one). Refetched below so the chip mirrors live catalog state.
+      draftAgent: null,
     });
+    await refreshDraftDefault();
   },
 
   ensureSession: async () => {
     const existing = get().activeSessionId;
     if (existing) return existing;
     try {
-      const created = await createSession();
+      let created = await createSession();
+      // 045 draft fix: if the user picked a non-default agent on the draft
+      // chip, the session was created linked to the catalog default — switch
+      // it now (the lock only triggers once a message is persisted, so this
+      // patch is safe on a brand-new session). Same-id PATCH is a 200 no-op
+      // server-side, but skipping it locally avoids the extra round-trip.
+      const draft = get().draftAgent;
+      if (draft && draft.id !== created.agent?.id) {
+        try {
+          const patched = await setSessionAgent(created.id, draft.id);
+          if (patched) created = patched;
+        } catch {
+          // The send goes on with the default-linked agent — preferable to
+          // failing the whole turn over a chip preference.
+        }
+      }
       // Carry any experiment settings the user tuned on the draft over to the
       // now-persisted conversation (AC7).
       useExperiment.getState().adopt(null, created.id);

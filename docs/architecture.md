@@ -10,24 +10,32 @@ The simulator is two apps connected by a streaming event protocol.
 └───────────────────────────────────────────────────────────────────────────────┘
                                      │  SSE (text/event-stream)
 ┌──────────────────────── Backend (FastAPI, Python 3.12) ──────────────────────┐
-│  POST /api/chat   → create trace_id, open EventSourceResponse                 │
-│  GET  /api/trace/{id} → replay a finished trace                               │
-│  GET  /api/health → provider (openai), model, has_key, index status           │
+│  POST /api/chat           → create trace_id, open EventSourceResponse         │
+│  GET  /api/trace/{id}     → replay a finished trace (cache → DB fallback)     │
+│  GET  /api/health         → provider (openai), model, has_key, index status   │
+│  GET  /api/config         → defaults the frontend prefills from               │
+│  Sessions  : GET/POST/DELETE/PATCH /api/sessions[/{id}[...]]                  │
+│  Agents    : GET/POST/DELETE/PATCH /api/agents[/{id}]   (044-shared catalog)  │
+│  Skills    : GET/POST/DELETE /api/skills[/{id}]         (027-skills)          │
+│  Documents : per-session list / upload / delete                               │
+│  POST /api/data/clear → wipe every user-data table                            │
 │                                                                               │
-│  TraceEmitter  → normalizes every stage into TraceEvents (queue + store)      │
-│  App database (SQLite ConversationStore) → db.read history / db.write convo   │
+│  TraceEmitter → normalizes every stage into TraceEvents; in-memory LRU cache  │
+│                  + real-time persist to `trace_events` SQLite (048)           │
+│  App database (SQLite ConversationStore, 7 tables — see docs/data-model.md)  │
 │                                                                               │
-│  LangGraph StateGraph (a bounded ReAct loop):                                 │
-│     route → retrieve → think ──(tool calls?)──▶ tools ──┐                      │
-│                          ▲                              │                      │
-│                          └──────────────────────────────┘                     │
-│                          └──(no tool calls)──▶ generate → respond              │
-│       │                      │          │                                     │
-│   RAG retriever         MCP client   LLM provider                             │
-│   (Chroma + cosine)   (langchain-mcp- (OpenAI)                                │
-│                        adapters, stdio)                                       │
-│                            │                                                  │
-│                      MCP server (FastMCP): calculator, current_time, kb_lookup │
+│  LangGraph StateGraph (a bounded, tool-calling ReAct loop):                   │
+│     route → think ──(tool calls?)──▶ tools ──┐                                │
+│              ▲                                │                                │
+│              └────────────────────────────────┘                               │
+│              └──(no tool calls)──▶ generate → respond                         │
+│                          │                                                    │
+│                      MCP client (langchain-mcp-adapters, stdio)               │
+│                      + native agent tools (`search_knowledge_base`)           │
+│                          │                                                    │
+│         MCP server (FastMCP): calculator · current_time · kb_lookup · load_skill │
+│         RAG retriever (Chroma + cosine) — invoked *as a tool*, not a node     │
+│         LLM provider (OpenAI) — used inside `think` *and* `generate`          │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -49,10 +57,16 @@ Defined once in [`backend/app/schemas.py`](../backend/app/schemas.py) and mirror
 }
 ```
 
-Stages: `frontend → backend → db.read → agent.route → rag.embed → rag.search → rag.retrieve →
-agent.think → llm.prompt → (mcp.discover, mcp.call) → llm.generate → respond → db.write`.
-The backend reads recent history from the application database before running the agent and
-persists the finished conversation after.
+Chat stages, in the order they fire: `frontend → backend → db.read → agent.route → mcp.discover →
+agent.think → llm.prompt → (mcp.call or rag.embed → rag.search → rag.retrieve when the agent
+elects the `search_knowledge_base` tool) → llm.generate → respond → db.write`. The backend reads
+recent history from the application database before running the agent and persists the finished
+conversation after.
+
+PDF upload write-path (002-interactive-chat · 033 · 034-storage-ingestion-flow) adds four more
+stages on `POST /api/sessions/{id}/documents`: `storage.upload → rag.ingest.chunk →
+rag.ingest.embed → rag.ingest.store`. The Storage and Ingestion stations are hidden by default and
+revealed only when the trace contains an upload (035-conditional-upload-nodes).
 
 ## How events are produced and consumed
 
@@ -61,8 +75,8 @@ persists the finished conversation after.
   `end` event on exit, timing the body. `llm.generate` additionally emits one `progress` event
   per streamed token. See [`backend/app/trace.py`](../backend/app/trace.py) and
   [`backend/app/agent/graph.py`](../backend/app/agent/graph.py).
-- **Delivered**: `POST /api/chat` takes a `mode` (chosen by the header's ⚙️ settings panel,
-  [`lib/settings.ts`](../frontend/src/lib/settings.ts)):
+- **Delivered**: `POST /api/chat` takes a `mode` (chosen on the dedicated **Settings page**
+  reached via the header's ⚙️ toggle, 041-settings-page — [`lib/settings.ts`](../frontend/src/lib/settings.ts)):
   - `stream` (default) — runs the graph as a background task and relays events from the emitter's
     queue over SSE, then emits a final `done` event and saves the trace. The answer types out live.
   - `batch` — runs the whole pipeline to completion and returns the finished trace + answer as a
@@ -77,11 +91,17 @@ persists the finished conversation after.
 
 ## Stations, tiers and network hops
 
-The canvas shows seven **stations** (Frontend, Backend, Agent, App Database, RAG, MCP, LLM). Each
-station aggregates one or more protocol **stages** — for example the RAG station covers
-`rag.embed`, `rag.search`, and `rag.retrieve`; the Frontend station covers both `frontend`
-(request out) and `respond` (answer back); and the App Database station covers `db.read` and
-`db.write`.
+The canvas shows seven **always-on stations** (Frontend, Backend, Agent, App Database, RAG, MCP,
+LLM) plus two **upload-only stations** — Object Storage and Ingestion — that appear when the
+trace contains a PDF upload (033 · 034 · 035-conditional-upload-nodes). The Intermediate and
+Advanced rungs of the [maturity ladder](../docs/roadmap.md) declare additional `comingSoon`
+preview stations (reranker, gateway, guardrails, semantic cache, eval, observability, plus
+multi-agent workers) — clearly labelled, non-executing, and gated by `canSend(scenario)` so
+nothing fakes a run. Each station aggregates one or more protocol **stages** — for example the
+RAG station covers `rag.embed`, `rag.search`, and `rag.retrieve` (during chat) and shares
+`rag.ingest.*` with the Ingestion station (during upload); the Frontend station covers both
+`frontend` (request out) and `respond` (answer back); and the App Database station covers
+`db.read` and `db.write`.
 
 Stations are grouped into **tiers** — deployable containers that communicate over the network.
 Each tier keeps its friendly name plus the canonical **n-tier alias**, and maps to a concrete
@@ -92,7 +112,9 @@ service per cloud (the header's cloud toggle picks Generic / Azure / AWS / GCP):
 | Client (Presentation) | Frontend | Static Web Apps + Front Door | S3 + CloudFront + WAF | Cloud Storage + Cloud CDN + Cloud Armor |
 | API (Application) | Backend | Container Apps (public ingress) | App Runner / ECS Fargate + ALB | Cloud Run (HTTPS LB) |
 | Agent (Compute) | Agent | Container Apps (internal) | ECS Fargate (private subnet) | Cloud Run (internal) |
-| AI & Data Services (Data) | App Database, RAG, MCP, LLM | OpenAI · AI Search · SQL | Bedrock · OpenSearch · RDS | Vertex AI · Vector Search · Cloud SQL |
+| AI & Data Services (Data) | App Database, RAG, MCP, LLM, Object Storage*, Ingestion* | OpenAI · AI Search · SQL · Blob · Functions | Bedrock · OpenSearch · RDS · S3 · Lambda | Vertex AI · Vector Search · Cloud SQL · GCS · Cloud Run |
+
+\* Storage + Ingestion are upload-only — see [`stations.ts`](../frontend/src/lib/stations.ts) and 035-conditional-upload-nodes.
 
 Every tier except the Client lives inside a **private-network boundary** (VNet / VPC), drawn as a
 dashed perimeter on the canvas. Each **hop** carries a protocol (HTTPS/TLS 1.3, mTLS, TCP, SQL,
