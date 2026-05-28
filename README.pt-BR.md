@@ -150,6 +150,9 @@ explicitamente distintos visualmente** — a *arquitetura-alvo* é, em si, um ar
 Honestidade em primeiro lugar: nada finge uma execução, então o envio fica desativado num degrau até
 seus nós reais existirem (cada um chega em sua própria spec).
 
+> 📋 Todo bloco de prévia está catalogado em **[`docs/roadmap.md`](docs/roadmap.md)** com o que é,
+> onde fica no código e o que uma spec precisaria adicionar — **escolha um para contribuir**.
+
 O próprio nó do Agente é **renomeado por degrau** para marcar essa direção: `Agent` / `ReAct` no
 Simples vira **`DeepAgents`** no Intermediário e **`DeepAgents + Multiagentes`** no Avançado. Hoje isso
 é só um rótulo no frontend (a estação por baixo é a mesma) — um lembrete visual de para onde a escada
@@ -470,4 +473,10 @@ as [fases da linha do tempo](specs/004-timeline-phases/) e [token + custo](specs
 
 PRs e issues são bem-vindos — isto é um recurso de aprendizado. Por favor siga o
 [fluxo SDD + TDD](docs/development-workflow.md) acima. Licenciado sob [MIT](LICENSE).
+
+**Procurando algo para construir?** Comece por **[`docs/roadmap.md`](docs/roadmap.md)** — a lista
+de TODO para colaboradores com cada nó Intermediário / Avançado ainda não implementado (DeepAgents,
+orquestração multi-agente, gateway de LLM / roteador de modelos, guardrails, cache semântico, eval
+runner, sink de observabilidade) mais costuras transversais (suporte a multi-provider, autenticação,
+multi-réplica). Cada item aponta a costura no código e esboça a spec que ele precisa.
 </content>

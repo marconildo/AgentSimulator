@@ -93,6 +93,41 @@ describe("deriveBudget — input + generated answer (completion)", () => {
     expect(b.completion).toBe(0);
     expect(b.used).toBe(b.input);
   });
+
+  // Regression: the panel used to mix the think call's prompt_tokens with the
+  // generate call's completion_tokens, producing a number that was neither a
+  // single call's window nor the turn total — and that disagreed with the LLM
+  // card / Execution traces / LangSmith (which all show the turn total).
+  // The budget must now sum prompt+completion across every real LLM round in
+  // the turn (think rounds + generate), so `used` equals the LLM card's total.
+  it("sums input AND completion across every real LLM round in the turn", () => {
+    seq = 0;
+    // A realistic turn: one think round (decide) + a final generate round.
+    const events: TraceEvent[] = [
+      ev("agent.route", "end", { query: "..." }),
+      ev("agent.think", "start", {}),
+      ev("llm.prompt", "start", {}),
+      ev("llm.prompt", "end", { context_window: WINDOW, context_budget: BUDGET }),
+      ev(
+        "agent.think",
+        "end",
+        { decision: "answer" },
+        { prompt_tokens: 851, completion_tokens: 949 }, // think also produced tokens
+      ),
+      ev(
+        "llm.generate",
+        "end",
+        { answer: "…" },
+        { prompt_tokens: 649, completion_tokens: 734 },
+      ),
+    ];
+    const b = deriveBudget(events, events.length - 1);
+    // Both halves sum across think + generate (mirrors usage.tallyUsage —
+    // same code path as the BRAIN/LLM card).
+    expect(b.input).toBe(851 + 649); // 1500
+    expect(b.completion).toBe(949 + 734); // 1683
+    expect(b.used).toBe(b.input + b.completion); // matches Usage & Cost total
+  });
 });
 
 describe("deriveBudget — cursor-aware (AC6)", () => {
@@ -113,21 +148,28 @@ describe("deriveBudget — cursor-aware (AC6)", () => {
     expect(b.free).toBe(b.window);
   });
 
-  it("reflects the latest llm.prompt ≤ cursor and fills as you step forward", () => {
+  it("input/completion grow turn-cumulatively across rounds; categories reflect the latest llm.prompt", () => {
     seq = 0;
-    // Two rounds with different windows/budgets/used totals.
+    // Two think rounds in one turn (e.g. think → tools → think). Each emits
+    // its own llm.prompt budget + its own real usage.
     const r1 = round({ ...BUDGET, messages: 100 }, 5000);
     const r2 = round({ ...BUDGET, messages: 900 }, 9000);
     const events = [...r1, ...r2];
 
-    // Cursor at the end of round 1 → round 1's numbers.
+    // Cursor at the end of round 1: only r1 has run → used == r1.prompt.
     const afterR1 = deriveBudget(events, r1.length - 1);
+    expect(afterR1.input).toBe(5000);
     expect(afterR1.used).toBe(5000);
+    // Categories come from the latest llm.prompt visible (r1's budget).
     expect(afterR1.categories.find((c) => c.key === "messages")!.tokens).toBe(100);
 
-    // Cursor at the very end → round 2's numbers.
+    // Cursor at end of round 2: input is the SUM across both rounds (matches
+    // the LLM card). Categories still reflect the latest round's assembly,
+    // which is the right unit — each round mostly re-sends the same system /
+    // tool defs / skills, so summing them would multiply-count.
     const afterR2 = deriveBudget(events, events.length - 1);
-    expect(afterR2.used).toBe(9000);
+    expect(afterR2.input).toBe(5000 + 9000);
+    expect(afterR2.used).toBe(5000 + 9000);
     expect(afterR2.categories.find((c) => c.key === "messages")!.tokens).toBe(900);
   });
 });

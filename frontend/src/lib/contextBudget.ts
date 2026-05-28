@@ -5,10 +5,15 @@
 // just a smaller cursor).
 //
 // Honesty stance (mirrors Claude Code's `/context`): the **used** total is the
-// real billed `prompt_tokens` of the latest reasoning round (on the `agent.think`
-// END, 011); the **per-category split** is the labelled tiktoken estimate emitted
-// on the `llm.prompt` END (`context_budget`, 036). Two events per round carry the
-// two halves — we correlate "latest ≤ cursor" of each (the same round in practice).
+// real billed token usage **summed across every LLM round in the turn** — every
+// `agent.think` END (the decide rounds, 011) plus the `llm.generate` END (the
+// final answer). This is the *same* code path the BRAIN / LLM card and the HUD
+// use via `usage.tallyUsage` — a parity test pins them so the four numeric
+// surfaces (Agent → context, LLM card on canvas, Execution traces, LangSmith)
+// can never disagree on a turn total. The **per-category split** is the labelled
+// tiktoken estimate emitted on the `llm.prompt` END (`context_budget`, 036),
+// taken from the *latest* round visible — categories like system / tool defs /
+// skills are mostly re-sent every round, so summing them would multiply-count.
 // Free = window − used. A pre-036 / replayed trace lacking the fields degrades to
 // the chars/4 estimate via `contextSections`, flagged `estimated` (AC9).
 
@@ -45,11 +50,30 @@ export interface Budget {
 
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
 
-/** The real prompt_tokens of the latest reasoning round ≤ cursor, if recorded. */
-function realInput(events: TraceEvent[]): number | null {
-  const think = lastEnd(events, "agent.think");
-  const v = think?.metrics.prompt_tokens;
-  return typeof v === "number" && v > 0 ? v : null;
+/**
+ * Real token usage of this turn — summed across every LLM call ≤ cursor:
+ * each `agent.think` END (a decide round, 011) plus the `llm.generate` END
+ * (the final answer). Mirrors `usage.tallyUsage` exactly so the budget panel,
+ * the BRAIN/LLM card, the HUD and the execution traces never disagree.
+ * Returns `null` when no real usage has been recorded yet (no LLM-call END
+ * carries `prompt_tokens`) — the caller falls back to the estimate sum.
+ */
+function realRoundsUsage(
+  events: TraceEvent[],
+): { input: number; completion: number } | null {
+  let input = 0;
+  let completion = 0;
+  let saw = false;
+  for (const ev of events) {
+    if (ev.phase !== "end") continue;
+    if (ev.stage !== "agent.think" && ev.stage !== "llm.generate") continue;
+    const p = num(ev.metrics.prompt_tokens);
+    const c = num(ev.metrics.completion_tokens);
+    if (p > 0 || c > 0) saw = true;
+    input += p;
+    completion += c;
+  }
+  return saw ? { input, completion } : null;
 }
 
 /**
@@ -85,16 +109,18 @@ export function deriveBudget(events: TraceEvent[], cursor: number): Budget {
   // fallback otherwise) — shared with the turn diff, so they never disagree.
   const split = contextSections(visible);
 
-  // `input` is the prompt occupying the window — authoritative-real when we have
-  // it (the latest reasoning round, which includes the tool schemas counted in the
-  // split); otherwise the estimate's sum (a pre-feature trace still renders — AC9).
+  // `input` + `completion` are summed across every LLM round in this turn —
+  // every `agent.think` END (decide round) plus the `llm.generate` END (final
+  // answer). Same code path as `usage.tallyUsage` (the BRAIN/LLM card and the
+  // HUD): the four numeric surfaces always agree on the turn total. Pre-036
+  // traces without real metrics fall back to the per-category estimate sum
+  // (AC9). The categories themselves are one round's prompt assembly — most
+  // (system, tool defs, skills) are re-sent every round, so their sum is < the
+  // turn-total `input`; the `estimatedNote` label already discloses this gap.
+  const real = realRoundsUsage(visible);
   const estimateSum = SECTIONS.reduce((s, k) => s + split[k], 0);
-  const input = realInput(visible) ?? estimateSum;
-  // `completion` is the generated answer written into the window — the real tokens
-  // on the latest llm.generate END (0 before the answer exists). Shown as its own
-  // slice so the panel honours "show both prompt and completion" tokens.
-  const generate = lastEnd(visible, "llm.generate");
-  const completion = generate ? num(generate.metrics.completion_tokens) : 0;
+  const input = real?.input ?? estimateSum;
+  const completion = real?.completion ?? 0;
   const used = input + completion;
   const free = Math.max(window - used, 0);
 

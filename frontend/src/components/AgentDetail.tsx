@@ -293,7 +293,8 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
 
           {/* Context window — a /context-style budget against the model's real
               maximum: input (prompt) + answer (completion) vs. free, split by
-              category. Per model call, so it differs from the cumulative Usage block. */}
+              category. Sums every LLM round in this turn (think + generate) so
+              `used` always equals the BRAIN/LLM card's totalTokens. */}
           <Panel title={a.contextWindow} accent="var(--color-ok)" hint={a.windowHint}>
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
               <span className="font-mono text-[12px] text-[var(--color-ink)]">

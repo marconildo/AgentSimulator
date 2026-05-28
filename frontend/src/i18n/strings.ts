@@ -936,7 +936,7 @@ const en: Strings = {
     freeSpace: "Free space",
     windowHint: "The model's finite context window — used vs. free this turn.",
     estimatedNote: "Per-category split is an estimate; used/max is the real billed total.",
-    perCallNote: "This is one model call's window; Usage & Cost sums every round of the turn.",
+    perCallNote: "Used sums every LLM round in this turn (decide + answer) — matches Usage & Cost.",
   },
   citation: {
     sources: "sources",
@@ -1456,7 +1456,7 @@ const pt: Strings = {
     freeSpace: "Espaço livre",
     windowHint: "A janela de contexto finita do modelo — usado × livre neste turno.",
     estimatedNote: "A divisão por categoria é uma estimativa; usado/máx é o total real cobrado.",
-    perCallNote: "Esta é a janela de uma chamada ao modelo; Usage & Cost soma todas as rodadas do turno.",
+    perCallNote: "Usado soma todas as rodadas de LLM neste turno (decidir + responder) — confere com Usage & Cost.",
   },
   citation: {
     sources: "fontes",

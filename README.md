@@ -145,6 +145,9 @@ The upper rungs render their extra stations as **explicit, visually-distinct "co
 tiles** — the *target architecture* is itself a teaching artifact. Honesty first: nothing fakes a
 run, so sending is disabled on a rung until its real nodes ship (each lands in its own spec).
 
+> 📋 Every preview tile is catalogued in **[`docs/roadmap.md`](docs/roadmap.md)** with what it is,
+> where it sits in the code, and what a spec would need to add — **pick one to contribute**.
+
 The Agent node itself is **relabelled per rung** to mark this direction: `Agent` / `ReAct` on Simple
 becomes **`DeepAgents`** on Intermediate and **`DeepAgents + Multi-agents`** on Advanced. Today this is
 a frontend label only (same underlying station) — a visual reminder of where the ladder heads, not yet
@@ -461,5 +464,11 @@ Each feature above has a numbered spec — e.g. the [maturity ladder](specs/008-
 
 PRs and issues welcome — this is a learning resource. Please follow the
 [SDD + TDD workflow](docs/development-workflow.md) above. Licensed under [MIT](LICENSE).
+
+**Looking for something to build?** Start with **[`docs/roadmap.md`](docs/roadmap.md)** — the
+contributor TODO list of every unimplemented Intermediate / Advanced node (DeepAgents,
+multi-agent orchestration, LLM gateway / model router, guardrails, semantic cache, eval runner,
+observability sink) plus cross-cutting seams (multi-provider support, auth, multi-replica). Each
+item links the code seam and sketches the spec it needs.
 </content>
 </invoke>
