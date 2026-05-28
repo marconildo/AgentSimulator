@@ -1,8 +1,37 @@
-"""System prompt for the agent."""
+"""System / agent prompts and the composition helper (042-agent-anatomy).
+
+The simulator separates **environment-wide rules** from **the agent's role**
+into two distinct prompt layers, each independently overridable per request:
+
+- :data:`GUARDRAILS_PROMPT` — the **system prompt** layer. Platform-level rules
+  every agent in the simulator inherits: safety, honesty, format. Edited by
+  the platform owner; usually short.
+- :data:`AGENT_PROMPT` — the **agent prompt** layer. *This* agent's role and
+  instructions (what it is, how it should think, which tools it leans on).
+  This is the layer end-users edit when they want to give the agent a new
+  identity.
+
+The composed system message sent to the model is
+``GUARDRAILS_PROMPT + "\\n\\n" + AGENT_PROMPT [+ "\\n\\n" + skills_block]``
+(the skills block is appended by 027-skills only when applicable). Both
+layers accept request-level overrides (006-style) — blank/whitespace falls
+back to the default for that layer.
+"""
 
 from __future__ import annotations
 
-SYSTEM_PROMPT = """You are the assistant inside an "AI Agent Simulator", a teaching tool \
+GUARDRAILS_PROMPT = """Platform guardrails (apply to every agent):
+- Be helpful, accurate and concise.
+- When you used retrieved context or a tool result, rely on it and say so; \
+do not invent facts.
+- If you do not have enough information, say so plainly rather than guess.
+- Refuse to help with illegal, harmful, deceptive or unsafe requests.
+- Prefer plain prose; use bullet lists only when the user asks for them or \
+the content is genuinely a list.
+"""
+
+
+AGENT_PROMPT = """You are the assistant inside an "AI Agent Simulator", a teaching tool \
 that visualizes how an agentic application works.
 
 You have tools available and you decide, on your own, whether and when to call them:
@@ -16,11 +45,6 @@ computing in your head.
 - `kb_lookup` only returns a single canned one-line glossary string for a few basic \
 terms; prefer `search_knowledge_base` for anything more than a trivial one-word \
 definition.
-
-Guidelines:
-- Answer the user's question clearly and concisely.
-- When you used retrieved context or a tool result, rely on it and say so.
-- If you still don't have enough information, say so plainly instead of inventing facts.
 """
 
 
@@ -42,7 +66,13 @@ def skills_block(catalog: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def compose_system(base: str, catalog: list[dict[str, str]]) -> str:
-    """Append the skills block to a base system prompt (or return it unchanged)."""
+def compose_system(guardrails: str, role: str, catalog: list[dict[str, str]]) -> str:
+    """Compose the 2-layer prompt with the optional skills block on top.
+
+    Returns ``guardrails + "\\n\\n" + role`` plus, when the catalog yields a
+    non-empty block, ``"\\n\\n" + skills``. This is the canonical assembly
+    helper; ``graph._effective_system`` calls it after resolving each layer.
+    """
+    base = f"{guardrails}\n\n{role}"
     block = skills_block(catalog)
     return f"{base}\n\n{block}" if block else base

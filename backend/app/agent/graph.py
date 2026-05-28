@@ -38,7 +38,7 @@ from ..mcp.server import LOAD_SKILL_TOOL, found_for
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import TraceEmitter
-from .prompts import SYSTEM_PROMPT, skills_block
+from .prompts import AGENT_PROMPT, GUARDRAILS_PROMPT, compose_system, skills_block
 from .state import AgentState
 from .tools import RETRIEVAL_TOOL, agent_tool_specs, is_retrieval
 
@@ -72,26 +72,40 @@ def _skills_advertised(state: AgentState) -> bool:
     return enabled is None or LOAD_SKILL_TOOL in enabled
 
 
-def _system_parts(state: AgentState) -> tuple[str, str]:
-    """The base system prompt and the (separate) skills-catalog block.
+def _system_parts(state: AgentState) -> tuple[str, str, str]:
+    """The three layers of the assembled system message.
 
-    006-interactive-experiments: a non-blank ``system_prompt`` override fully
-    replaces the default ``base``; a blank/whitespace one falls back to the
-    default ``SYSTEM_PROMPT``. 027-skills: the catalog block (name + description)
-    is non-empty only when there are skills *and* ``load_skill`` is advertised.
-    Returned separately so 036's budget can attribute them to distinct categories.
+    042-agent-anatomy split the prior single prompt into two independently
+    overridable layers:
+
+    - **guardrails** (``system_prompt`` override, default ``GUARDRAILS_PROMPT``)
+      — platform-wide rules every agent in the simulator inherits.
+    - **role** (``agent_prompt`` override, default ``AGENT_PROMPT``) — this
+      agent's identity and tool-usage instructions.
+
+    006-interactive-experiments semantics for each: non-blank override fully
+    replaces the corresponding default; blank/whitespace falls back. 027-skills:
+    the catalog block is the third layer, non-empty only when there are skills
+    *and* ``load_skill`` is advertised. Returned separately so 036's context
+    budget can attribute each to a distinct category.
     """
-    override = state["system_prompt"]
-    base = override if (override and override.strip()) else SYSTEM_PROMPT
+    sys_override = state.get("system_prompt")
+    agent_override = state.get("agent_prompt")
+    guardrails = sys_override if (sys_override and sys_override.strip()) else GUARDRAILS_PROMPT
+    role = agent_override if (agent_override and agent_override.strip()) else AGENT_PROMPT
     catalog = state.get("skills_catalog") or []
     skills = skills_block(catalog) if (catalog and _skills_advertised(state)) else ""
-    return base, skills
+    return guardrails, role, skills
 
 
 def _effective_system(state: AgentState) -> str:
-    """The system prompt actually sent to the model (base + skills block)."""
-    base, skills = _system_parts(state)
-    return f"{base}\n\n{skills}" if skills else base
+    """The system message actually sent to the model (guardrails + role [+ skills])."""
+    guardrails, role, skills = _system_parts(state)
+    # Recompose via the canonical helper so this and ``compose_system`` can never
+    # drift on the join separator. An empty catalog yields just the two layers.
+    catalog = state.get("skills_catalog") or []
+    catalog_for_block = catalog if skills else []
+    return compose_system(guardrails, role, catalog_for_block)
 
 
 async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -158,13 +172,15 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                 # 036-context-window-budget: attach the real model window + the
                 # per-category tiktoken split (a labelled estimate) so the Agent
                 # panel renders a /context-style budget against the real maximum.
-                base, skills = _system_parts(state)
+                # 042-agent-anatomy: the system layer now spans guardrails + role;
+                # the budget attributes their combined token count to ``system``.
+                guardrails, role, skills = _system_parts(state)
                 prompt_rec.data = {
                     **decision.prompt_preview,
                     "context": state["context"],
                     "context_window": context_window(provider.model_name),
                     "context_budget": context_budget(
-                        system=base,
+                        system=f"{guardrails}\n\n{role}",
                         tools=specs,
                         skills=skills,
                         history=state["history"],
@@ -428,17 +444,19 @@ async def run_agent_state(
     mode: str = "stream",
     session_id: str | None = None,
     system_prompt: str | None = None,
+    agent_prompt: str | None = None,
     enabled_tools: list[str] | None = None,
     scenario: str = "simple",
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
+    model: str | None = None,
 ) -> AgentState:
     """Run the agent for one message and return the final graph state.
 
     Exposed (alongside :func:`run_agent`) so tests can inspect the canonical
     message thread (``state["messages"]``) the run produced.
     """
-    provider = get_provider()
+    provider = get_provider(model=model)
     registry = await get_registry()
     graph = get_compiled_graph()
 
@@ -448,7 +466,9 @@ async def run_agent_state(
         "top_k": top_k,
         "mode": mode,
         "system_prompt": system_prompt,
+        "agent_prompt": agent_prompt,
         "enabled_tools": enabled_tools,
+        "model": model,
         "scenario": scenario,
         "simulate_failure": simulate_failure,
         "history": history or [],
@@ -475,10 +495,12 @@ async def run_agent(
     mode: str = "stream",
     session_id: str | None = None,
     system_prompt: str | None = None,
+    agent_prompt: str | None = None,
     enabled_tools: list[str] | None = None,
     scenario: str = "simple",
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
+    model: str | None = None,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -488,11 +510,13 @@ async def run_agent(
     in one shot. ``session_id`` scopes RAG retrieval to the base corpus plus this
     conversation's uploaded documents.
 
-    006-interactive-experiments request-only overrides (all optional; omitting
-    them reproduces today's behavior): ``system_prompt`` fully replaces the
-    default prompt (blank ⇒ default); ``enabled_tools`` restricts which tools are
-    discovered and callable — including knowledge-base retrieval
-    (``None`` = all, ``[]`` = none).
+    Request-only overrides (006 + 042; all optional, omitting them reproduces
+    today's behavior): ``system_prompt`` replaces the **guardrails** layer of
+    the assembled prompt; ``agent_prompt`` replaces the **role** layer (the
+    agent's identity / instructions); ``enabled_tools`` restricts which tools
+    are discovered and callable (``None`` = all, ``[]`` = none) — including the
+    knowledge-base retrieval tool; ``model`` picks the OpenAI model for this
+    run (validated against the curated allowlist by the API layer).
     """
     final_state = await run_agent_state(
         message,
@@ -502,9 +526,11 @@ async def run_agent(
         mode=mode,
         session_id=session_id,
         system_prompt=system_prompt,
+        agent_prompt=agent_prompt,
         enabled_tools=enabled_tools,
         scenario=scenario,
         simulate_failure=simulate_failure,
         skills_catalog=skills_catalog,
+        model=model,
     )
     return final_state["answer"]

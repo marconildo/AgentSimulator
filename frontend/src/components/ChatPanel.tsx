@@ -224,7 +224,7 @@ function ConversationRow({
           </span>
         </span>
         <span className="mt-0.5 block text-[11px] text-[var(--color-muted)]">
-          {t.chat.messages(session.message_count)}
+          {t.chat.messages(session.message_count ?? 0)}
         </span>
       </span>
     </button>

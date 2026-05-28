@@ -17,11 +17,20 @@ class AgentState(TypedDict):
     # Delivery mode ("stream" | "batch"); batch generates the answer in one shot.
     mode: str
     # Experiment overrides (006-interactive-experiments), request-only inputs:
-    #   system_prompt: full replacement for the default prompt (None/blank = default)
+    #   system_prompt: replaces the GUARDRAILS layer (042-agent-anatomy split
+    #                  the prior single prompt into guardrails + role); blank/
+    #                  None falls back to the default ``GUARDRAILS_PROMPT``.
+    #   agent_prompt:  replaces the ROLE layer (042-agent-anatomy); blank/None
+    #                  falls back to the default ``AGENT_PROMPT``.
     #   enabled_tools: tool names to expose (None = all, [] = none) — gates the
-    #                  retrieval tool too (026-agent-tool-autonomy)
+    #                  retrieval tool too (026-agent-tool-autonomy).
+    #   model:         per-conversation OpenAI model override (042-agent-anatomy);
+    #                  validated against the curated allowlist by the API layer.
+    #                  None = use the configured default (``settings.llm_model``).
     system_prompt: str | None
+    agent_prompt: str | None
     enabled_tools: list[str] | None
+    model: str | None
     # Maturity-ladder rung (008-scenario-framework), request-only. Carried for
     # later specs to branch on; node logic does not read it yet.
     scenario: str

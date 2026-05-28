@@ -74,6 +74,10 @@ interface ChatState {
   // the built-in corpus), then reset the UI to a fresh draft. Returns the counts
   // removed, or null if the request failed.
   clearAll: () => Promise<ClearResult | null>;
+  // 042-agent-anatomy: replace a single session record after a server PATCH so
+  // the sidebar + Agent station header reflect the updated metadata (e.g. the
+  // new `agent_name`) without an extra `listSessions` round-trip.
+  replaceSession: (session: SessionMeta) => void;
 }
 
 const isAbort = (err: unknown) => err instanceof Error && err.name === "AbortError";
@@ -428,4 +432,9 @@ export const useChat = create<ChatState>((set, get) => ({
       return null;
     }
   },
+
+  replaceSession: (session) =>
+    set((s) => ({
+      sessions: s.sessions.map((row) => (row.id === session.id ? { ...row, ...session } : row)),
+    })),
 }));

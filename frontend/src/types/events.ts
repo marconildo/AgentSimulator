@@ -52,13 +52,19 @@ export interface JsonRpcFrames {
 }
 
 // The resolved POST /api/chat body the backend acted on, echoed on the
-// `frontend` event (top_k resolved; 006 overrides present only when sent).
+// `frontend` event (top_k resolved; 006/042 overrides present only when sent;
+// `model` is always the resolved value — override or configured default).
 export interface RequestBody {
   message: string;
   session_id: string;
   top_k: number;
   mode: string;
+  // 042-agent-anatomy: always present (resolved server-side from override or
+  // default), so the inspector can show what actually ran without guessing.
+  model: string;
   system_prompt?: string;
+  // 042-agent-anatomy: agent prompt (role) override; echoed only when set.
+  agent_prompt?: string;
   enabled_tools?: string[];
   // 017-failure-injection — present only when a failure was forced (≠ none).
   simulate_failure?: string;

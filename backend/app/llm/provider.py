@@ -120,11 +120,19 @@ class LLMProvider(ABC):
         """
 
 
-def get_provider() -> LLMProvider:
-    """Return the OpenAI provider, or fail fast if no key is configured."""
+def get_provider(*, model: str | None = None) -> LLMProvider:
+    """Return the OpenAI provider, or fail fast if no key is configured.
+
+    042-agent-anatomy: the optional ``model`` kwarg picks the OpenAI model for
+    this run; the API layer validates it against the curated allowlist before
+    calling. ``None`` keeps today's behavior (use ``settings.llm_model``).
+    """
     settings = get_settings()
     if not settings.has_openai_key:
         raise MissingAPIKeyError()
     from .openai_provider import OpenAIProvider
 
-    return OpenAIProvider(model=settings.llm_model, api_key=settings.openai_api_key)
+    return OpenAIProvider(
+        model=model or settings.llm_model,
+        api_key=settings.openai_api_key,
+    )

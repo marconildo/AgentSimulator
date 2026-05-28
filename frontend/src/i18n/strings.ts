@@ -482,6 +482,62 @@ export interface Strings {
     learnStackTitle: string;
     learnStackBody: string;
   };
+  // 042-agent-anatomy — the "Configure agent" dialog opened from the Agent
+  // station. Seven sections compose the agent's identity (name, system prompt,
+  // agent prompt, model, tools, knowledge, skills). Strings here are pure UI
+  // chrome — the prompt defaults themselves (server-shipped content) stay
+  // English-only by design.
+  agentAnatomy: {
+    openButton: string;
+    editIdentity: string;
+    dialogTitle: string;
+    close: string;
+    reset: string;
+    defaultAgentName: string;
+    identity: {
+      title: string;
+      nameLabel: string;
+      namePlaceholder: string;
+      descLabel: string;
+      descPlaceholder: string;
+      hint: string;
+    };
+    system: {
+      title: string;
+      help: string;
+    };
+    agent: {
+      title: string;
+      help: string;
+    };
+    model: {
+      title: string;
+      help: string;
+      resolved: string;
+      useDefault: string;
+    };
+    tools: {
+      title: string;
+      help: string;
+      countAll: string;
+      countSome: (enabled: number, total: number) => string;
+    };
+    knowledge: {
+      title: string;
+      help: string;
+      corpus: string;
+      corpusLockHint: string;
+      uploads: string;
+      uploadsEmpty: string;
+      add: string;
+      remove: string;
+      loading: string;
+    };
+    skills: {
+      title: string;
+      sharedNote: string;
+    };
+  };
 }
 
 const en: Strings = {
@@ -695,7 +751,8 @@ const en: Strings = {
     experiment: {
       title: "Experiment",
       systemPrompt: "System prompt",
-      promptHint: "Edit the agent's instructions and watch the assembled prompt change.",
+      promptHint:
+        "Edits the guardrails layer (platform-wide rules). The agent's role / instructions live in the Agent node's Configure agent dialog.",
       reset: "Reset to default",
       tools: "Tools (MCP)",
       toolsHint: "Turn tools off and watch the agent re-plan without them.",
@@ -1018,6 +1075,59 @@ const en: Strings = {
     learnStackBody:
       "This map explains how the simulator is built — its architecture and layers, the software and Gen-AI concepts it uses (and why), the security at each layer, the networking and infrastructure, and where data lives. Click any node to read about it.",
   },
+  agentAnatomy: {
+    openButton: "Configure agent",
+    editIdentity: "Edit agent identity",
+    dialogTitle: "Agent anatomy",
+    close: "Close",
+    reset: "Reset to default",
+    defaultAgentName: "Agent",
+    identity: {
+      title: "Identity",
+      nameLabel: "Name",
+      namePlaceholder: "Agent",
+      descLabel: "Short description",
+      descPlaceholder: "What is this agent specialized in?",
+      hint: "Start with the name and a short description — you can change them later.",
+    },
+    system: {
+      title: "System prompt",
+      help:
+        "Platform-wide rules every agent inherits: safety, honesty, format. Applies before the agent's role.",
+    },
+    agent: {
+      title: "Agent prompt",
+      help:
+        "Who this agent is and what it should do. The role and tool-usage instructions specific to this agent.",
+    },
+    model: {
+      title: "Model",
+      help: "The language model this conversation uses.",
+      resolved: "This conversation will use:",
+      useDefault: "Use default",
+    },
+    tools: {
+      title: "Tools",
+      help: "Which tools this agent can choose to call.",
+      countAll: "All enabled",
+      countSome: (enabled, total) => `${enabled} of ${total} enabled`,
+    },
+    knowledge: {
+      title: "Knowledge base",
+      help: "What this agent can retrieve from at runtime.",
+      corpus: "Corpus (shipped)",
+      corpusLockHint: "Read-only — bundled with the simulator.",
+      uploads: "Your uploads",
+      uploadsEmpty: "No documents uploaded yet.",
+      add: "Add document",
+      remove: "Remove",
+      loading: "Loading…",
+    },
+    skills: {
+      title: "Skills",
+      sharedNote: "Skills are shared across all conversations.",
+    },
+  },
 };
 
 const pt: Strings = {
@@ -1231,7 +1341,8 @@ const pt: Strings = {
     experiment: {
       title: "Experimentar",
       systemPrompt: "Prompt de sistema",
-      promptHint: "Edite as instruções do agente e veja o prompt montado mudar.",
+      promptHint:
+        "Edita a camada de guardrails (regras do ambiente). O papel / instruções do agente ficam no diálogo Configurar agente, no nó Agent.",
       reset: "Restaurar padrão",
       tools: "Ferramentas (MCP)",
       toolsHint: "Desligue ferramentas e veja o agente replanejar sem elas.",
@@ -1553,6 +1664,59 @@ const pt: Strings = {
     learnStackTitle: "Aprenda a stack",
     learnStackBody:
       "Este mapa explica como o simulador é construído — sua arquitetura e camadas, os conceitos de software e Gen AI que utiliza (e por quê), a segurança em cada camada, a rede e a infraestrutura, e onde os dados ficam. Clique em qualquer nó para ler sobre ele.",
+  },
+  agentAnatomy: {
+    openButton: "Configurar agente",
+    editIdentity: "Editar identidade do agente",
+    dialogTitle: "Anatomia do agente",
+    close: "Fechar",
+    reset: "Restaurar padrão",
+    defaultAgentName: "Agente",
+    identity: {
+      title: "Identidade",
+      nameLabel: "Nome",
+      namePlaceholder: "Agente",
+      descLabel: "Descrição curta",
+      descPlaceholder: "Em que este agente é especialista?",
+      hint: "Comece pelo nome e por uma descrição curta — você pode mudar depois.",
+    },
+    system: {
+      title: "Prompt de sistema",
+      help:
+        "Regras do ambiente que todo agente herda: segurança, honestidade, formato. Aplica-se antes do papel do agente.",
+    },
+    agent: {
+      title: "Prompt do agente",
+      help:
+        "Quem é este agente e o que ele deve fazer. O papel e as instruções de uso de ferramentas específicas deste agente.",
+    },
+    model: {
+      title: "Modelo",
+      help: "O modelo de linguagem que esta conversa utilizará.",
+      resolved: "Esta conversa usará:",
+      useDefault: "Usar padrão",
+    },
+    tools: {
+      title: "Ferramentas",
+      help: "Quais ferramentas este agente pode escolher chamar.",
+      countAll: "Todas habilitadas",
+      countSome: (enabled, total) => `${enabled} de ${total} habilitadas`,
+    },
+    knowledge: {
+      title: "Base de conhecimento",
+      help: "Do que este agente pode recuperar informações em tempo de execução.",
+      corpus: "Corpus (do sistema)",
+      corpusLockHint: "Somente leitura — embutido no simulador.",
+      uploads: "Seus uploads",
+      uploadsEmpty: "Nenhum documento enviado ainda.",
+      add: "Adicionar documento",
+      remove: "Remover",
+      loading: "Carregando…",
+    },
+    skills: {
+      title: "Skills",
+      sharedNote: "Skills são compartilhadas entre todas as conversas.",
+    },
   },
 };
 

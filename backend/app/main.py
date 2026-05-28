@@ -17,15 +17,17 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from .agent import run_agent
-from .agent.prompts import SYSTEM_PROMPT
+from .agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from .agent.tools import agent_tool_specs
 from .config import get_settings
 from .db.seed import seed_skills
 from .db.store import DuplicateSkillName, get_store
 from .llm.context import history_pair_tokens
+from .llm.models import model_ids, models_payload
 from .mcp.client import get_registry
 from .rag.ingest import build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
@@ -165,7 +167,12 @@ async def config() -> dict:
     settings = get_settings()
     registry = await get_registry()
     return {
-        "default_system_prompt": SYSTEM_PROMPT,
+        # 042-agent-anatomy split the prior single prompt into two layers.
+        # ``default_system_prompt`` now ships the **guardrails** text; the prior
+        # role text is exposed separately as ``default_agent_prompt`` so the FE
+        # can prefill each textarea independently.
+        "default_system_prompt": GUARDRAILS_PROMPT,
+        "default_agent_prompt": AGENT_PROMPT,
         "default_top_k": settings.rag_top_k,
         "top_k_min": 1,
         "top_k_max": 8,
@@ -179,13 +186,33 @@ async def config() -> dict:
         # 017-failure-injection: the allowed values for the "Simulate failure"
         # selector, so the frontend never hardcodes them (AC4).
         "failure_modes": [m.value for m in SimulateFailure],
+        # 042-agent-anatomy: the curated OpenAI chat-model list the Agent
+        # Anatomy dialog renders, plus the server's resolved default. The FE
+        # never hardcodes model ids; the API validates ``ChatRequest.model``
+        # against this list. Keep the payload shape stable — frontend types
+        # mirror it.
+        "models": models_payload(),
+        "default_model": settings.llm_model,
     }
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     settings = get_settings()
+    # 042-agent-anatomy: validate the optional model override against the
+    # curated allowlist *before* doing any heavy work. An unlisted id is a
+    # 422, not a runtime surprise from the OpenAI client.
+    if req.model is not None and req.model not in model_ids():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "model not in allowlist",
+                "model": req.model,
+                "allowed": sorted(model_ids()),
+            },
+        )
     top_k = req.top_k or settings.rag_top_k
+    resolved_model = req.model or settings.llm_model
     trace_id = uuid.uuid4().hex
     emitter = TraceEmitter(trace_id, req.message)
 
@@ -206,9 +233,15 @@ async def chat(req: ChatRequest):
         "top_k": top_k,
         "mode": req.mode,
         "scenario": req.scenario.value,
+        # 042-agent-anatomy: always echo the **resolved** model (override or
+        # configured default) so the FE can show what actually ran without
+        # having to know about the server default. Resolves AC6.
+        "model": resolved_model,
     }
     if req.system_prompt is not None:
         request_body["system_prompt"] = req.system_prompt
+    if req.agent_prompt is not None:
+        request_body["agent_prompt"] = req.agent_prompt
     if req.enabled_tools is not None:
         request_body["enabled_tools"] = req.enabled_tools
     # Include the forced failure only when set (017) — a `none` run echoes nothing
@@ -260,10 +293,12 @@ async def chat(req: ChatRequest):
                     mode=req.mode,
                     session_id=session_id,
                     system_prompt=req.system_prompt,
+                    agent_prompt=req.agent_prompt,
                     enabled_tools=req.enabled_tools,
                     scenario=req.scenario,
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,
+                    model=req.model,
                 )
 
                 # Persist the finished message + the chunks retrieved for it
@@ -347,6 +382,36 @@ async def get_trace(trace_id: str):
     return summary
 
 
+@app.get("/api/corpus")
+async def list_corpus() -> dict:
+    """List the shipped corpus files (042-agent-anatomy).
+
+    Read-only metadata for the Agent Anatomy dialog's Knowledge Base subsection:
+    filename, size in bytes, and a whitespace-collapsed first-240-chars preview.
+    Only ``*.md`` files in :attr:`Settings.corpus_path` are returned, sorted by
+    filename. Independent of the OpenAI key (the corpus is on disk, not in the
+    LLM)."""
+    corpus_dir = get_settings().corpus_path
+    files: list[dict[str, Any]] = []
+    if corpus_dir.exists():
+        for path in sorted(corpus_dir.glob("*.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # Whitespace-collapsed first 240 chars — keeps the JSON small while
+            # giving the FE enough to render a 1–2 line teaser.
+            preview = " ".join(text.split())[:240]
+            files.append(
+                {
+                    "filename": path.name,
+                    "size_bytes": path.stat().st_size,
+                    "preview": preview,
+                }
+            )
+    return {"files": files}
+
+
 @app.post("/api/data/clear")
 async def clear_data():
     """Reset both stores (025-clear-databases): remove every user-imported chunk
@@ -380,6 +445,31 @@ async def list_sessions():
 async def delete_session(session_id: str):
     """Delete a conversation + its messages (keeps PDF embeddings — D6, AC4)."""
     return await get_store().delete_session(session_id)
+
+
+class SessionPatch(BaseModel):
+    """Body of ``PATCH /api/sessions/{id}`` (042-agent-anatomy).
+
+    Only the per-session agent name is editable today. ``agent_name`` is
+    bounded at 60 chars (after strip); an empty string clears the override.
+    Future fields go here (e.g. short description, color tag).
+    """
+
+    agent_name: str | None = Field(default=None, max_length=60)
+
+
+@app.patch("/api/sessions/{session_id}")
+async def patch_session(session_id: str, body: SessionPatch):
+    """Update per-conversation agent metadata (042-agent-anatomy)."""
+    # Normalize the incoming value: strip whitespace; ``""`` after strip means
+    # "clear the override" (NULL in the row). The 60-char cap is enforced by
+    # pydantic at validation time (over-cap ⇒ 422).
+    raw = body.agent_name
+    name = raw.strip() if isinstance(raw, str) else None
+    row = await get_store().update_session(session_id, agent_name=name)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return row
 
 
 @app.get("/api/sessions/{session_id}/messages")

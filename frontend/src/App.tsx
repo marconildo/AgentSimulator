@@ -1,6 +1,7 @@
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { AgentAnatomyDialog } from "./components/AgentAnatomyDialog";
 import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
@@ -316,6 +317,7 @@ export default function App() {
                 <TourCaption />
               </ReactFlowProvider>
               {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
+              <AgentAnatomyDialog />
             </main>
 
             <SidePanel

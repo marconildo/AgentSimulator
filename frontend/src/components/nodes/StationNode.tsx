@@ -2,11 +2,13 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
 
 import { useT } from "../../i18n";
+import { useAgentAnatomy } from "../../lib/agentAnatomy";
 import { formatTokens, formatUsd } from "../../lib/cost";
 import type { StationRuntime, UsageTotals } from "../../lib/derive";
 import { NODE_WIDTH } from "../../lib/layout";
 import { formatLatency } from "../../lib/time";
 import { READOUT_GLOSSARY_KEY, type StationId, type StationMeta } from "../../lib/stations";
+import { useChat } from "../../store/useChat";
 import { useSimulator } from "../../store/useSimulator";
 import type { TraceEvent } from "../../types/events";
 
@@ -34,6 +36,19 @@ export function StationNode(props: NodeProps) {
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
   const openDetail = useSimulator((s) => s.openDetail);
+  // 042-agent-anatomy — open the "Configure agent" dialog from the Agent node.
+  // The hook is mounted for every station (zustand allows this), but the
+  // affordance only renders on the agent station below.
+  const openAnatomy = useAgentAnatomy((s) => s.openDialog);
+  // The conversation's `agent_name` (when set) overrides the station header
+  // label so users see the named agent on the canvas, not the generic "Agent".
+  const activeSession = useChat((c) => {
+    const id = c.activeSessionId;
+    return id ? c.sessions.find((s) => s.id === id) ?? null : null;
+  });
+  const isAgent = meta.id === "agent";
+  const agentName = isAgent ? activeSession?.agent_name ?? null : null;
+  const displayTitle = agentName ?? meta.title;
 
   // Spotlight model: only the station the packet is at right now is lit; every
   // other station (not yet reached, or already done) stays deactivated. Use the
@@ -91,8 +106,25 @@ export function StationNode(props: NodeProps) {
             {/* Titles/subtitles can exceed the node width (e.g. "Model Context
                 Protocol", "Ingestion / Indexer"); clip with ellipsis but reveal
                 the full text on hover via the native title tooltip. */}
-            <div title={meta.title} className="truncate text-[13px] font-semibold text-[var(--color-ink)]">
-              {meta.title}
+            <div
+              title={displayTitle}
+              className="flex items-center gap-1 truncate text-[13px] font-semibold text-[var(--color-ink)]"
+            >
+              <span className="truncate">{displayTitle}</span>
+              {isAgent && !comingSoon && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAnatomy("identity");
+                  }}
+                  title={t.agentAnatomy.editIdentity}
+                  aria-label={t.agentAnatomy.editIdentity}
+                  data-testid="open-agent-anatomy-edit"
+                  className="grid h-4 w-4 shrink-0 place-items-center rounded text-[10px] text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-ink)]"
+                >
+                  ✏️
+                </button>
+              )}
             </div>
             <div title={meta.subtitle} className="truncate text-[10px] text-[var(--color-muted)]">
               {meta.subtitle}
@@ -143,16 +175,34 @@ export function StationNode(props: NodeProps) {
           <div className="mt-2 flex min-h-0 flex-1 flex-col">
             <ExpandedBody meta={meta} rt={runtime} usage={usage} />
             {HAS_DETAIL[meta.id] && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openDetail(meta.id);
-                }}
-                className="mt-auto w-full rounded-lg border px-2 py-1 text-[10.5px] font-semibold transition hover:bg-[var(--color-panel-2)]"
-                style={{ borderColor: accent, color: accent }}
-              >
-                {t.node.openFull} ▸
-              </button>
+              <div className="mt-auto flex flex-col gap-1.5">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDetail(meta.id);
+                  }}
+                  className="w-full rounded-lg border px-2 py-1 text-[10.5px] font-semibold transition hover:bg-[var(--color-panel-2)]"
+                  style={{ borderColor: accent, color: accent }}
+                >
+                  {t.node.openFull} ▸
+                </button>
+                {isAgent && (
+                  // 042-agent-anatomy — secondary affordance: open the "Configure
+                  // agent" dialog (identity, prompts, model, tools, KB, skills).
+                  // Distinct from "Open full view", which is the runtime drill-in.
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAnatomy();
+                    }}
+                    data-testid="open-agent-anatomy"
+                    className="w-full rounded-lg border border-dashed px-2 py-1 text-[10.5px] font-semibold text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] hover:text-[var(--color-ink)]"
+                    style={{ borderColor: `color-mix(in srgb, ${accent} 35%, transparent)` }}
+                  >
+                    ⚙️ {t.agentAnatomy.openButton}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ) : (

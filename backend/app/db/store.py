@@ -36,6 +36,9 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
     title      TEXT,
+    -- 042-agent-anatomy: optional per-conversation agent name set from the
+    -- Agent Anatomy dialog. NULL = unset (FE shows the localized default).
+    agent_name TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -121,6 +124,10 @@ class ConversationStore:
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
         if "skills" not in cols:
             conn.execute("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'")
+        # 042-agent-anatomy: per-conversation agent name (NULL = unset, default).
+        session_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+        if "agent_name" not in session_cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN agent_name TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
@@ -140,7 +147,13 @@ class ConversationStore:
                 "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (sid, title, now, now),
             )
-        return {"id": sid, "title": title, "created_at": now, "updated_at": now}
+        return {
+            "id": sid,
+            "title": title,
+            "agent_name": None,
+            "created_at": now,
+            "updated_at": now,
+        }
 
     def _ensure_session_sync(self, session_id: str) -> dict[str, Any]:
         existing = self._get_session_sync(session_id)
@@ -151,7 +164,7 @@ class ConversationStore:
     def _get_session_sync(self, session_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?",
+                "SELECT id, title, agent_name, created_at, updated_at FROM sessions WHERE id = ?",
                 (session_id,),
             ).fetchone()
         return dict(row) if row else None
@@ -160,13 +173,33 @@ class ConversationStore:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT s.id, s.title, s.created_at, s.updated_at,
+                SELECT s.id, s.title, s.agent_name, s.created_at, s.updated_at,
                        (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
                 FROM sessions s
                 ORDER BY s.updated_at DESC, s.created_at DESC
                 """
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def _update_session_sync(
+        self, session_id: str, *, agent_name: str | None
+    ) -> dict[str, Any] | None:
+        """Set or clear the per-session agent name (042-agent-anatomy).
+
+        ``agent_name`` is the stripped value (``""`` after strip clears the
+        column to ``NULL``). Returns the updated session row, or ``None`` if
+        the id does not exist.
+        """
+        cleared = agent_name == "" or agent_name is None
+        value = None if cleared else agent_name
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE sessions SET agent_name = ? WHERE id = ?",
+                (value, session_id),
+            )
+            if cur.rowcount == 0:
+                return None
+        return self._get_session_sync(session_id)
 
     def _delete_session_sync(self, session_id: str) -> dict[str, Any]:
         with self._connect() as conn:
@@ -495,6 +528,11 @@ class ConversationStore:
 
     async def delete_session(self, session_id: str) -> dict[str, Any]:
         return await asyncio.to_thread(self._delete_session_sync, session_id)
+
+    async def update_session(
+        self, session_id: str, *, agent_name: str | None
+    ) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._update_session_sync, session_id, agent_name=agent_name)
 
     async def clear_all(self) -> dict[str, Any]:
         return await asyncio.to_thread(self._clear_all_sync)

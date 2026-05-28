@@ -224,8 +224,11 @@ def test_skills_block_lists_name_and_description_not_body():
     assert "load_skill" in block  # tells the model how to load one
     assert skills_block([]) == ""  # empty catalog ⇒ no block
 
-    composed = compose_system("BASE PROMPT", _CATALOG)
-    assert composed.startswith("BASE PROMPT")
+    # 042-agent-anatomy: compose_system is now three layers (guardrails + role
+    # + skills). Only the catalog-appending behavior is asserted here; the layer
+    # semantics live in test_agent_prompt_layers.py.
+    composed = compose_system("GUARDS", "BASE PROMPT", _CATALOG)
+    assert composed.startswith("GUARDS\n\nBASE PROMPT")
     assert "resumo-em-bullets" in composed
 
 
@@ -238,23 +241,31 @@ def _state(system_prompt=None, enabled_tools=None, catalog=None):
 
 
 def test_effective_system_appends_catalog_only_when_skills_advertised():
-    from app.agent.graph import SYSTEM_PROMPT, _effective_system
+    # 042-agent-anatomy: the assembled system message is now
+    # guardrails + role + (optional) skills; the role layer is the one that
+    # carries the agent's identity text the prior ``SYSTEM_PROMPT`` shipped.
+    from app.agent.graph import _effective_system
+    from app.agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
+
+    no_skills = f"{GUARDRAILS_PROMPT}\n\n{AGENT_PROMPT}"
 
     # Default run (no enabled override) ⇒ the catalog block is appended.
     with_block = _effective_system(_state())  # type: ignore[arg-type]
-    assert "resumo-em-bullets" in with_block and SYSTEM_PROMPT in with_block
+    assert "resumo-em-bullets" in with_block
+    assert AGENT_PROMPT in with_block and GUARDRAILS_PROMPT in with_block
 
     # load_skill explicitly enabled ⇒ still appended.
     assert "resumo-em-bullets" in _effective_system(_state(enabled_tools=["load_skill"]))  # type: ignore[arg-type]
 
     # All tools disabled ⇒ nothing can be loaded ⇒ block omitted (AC3).
-    assert _effective_system(_state(enabled_tools=[])) == SYSTEM_PROMPT  # type: ignore[arg-type]
+    assert _effective_system(_state(enabled_tools=[])) == no_skills  # type: ignore[arg-type]
     # A tool list without load_skill ⇒ omitted too.
-    assert _effective_system(_state(enabled_tools=["calculator"])) == SYSTEM_PROMPT  # type: ignore[arg-type]
+    assert _effective_system(_state(enabled_tools=["calculator"])) == no_skills  # type: ignore[arg-type]
     # Empty catalog ⇒ omitted (backward compatible, AC11).
-    assert _effective_system(_state(catalog=[])) == SYSTEM_PROMPT  # type: ignore[arg-type]
+    assert _effective_system(_state(catalog=[])) == no_skills  # type: ignore[arg-type]
 
-    # A system_prompt override still gets the catalog appended.
+    # A system_prompt override still gets the catalog appended; it now replaces
+    # only the guardrails layer (the role layer keeps its default).
     over = _effective_system(_state(system_prompt="ONLY THIS"))  # type: ignore[arg-type]
     assert over.startswith("ONLY THIS") and "resumo-em-bullets" in over
 

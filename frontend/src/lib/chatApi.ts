@@ -9,9 +9,14 @@ import { API_BASE, consumeEventStream } from "./sse";
 export interface SessionMeta {
   id: string;
   title: string | null;
+  // 042-agent-anatomy: per-conversation agent name. Optional in the type
+  // because the legacy session list endpoint also returns it; the FE coalesces
+  // to the localized default "Agent" / "Agente" when null/absent. The PATCH
+  // endpoint always sets the column to either a value or NULL.
+  agent_name?: string | null;
   created_at: number;
   updated_at: number;
-  message_count: number;
+  message_count?: number;
 }
 
 export interface ChatChunk {
@@ -62,6 +67,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const listSessions = () => api<SessionMeta[]>("/api/sessions");
 export const createSession = () => api<SessionMeta>("/api/sessions", { method: "POST" });
+// 042-agent-anatomy: edit a conversation's metadata (today: agent_name only).
+// The backend strips and length-checks (≤60 chars); "" clears the override.
+export const patchSession = (id: string, body: { agent_name?: string | null }) =>
+  jsonApi<SessionMeta>(`/api/sessions/${id}`, "PATCH", body);
 
 // 025-clear-databases: the global reset. Counts of what was removed from both
 // stores — relational rows + user-imported vectors (the built-in corpus is kept).
@@ -130,8 +139,20 @@ export interface ScenarioInfo {
   available: boolean;
 }
 
+// 042-agent-anatomy: one curated OpenAI chat model the FE Agent Anatomy dialog
+// renders in its Model dropdown. The id is the OpenAI model id; the label is
+// what the user sees. Proper noun → not translated.
+export interface ModelInfo {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface AppConfig {
-  default_system_prompt: string;
+  // 042-agent-anatomy split the prior single prompt into two server-shipped
+  // defaults; the FE Agent Anatomy dialog prefills each textarea independently.
+  default_system_prompt: string; // guardrails layer
+  default_agent_prompt: string; // role layer
   default_top_k: number;
   top_k_min: number;
   top_k_max: number;
@@ -141,6 +162,11 @@ export interface AppConfig {
   // 017-failure-injection: allowed values for the "Simulate failure" selector,
   // so the frontend never hardcodes them (AC4). e.g. ["none","tool_error",…].
   failure_modes: string[];
+  // 042-agent-anatomy: curated OpenAI chat models the Agent Anatomy dialog
+  // lets the user pick from, plus the resolved server default. Server-side
+  // allowlist validation prevents an unlisted id from reaching the agent.
+  models: ModelInfo[];
+  default_model: string;
 }
 
 let _configPromise: Promise<AppConfig> | null = null;
@@ -148,6 +174,22 @@ let _configPromise: Promise<AppConfig> | null = null;
 export const getConfig = (): Promise<AppConfig> => {
   if (!_configPromise) _configPromise = api<AppConfig>("/api/config");
   return _configPromise;
+};
+
+// 042-agent-anatomy: corpus listing for the Knowledge Base section.
+export interface CorpusFile {
+  filename: string;
+  size_bytes: number;
+  preview: string;
+}
+export interface CorpusListing {
+  files: CorpusFile[];
+}
+let _corpusPromise: Promise<CorpusListing> | null = null;
+/** Fetch (and cache) the shipped corpus files. Read-only. */
+export const getCorpus = (): Promise<CorpusListing> => {
+  if (!_corpusPromise) _corpusPromise = api<CorpusListing>("/api/corpus");
+  return _corpusPromise;
 };
 
 export interface UploadHandlers {

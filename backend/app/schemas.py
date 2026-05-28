@@ -127,17 +127,27 @@ class ChatRequest(BaseModel):
     # --- Experiment overrides (006-interactive-experiments) ------------------
     # Request-only inputs that let the UI change *how* the run executes without
     # adding any pipeline stage. All optional: omitting them reproduces today's
-    # behavior exactly (default prompt, all tools, default top-k).
+    # behavior exactly (default prompts, all tools, default top-k, default model).
     #
-    # Full system-prompt replacement (the textarea *is* the whole prompt); blank
-    # falls back to the default server-side. Capped to bound the blast radius.
+    # 042-agent-anatomy split the prior single prompt into two layers, each
+    # independently overridable. ``system_prompt`` now replaces the GUARDRAILS
+    # layer (platform-wide rules); ``agent_prompt`` replaces the ROLE layer
+    # (this agent's identity/instructions). Both are capped at 2000 chars to
+    # bound the blast radius; blank/whitespace falls back to the corresponding
+    # server default for that layer.
     system_prompt: str | None = Field(default=None, max_length=2000)
+    agent_prompt: str | None = Field(default=None, max_length=2000)
     # Names of the MCP tools to expose this run. ``None`` = all tools (default);
     # ``[]`` = no tools (LLM-only path); a list = only those tools discovered.
     enabled_tools: list[str] | None = None
     # Lets the UI override RAG top-k for experimentation; bounded to the slider's
     # range (1..8). ``None`` = the configured default (``rag_top_k``).
     top_k: int | None = Field(default=None, ge=1, le=8)
+    # Per-conversation OpenAI model override (042-agent-anatomy). The API
+    # validates this against the curated allowlist (``app.llm.models``) and
+    # returns 422 on an unlisted value, so the agent never sees an unvetted id.
+    # ``None`` = use ``settings.llm_model`` (the configured default).
+    model: str | None = Field(default=None, max_length=120)
 
     # --- Scenario (008-scenario-framework) -----------------------------------
     # Which rung of the maturity ladder this run targets. Request-only, carried
