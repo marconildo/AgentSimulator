@@ -110,12 +110,14 @@ async def test_clear_all_reports_and_wipes_skills(tmp_path):
 
     result = await store.clear_all()
     # 043-persisted-agent: clear now wipes agents too (and re-seeds the default).
+    # 048-persist-traces: + trace_events_deleted (0 here — this test never emits).
     assert result == {
         "sessions_deleted": 0,
         "messages_deleted": 0,
         "documents_deleted": 0,
         "skills_deleted": 2,
         "agents_deleted": 1,
+        "trace_events_deleted": 0,
     }
     assert await store.list_skills() == []
     # Idempotent: a second clear reports zero skills removed.

@@ -34,6 +34,10 @@ EXPECTED_CLEAR_KEYS: set[str] = {
     "documents_deleted",
     "skills_deleted",
     "agents_deleted",
+    # 048-persist-traces: every emitted event persists; the global reset wipes
+    # them too. The CASCADE from `sessions.id` would cover most rows, but the
+    # explicit count is the contract surface for the FE / future tooling.
+    "trace_events_deleted",
 }
 
 
@@ -58,6 +62,21 @@ async def _seed_one_of_everything(store: ConversationStore) -> str:
     # 044-shared-agent-catalog: at least one non-default agent so the
     # delete-all path is exercised; the default is re-seeded after.
     await store.create_agent(name="Test Agent", description="audited")
+    # 048-persist-traces: at least one row in `trace_events` so the cleanup
+    # contract test exercises the new column too.
+    await store.write_trace_event(
+        {
+            "trace_id": "msg-1",
+            "seq": 1,
+            "ts": 0.0,
+            "session_id": sid,
+            "stage": "backend",
+            "phase": "end",
+            "label": "",
+            "data": {},
+            "metrics": {},
+        }
+    )
     return sid
 
 
@@ -80,6 +99,7 @@ async def test_clear_all_zeroes_every_user_data_table(tmp_path):
     assert _count_rows(path, "message_documents") >= 1
     assert _count_rows(path, "skills") >= 1
     assert _count_rows(path, "agents") >= 2  # default + the test agent
+    assert _count_rows(path, "trace_events") >= 1
 
     await store.clear_all()
 
@@ -88,6 +108,7 @@ async def test_clear_all_zeroes_every_user_data_table(tmp_path):
     assert _count_rows(path, "documents") == 0
     assert _count_rows(path, "message_documents") == 0  # cascade
     assert _count_rows(path, "skills") == 0
+    assert _count_rows(path, "trace_events") == 0
     # Default re-seeded → exactly one agent row left.
     assert _count_rows(path, "agents") == 1
 

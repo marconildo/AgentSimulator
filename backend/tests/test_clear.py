@@ -44,6 +44,10 @@ async def test_clear_all_wipes_all_relational_history(tmp_path):
         "documents_deleted": 1,
         "skills_deleted": 0,
         "agents_deleted": 1,
+        # 048-persist-traces: this test doesn't emit any trace events itself
+        # (it bypasses the chat endpoint), so the count is 0 — but the key
+        # must be present per 046's `EXPECTED_CLEAR_KEYS` contract.
+        "trace_events_deleted": 0,
     }
     assert await store.list_sessions() == []
     assert await store.list_messages(s1) == []
@@ -64,6 +68,7 @@ async def test_clear_all_is_safe_and_idempotent_on_empty_store(tmp_path):
         "documents_deleted": 0,
         "skills_deleted": 0,
         "agents_deleted": 1,
+        "trace_events_deleted": 0,
     }
     assert await store.clear_all() == first
 
@@ -155,4 +160,7 @@ def test_clear_data_endpoint_is_idempotent_on_empty():
             "agents_deleted": 1,
             "vectors_removed": 0,
             "objects_deleted": 0,
+            # 048-persist-traces: the post-clear empty state also reports 0
+            # trace events (matches the endpoint's count keyset).
+            "trace_events_deleted": 0,
         }

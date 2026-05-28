@@ -233,6 +233,9 @@ async def chat(req: ChatRequest):
     # client didn't send a session_id. The id is echoed on the SSE `done` event.
     session = await store.ensure_session(req.session_id or uuid.uuid4().hex)
     session_id = session["id"]
+    # 048-persist-traces: pin the session on the emitter so every subsequent
+    # `emit` denormalizes session_id onto its trace_events row.
+    emitter.session_id = session_id
     # 043-persisted-agent: the session always carries an inline agent (clone
     # of the seed default). Request-level overrides (006) still win when set
     # — falling back to the agent row only fills in the absent fields. So a
@@ -414,10 +417,20 @@ async def chat(req: ChatRequest):
 
 @app.get("/api/trace/{trace_id}")
 async def get_trace(trace_id: str):
+    """Return a finished trace's summary.
+
+    048-persist-traces: layered read. The bounded in-memory `TraceStore`
+    (cap=50) serves the hot path; on a miss (older traces, restart, another
+    instance) we reconstruct the same `TraceSummary` shape from
+    `trace_events` + `messages`. Identical JSON shape on both paths.
+    """
     summary = trace_store.get(trace_id)
-    if summary is None:
+    if summary is not None:
+        return summary
+    db_summary = await get_store().get_trace_summary(trace_id)
+    if db_summary is None:
         raise HTTPException(status_code=404, detail="trace not found")
-    return summary
+    return db_summary
 
 
 @app.get("/api/corpus")
@@ -669,6 +682,9 @@ async def upload_document(session_id: str, file: Annotated[UploadFile, File()]):
 
     store = get_store()
     await store.ensure_session(session_id)
+    # 048-persist-traces: pin the session on the upload emitter too, so every
+    # ingestion event carries it through to `trace_events.session_id`.
+    emitter.session_id = session_id
     # 040-message-attachments: captured by the producer below, read by the
     # done frame so the FE composer can stage the freshly-ingested doc as a
     # chip without a follow-up `GET /documents` round-trip. ``-1`` if the

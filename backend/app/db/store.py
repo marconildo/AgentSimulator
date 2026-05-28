@@ -162,6 +162,27 @@ CREATE TABLE IF NOT EXISTS message_documents (
     created_at  REAL NOT NULL,
     PRIMARY KEY (message_id, document_id)
 );
+-- 048-persist-traces: every `TraceEvent` emitted during a chat or upload is
+-- persisted in real-time. Denormalized single table — `session_id` rides on
+-- every row for cheap per-session reads; `message_id` is not stored because
+-- `message_id == trace_id` by construction (the chat endpoint reuses the
+-- trace_id as the message id when persisting at end of run). `data`/`metrics`
+-- are JSON blobs serialised with `json.dumps(default=str)` so unusual Python
+-- objects in `data` (Path, datetime, …) coerce gracefully to strings.
+CREATE TABLE IF NOT EXISTS trace_events (
+    trace_id   TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    ts         REAL NOT NULL,
+    session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+    stage      TEXT NOT NULL,
+    phase      TEXT NOT NULL,
+    label      TEXT NOT NULL DEFAULT '',
+    data       TEXT NOT NULL DEFAULT '{}',
+    metrics    TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (trace_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_trace_events_session
+    ON trace_events(session_id, ts);
 -- 027-skills: the global, agent-loadable skill catalog. A skill is a named
 -- instruction bundle the agent advertises by name+description and loads on
 -- demand (the `body`) via the `load_skill` tool. `name` is unique so the model
@@ -243,6 +264,10 @@ class ConversationStore:
         # outer one is committed and closed. Gated by `PRAGMA user_version`
         # so re-boots are no-ops.
         ConversationStore._migrate_to_integrity_constraints(self.path)
+        # 048-persist-traces: additive migration — creates the `trace_events`
+        # table on existing pre-048 DBs. Gated by `PRAGMA user_version` so
+        # subsequent boots are no-ops. Fresh DBs already have it via _SCHEMA.
+        ConversationStore._migrate_to_persist_traces(self.path)
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection) -> None:
@@ -289,6 +314,9 @@ class ConversationStore:
     # for the new CHECKs + `ON DELETE SET NULL` has happened. Idempotent
     # across boots; existing dev DBs upgrade once on next start.
     _SCHEMA_VERSION_INTEGRITY_CONSTRAINTS = 2
+    # 048-persist-traces: bumped after the additive `trace_events` table is
+    # created. Pure `CREATE TABLE IF NOT EXISTS` — no table rebuild needed.
+    _SCHEMA_VERSION_PERSIST_TRACES = 3
 
     @staticmethod
     def _migrate_to_shared_catalog(conn: sqlite3.Connection) -> None:
@@ -477,6 +505,40 @@ class ConversationStore:
         finally:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.close()
+
+    @staticmethod
+    def _migrate_to_persist_traces(path: Path) -> None:
+        """048-persist-traces: add the `trace_events` table + its index.
+
+        Pure additive — no table rebuild, no FK toggling. Gated by
+        ``PRAGMA user_version`` so subsequent boots are no-ops. Fresh DBs
+        already have the table from ``_SCHEMA``; this is for the v2 → v3
+        upgrade path.
+        """
+        target = ConversationStore._SCHEMA_VERSION_PERSIST_TRACES
+        with sqlite3.connect(path) as conn:
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+            if current >= target:
+                return
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS trace_events (
+                    trace_id   TEXT NOT NULL,
+                    seq        INTEGER NOT NULL,
+                    ts         REAL NOT NULL,
+                    session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+                    stage      TEXT NOT NULL,
+                    phase      TEXT NOT NULL,
+                    label      TEXT NOT NULL DEFAULT '',
+                    data       TEXT NOT NULL DEFAULT '{}',
+                    metrics    TEXT NOT NULL DEFAULT '{}',
+                    PRIMARY KEY (trace_id, seq)
+                );
+                CREATE INDEX IF NOT EXISTS idx_trace_events_session
+                    ON trace_events(session_id, ts);
+                """
+            )
+            conn.execute(f"PRAGMA user_version = {target}")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
@@ -802,7 +864,19 @@ class ConversationStore:
                 # plus the default (which is immediately re-seeded below so the
                 # next `create_session` works without a restart).
                 "agents_deleted": conn.execute("SELECT COUNT(*) AS n FROM agents").fetchone()["n"],
+                # 048-persist-traces: the trace event log is user data — wipe it
+                # with everything else. The FK CASCADE from sessions would handle
+                # most rows for free, but counting + DELETEing explicitly keeps
+                # the contract honest (and handles rows whose session was already
+                # gone from a prior incomplete wipe).
+                "trace_events_deleted": conn.execute(
+                    "SELECT COUNT(*) AS n FROM trace_events"
+                ).fetchone()["n"],
             }
+            # 048-persist-traces: DELETE trace_events first so its denormalized
+            # session_id FK doesn't trip during the cascade. Order is
+            # belt-and-braces — the CASCADE would handle it either way.
+            conn.execute("DELETE FROM trace_events")
             conn.execute("DELETE FROM documents")
             conn.execute("DELETE FROM messages")
             conn.execute("DELETE FROM sessions")
@@ -812,6 +886,83 @@ class ConversationStore:
             # has something to clone (the lifespan seed only runs on startup).
             _seed_default_agent_sync(conn)
         return {k: int(v) for k, v in counts.items()}
+
+    # --- trace events (048-persist-traces) -----------------------------------
+
+    def _write_trace_event_sync(self, event_dict: dict[str, Any]) -> None:
+        """Persist a single `TraceEvent` row.
+
+        `data`/`metrics` are JSON-encoded with `default=str` so unusual Python
+        objects in `data` (Path, datetime, bytes, …) coerce gracefully into
+        strings rather than crashing the trace pipeline.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO trace_events "
+                "(trace_id, seq, ts, session_id, stage, phase, label, data, metrics) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event_dict["trace_id"],
+                    event_dict["seq"],
+                    event_dict["ts"],
+                    event_dict.get("session_id"),
+                    event_dict["stage"],
+                    event_dict["phase"],
+                    event_dict.get("label", ""),
+                    json.dumps(event_dict.get("data") or {}, default=str),
+                    json.dumps(event_dict.get("metrics") or {}, default=str),
+                ),
+            )
+
+    def _get_trace_events_sync(self, trace_id: str) -> list[dict[str, Any]]:
+        """Return every persisted event for ``trace_id``, ordered by ``seq``.
+
+        Each row is decoded back into the same shape the in-memory
+        ``TraceEvent`` carries — ``data`` and ``metrics`` are real dicts.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT trace_id, seq, ts, stage, phase, label, data, metrics "
+                "FROM trace_events WHERE trace_id = ? ORDER BY seq ASC",
+                (trace_id,),
+            ).fetchall()
+        return [
+            {
+                "trace_id": r["trace_id"],
+                "seq": r["seq"],
+                "ts": r["ts"],
+                "stage": r["stage"],
+                "phase": r["phase"],
+                "label": r["label"],
+                "data": json.loads(r["data"] or "{}"),
+                "metrics": json.loads(r["metrics"] or "{}"),
+            }
+            for r in rows
+        ]
+
+    def _get_trace_summary_sync(self, trace_id: str) -> dict[str, Any] | None:
+        """Rebuild the ``TraceSummary`` shape (``trace_id`` + ``message`` +
+        ``answer`` + ``events``) from the DB — the read path that fires when
+        the in-memory ``TraceStore`` has evicted the trace.
+
+        Joins ``trace_events`` (event list) with ``messages`` (so the user's
+        question + the assistant's answer survive too — recall ``message_id ==
+        trace_id``). Returns ``None`` if neither side has rows so the endpoint
+        can 404 cleanly.
+        """
+        events = self._get_trace_events_sync(trace_id)
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT message, answer FROM messages WHERE id = ?", (trace_id,)
+            ).fetchone()
+        if not events and row is None:
+            return None
+        return {
+            "trace_id": trace_id,
+            "message": row["message"] if row else "",
+            "answer": row["answer"] if row else "",
+            "events": events,
+        }
 
     # --- skills (027-skills) -------------------------------------------------
 
@@ -1143,6 +1294,17 @@ class ConversationStore:
 
     async def clear_all(self) -> dict[str, Any]:
         return await asyncio.to_thread(self._clear_all_sync)
+
+    # --- trace events (048-persist-traces) -----------------------------------
+
+    async def write_trace_event(self, event_dict: dict[str, Any]) -> None:
+        return await asyncio.to_thread(self._write_trace_event_sync, event_dict)
+
+    async def get_trace_events(self, trace_id: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._get_trace_events_sync, trace_id)
+
+    async def get_trace_summary(self, trace_id: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_trace_summary_sync, trace_id)
 
     async def write_message(
         self,

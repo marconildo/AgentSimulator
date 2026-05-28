@@ -261,7 +261,11 @@ async def test_write_message_rejects_duplicate_id(tmp_path):
 
 
 def test_user_version_bumps_to_2_idempotently(tmp_path):
-    """AC7 — migration takes a v1 DB to v2; re-init is a no-op."""
+    """AC7 — migration takes a v1 DB *at least* to v2 (the 047 floor);
+    re-init is a no-op. Anchored against the live constant so later
+    migrations (048 → 3, …) just bump the assertion in lockstep with
+    the constant — no manual edit needed here."""
+    floor = ConversationStore._SCHEMA_VERSION_INTEGRITY_CONSTRAINTS
     path = tmp_path / "version.sqlite3"
     _make_pre_047_db(path)
     # Initial state: v1.
@@ -270,12 +274,14 @@ def test_user_version_bumps_to_2_idempotently(tmp_path):
 
     ConversationStore(path)
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        first = conn.execute("PRAGMA user_version").fetchone()[0]
+    assert first >= floor, f"047 migration should reach at least v{floor}, got {first}"
 
-    # Re-construct: still v2.
+    # Re-construct: still at the same version (no double-run).
     ConversationStore(path)
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        second = conn.execute("PRAGMA user_version").fetchone()[0]
+    assert second == first
 
 
 def test_migration_preserves_existing_rows(tmp_path):

@@ -63,10 +63,22 @@ erDiagram
         REAL created_at
         REAL updated_at
     }
+    trace_events {
+        TEXT trace_id PK
+        INTEGER seq PK
+        REAL ts
+        TEXT session_id FK
+        TEXT stage
+        TEXT phase
+        TEXT label
+        TEXT data "JSON"
+        TEXT metrics "JSON"
+    }
 
-    sessions          }o--|| agents   : "agent_id (no cascade today; SET NULL after 047)"
+    sessions          }o--|| agents   : "agent_id ON DELETE SET NULL"
     sessions          ||--o{ messages : "ON DELETE CASCADE"
     sessions          ||--o{ documents : "ON DELETE CASCADE"
+    sessions          ||--o{ trace_events : "ON DELETE CASCADE"
     messages          ||--o{ message_documents : "ON DELETE CASCADE"
     documents         ||--o{ message_documents : "ON DELETE CASCADE"
 ```
@@ -93,6 +105,10 @@ ASCII fallback (for viewers without Mermaid):
            ┌──────────┐
            │  skills  │   ◀── global catalog (no FKs)
            └──────────┘
+
+           ┌──────────────┐
+           │ trace_events │  ◀── per-event log (FK session_id, CASCADE)
+           └──────────────┘
 ```
 
 ## Tables
@@ -203,6 +219,34 @@ of sessions (truly global).
 | `created_at` | REAL | NO | Unix epoch seconds. |
 | `updated_at` | REAL | NO | Bumped on edit. |
 
+### `trace_events`
+
+Every `TraceEvent` emitted during a chat or upload (048-persist-traces).
+Denormalized single table — `session_id` rides on every row for cheap
+per-session reads; `message_id` is not stored because `message_id ==
+trace_id` by construction (the chat endpoint reuses `trace_id` when
+calling `write_message` at end of run). The in-memory `TraceStore`
+(`backend/app/trace.py`, LRU=50) still sits in front as a hot cache; on
+miss, `GET /api/trace/{id}` reconstructs the `TraceSummary` from here.
+
+| column | type | null | meaning |
+|---|---|---|---|
+| `trace_id` | TEXT | NO | UUID hex; part of composite PK. Equals the `messages.id` of the persisted turn (when one was written). |
+| `seq` | INTEGER | NO | Monotonic 1..N within the trace; part of composite PK. |
+| `ts` | REAL | NO | Unix epoch seconds at emit time. |
+| `session_id` | TEXT | YES | FK → `sessions.id` (CASCADE). Nullable for the brief window before the chat/upload endpoint adopts the session on the emitter. |
+| `stage` | TEXT | NO | The `Stage` enum value (e.g. `backend`, `rag.search`, `llm.generate`). |
+| `phase` | TEXT | NO | The `Phase` enum value (`start` \| `progress` \| `end`). |
+| `label` | TEXT | NO | Short human-readable description shown in the canvas. Defaults to `''`. |
+| `data` | TEXT | NO | JSON blob (`json.dumps(default=str)` — unusual objects like `Path` coerce to strings). Defaults to `'{}'`. |
+| `metrics` | TEXT | NO | JSON map of numeric metrics (`latency_ms`, `prompt_tokens`, …). Defaults to `'{}'`. |
+
+PK: `(trace_id, seq)`. Index `idx_trace_events_session` on
+`(session_id, ts)` for the per-session lookup path. Writes go through
+`TraceEmitter.emit` → `_persist` → `ConversationStore.write_trace_event`
+in real time (one INSERT per event, via `asyncio.to_thread`); persist
+failures are logged and swallowed so the SSE stream is never starved.
+
 ## Relationships + cascade rules
 
 | Parent | Child | Cascade |
@@ -212,6 +256,7 @@ of sessions (truly global).
 | `messages` | `message_documents` | **CASCADE** — deleting a turn removes its attachment links. |
 | `documents` | `message_documents` | **CASCADE** — deleting a doc removes its links. |
 | `agents` | `sessions` | **`ON DELETE SET NULL`** (047). The app's `_delete_agent_sync` still re-points sessions to the default agent explicitly (the better UX); SET NULL is the schema-level backstop for any other deletion path (raw SQL, future endpoint, fixture). |
+| `sessions` | `trace_events` | **CASCADE** (048) — deleting a session removes every persisted trace event for that conversation. |
 
 `PRAGMA foreign_keys = ON` is set per connection (off by default in
 SQLite) — see `ConversationStore._connect`.
@@ -249,16 +294,17 @@ on purpose:
   - `1` — post-044 (shared-agent-catalog one-shot done; 043 clones dropped).
   - `2` — post-047 (per-table rebuild for `ON DELETE SET NULL` + `CHECK`
     constraints done; orphan `message_documents` swept).
-  A real `schema_migrations` table is deferred to a future spec (048 if
-  wanted) — the current set fits on one hand and the version pragma is
-  cheap.
+  - `3` — post-048 (`trace_events` table added; pure additive `CREATE
+    TABLE IF NOT EXISTS`, no row rebuild).
+  A real `schema_migrations` table is deferred to a future spec — the
+  current set fits on one hand and the version pragma is cheap.
 
 ## How `clear_all` wipes everything
 
 `POST /api/data/clear` calls `ConversationStore.clear_all()` which:
 
 1. Counts every user-data table, then deletes them in this order:
-   `documents → messages → sessions → skills → agents`.
+   `trace_events → documents → messages → sessions → skills → agents`.
    The session-rooted cascades make most of this redundant, but the
    explicit deletes mean the wipe is total even if a future change
    ever disables `PRAGMA foreign_keys`.
@@ -266,7 +312,7 @@ on purpose:
    `create_session` works without a server restart.
 3. Returns a dict with one `<table>_deleted` integer per top-level user
    table:
-   `{sessions_deleted, messages_deleted, documents_deleted, skills_deleted, agents_deleted}`.
+   `{sessions_deleted, messages_deleted, documents_deleted, skills_deleted, agents_deleted, trace_events_deleted}`.
 
 `message_documents` is implicit via cascade — its emptiness is asserted
 in `test_clear_coverage.py` directly via `SELECT COUNT(*)` rather than
