@@ -11,6 +11,8 @@ export interface Strings {
     tagline: string;
     learn: string;
     simulator: string;
+    // 041-settings-page: header toggle label (mirrors `learn` / `simulator`).
+    config: string;
     liveTitle: string;
     language: string;
     cloud: string;
@@ -201,6 +203,10 @@ export interface Strings {
     open: string;
     label: string;
     title: string;
+    // 041-settings-page: chrome for the dedicated Settings page.
+    pageTitle: string;
+    pageTagline: string;
+    backToSim: string;
     delivery: string;
     deliveryHint: string;
     streaming: string;
@@ -484,6 +490,7 @@ const en: Strings = {
       "A chat message's journey through RAG, MCP tools and an LLM — visualized live.",
     learn: "Learn",
     simulator: "Simulator",
+    config: "Config",
     liveTitle: "Live OpenAI calls",
     language: "Language",
     cloud: "Cloud provider",
@@ -676,6 +683,9 @@ const en: Strings = {
     open: "Architecture options",
     label: "Config",
     title: "Architecture options",
+    pageTitle: "Settings",
+    pageTagline: "Pipeline options, experiment knobs, and data controls.",
+    backToSim: "Back to Simulator",
     delivery: "Response delivery",
     deliveryHint: "How the backend returns the result to the browser.",
     streaming: "Streaming (SSE)",
@@ -1015,6 +1025,7 @@ const pt: Strings = {
       "A jornada de uma mensagem de chat por RAG, ferramentas MCP e um LLM — visualizada ao vivo.",
     learn: "Aprender",
     simulator: "Simulador",
+    config: "Config",
     liveTitle: "Chamadas reais à OpenAI",
     language: "Idioma",
     cloud: "Provedor de nuvem",
@@ -1207,6 +1218,9 @@ const pt: Strings = {
     open: "Opções de arquitetura",
     label: "Config",
     title: "Opções de arquitetura",
+    pageTitle: "Configurações",
+    pageTagline: "Opções do pipeline, controles de experimento e dados.",
+    backToSim: "Voltar ao Simulador",
     delivery: "Entrega da resposta",
     deliveryHint: "Como o backend devolve o resultado ao navegador.",
     streaming: "Streaming (SSE)",
