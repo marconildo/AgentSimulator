@@ -121,11 +121,15 @@ de IA & Dados — que conversam pela **rede**, com cada salto rotulado pelo seu 
 de serviço de nuvem de exemplo. Você vê a infraestrutura, os saltos **e** o loop do agente indo e
 voltando.
 
+### 🔬 Traces de execução — observabilidade que vem junto com a execução
+
+Cada execução também captura uma **árvore de spans no estilo LangSmith** — duração, tokens e custo
+por nó — para você ver *para onde vai a latência*: `think` vs `retrieve` vs `generate` vs a chamada
+ao LLM em si. É o mesmo dado que uma stack de observabilidade de produção te dá, exibido inline.
+
 <p align="center">
-  <img src="docs/images/inspector-backend.png" alt="Camada Backend: protocolos, rotas e saltos de rede" width="420"/>
-  <img src="docs/images/inspector-mcp.png" alt="Inspecionando as ferramentas MCP descobertas" width="420"/>
+  <img src="docs/images/executiontrace.png" alt="Traces de execução — árvore hierárquica de spans da execução com duração, tokens e custo por nó" width="900"/>
 </p>
-<p align="center"><sub>Clique numa estação para inspecionar os dados reais — protocolos, rotas &amp; saltos de rede (esquerda) e ferramentas MCP descobertas (direita).</sub></p>
 
 ---
 
@@ -155,6 +159,20 @@ O próprio nó do Agente é **renomeado por degrau** para marcar essa direção:
 Simples vira **`DeepAgents`** no Intermediário e **`DeepAgents + Multiagentes`** no Avançado. Hoje isso
 é só um rótulo no frontend (a estação por baixo é a mesma) — um lembrete visual de para onde a escada
 aponta, ainda não um runtime diferente.
+
+---
+
+## 🧠 Anatomia do agente — abra a caixa
+
+Clique em **Abrir vista completa** na estação Agent para mergulhar na **anatomia de um round do LLM**:
+o cérebro (modelo + loop ReAct), a **memória de trabalho** (chamadas de ferramenta #1/#2 com seus
+argumentos), a **memória de longo prazo** (pares anteriores da conversa) e um **orçamento real da
+janela de contexto** dividido por categoria — system prompt, definições de ferramentas, skills,
+memória, mensagens, resposta — contado com `tiktoken` para casar com a cobrança do modelo.
+
+<p align="center">
+  <img src="docs/images/contextwindow.png" alt="Anatomia do agente — loop ReAct, memória de trabalho/longo prazo e o orçamento real da janela de contexto por categoria" width="900"/>
+</p>
 
 ---
 
@@ -242,6 +260,17 @@ conversa**, pré-preenchido a partir do backend para nada ficar fixado no códig
 
 Um painel intocado reproduz exatamente o comportamento padrão.
 
+### 🛠️ Configure o agente (diálogo Configure agent)
+
+Abra **Configurar agente** no cabeçalho do nó Agent para editar o agente como qualquer outra entidade
+no catálogo: identidade, **prompt em duas camadas** (*guardrails* da plataforma + *role* específico
+do agente), modelo, ferramentas, base de conhecimento e skills. Os agentes são um catálogo de verdade
+— **compartilhados entre conversas**, então editar um propaga para todos os lugares em que ele é usado.
+
+<p align="center">
+  <img src="docs/images/agentsetup.png" alt="Configurar agente — identidade, prompts system/agent, modelo, ferramentas, base de conhecimento e skills, com um catálogo multi-agente compartilhado à esquerda" width="900"/>
+</p>
+
 ---
 
 ## 🌍 Bilíngue + ☁️ Camada de nuvem
@@ -263,7 +292,7 @@ explica toda a stack — arquitetura & camadas, os conceitos de software e de IA
 detalhamento "o que é / por que é usado aqui / onde no projeto" para cada tópico.
 
 <p align="center">
-  <img src="docs/images/learn.png" alt="Modo Learn — mapa de conteúdo interativo de toda a stack" width="860"/>
+  <img src="docs/images/learn.png" alt="Learn the stack — mapa de conteúdo interativo cobrindo arquitetura, engenharia de software, conceitos de Gen AI, segurança, redes, dados, AI-Ops e frontend" width="900"/>
 </p>
 
 ---

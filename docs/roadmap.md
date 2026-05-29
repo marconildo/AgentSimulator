@@ -218,6 +218,125 @@ genuine TODO for production-readiness.
 - **Constitution check.** §7 currently mandates *single-instance* — same story as multi-provider:
   amend the constitution as part of the spec.
 
+### 🔧 Security & trust — the *cybersecurity* seams
+
+The five seams below are the security cluster the project owes to a production-ready posture.
+The visible tile in this area today is **Guardrails** (🟡 AIOps above), which is scoped to *content
+safety* (injection · PII · toxicity). Everything below is about **identity, secrets, the supply
+chain and runtime isolation** — none of it is wired up yet, and each is its own future spec.
+
+### 🔧 Secrets management & egress DLP
+- **Where the seam would live.** Today secrets come from `backend/.env` (`OPENAI_API_KEY` read via
+  `pydantic-settings`). There is no redaction on prompts, answers, traces or logs — `prompt_preview`
+  in `backend/app/trace.py` and the `trace_events` SQLite table (spec
+  [048-persist-traces](../specs/048-persist-traces/)) store raw text.
+- **What's missing.**
+  - A real secrets backend (cloud KMS / Vault / Key Vault / Secrets Manager / Secret Manager)
+    behind the same `Settings`, so keys are never on disk in plain text.
+  - An **egress DLP filter** on every `TraceEvent` and every assistant message: redact API keys,
+    cloud credentials, JWTs, emails, CPF/SSN-like strings before they hit the SSE stream, the
+    SQLite store *and* the future observability sink.
+  - A **prompt-side secret scanner** before the LLM call (catches `OPENAI_API_KEY=…` and friends
+    pasted by the user) — the dual to Guardrails' PII check.
+- **What a spec would add.**
+  - A pluggable `SecretRedactor` invoked from `TraceEmitter._persist` and from the SSE writer; a
+    small detection ruleset (regex + entropy) with bilingual test fixtures.
+  - A `secrets.redact` `Stage` and inspector readout that says **what** was redacted (kind +
+    count), never **the secret**.
+  - Tests proving (a) a known-good key in the prompt never reaches the model; (b) a known-good
+    key in the answer never reaches the SSE stream nor the DB.
+- **Why it's its own seam (not Guardrails).** Guardrails is *content safety*; this is *secrets
+  hygiene* — a separate detection problem whose failure mode is a leaked credential, not an
+  unsafe sentence.
+
+### 🔧 Supply chain (SBOM · dependency scan · MCP trust)
+- **Where the seam would live.** Today CI (`.github/workflows/ci.yml`) runs `ruff` + `pytest` +
+  `npm run build` + `npm test`. No SBOM, no dependency scan, no image verification, no MCP
+  provenance check.
+- **What's missing.**
+  - **SBOM generation** in CI (CycloneDX or SPDX) for the backend (`pip-audit` / `cyclonedx-py`)
+    and the frontend (`@cyclonedx/cyclonedx-npm`).
+  - **Vulnerability scanning** that fails the build on critical CVEs (Snyk / Dependabot / Trivy /
+    `pip-audit`), with a documented severity threshold.
+  - **Image verification** in the `Dockerfile`s: base image digests pinned (no `:latest`), and the
+    published image signed (e.g. cosign / Sigstore) so deploys can verify provenance.
+  - **MCP server trust.** Today `backend/app/mcp/client.py` is happy to load tools from any stdio
+    process; production needs an **allowlist of trusted MCP servers** (and one day, signed MCP
+    manifests) — an untrusted MCP server can return a tool *description* that is itself a
+    prompt-injection attack against the agent.
+- **What a spec would add.**
+  - CI jobs that produce an SBOM artifact per release and run the dep-scanner; image-signing in
+    the publish workflow.
+  - An `MCP_SERVER_ALLOWLIST` config in `backend/app/config.py` checked in `client.py` before
+    `ClientSession.initialize()`; a test that an unlisted server raises and the agent falls back
+    to `local-fallback`.
+  - Bilingual blurbs in the Tools/MCP inspector readout naming the trust posture.
+
+### 🔧 Tool runtime isolation (sandbox · egress control)
+- **Where the seam would live.** Today `backend/app/mcp/server.py` runs **in the same process** as
+  the agent in `local-fallback`, and over **stdio in the same container** in the normal path. The
+  `calculator` and `current_time` tools are pure; `kb_lookup` and `load_skill` touch the DB. None
+  are sandboxed.
+- **What's missing.**
+  - **Process/container isolation per tool** — a runner that executes each MCP tool in a sandbox
+    (gVisor / Kata / Firecracker / a separate container with a read-only FS), so a compromised
+    tool cannot read `.env` or the SQLite DB.
+  - **Egress allowlist per tool** — declarative network policy (`current_time` may not reach the
+    internet; `search_knowledge_base` may only reach the embedding endpoint and Chroma). Default
+    deny; surface the allowlist on the tool's inspector card.
+  - **Resource caps** — CPU, memory and wall-clock budget per tool call, enforced at the runner
+    (today only the agent's `MAX_ITERATIONS=3` bound exists).
+- **What a spec would add.**
+  - A `ToolRunner` abstraction in `mcp/client.py` with a `LocalRunner` (today) and a
+    `SandboxedRunner` (e.g. subprocess + seccomp on Linux, container in production).
+  - New `Stage`s `tool.sandbox.start` / `tool.sandbox.deny` carrying the profile + egress
+    decision; readouts on the Tools station.
+  - Tests proving an offending tool (e.g. one that tries to open `/etc/passwd`) is blocked and
+    the agent surfaces a typed error.
+
+### 🔧 Identity (OIDC · workload identity · KMS)
+- **Where the seam would live.** The existing *Authentication, sessions & rate limiting* seam
+  above covers **user identity** at the FastAPI ingress. This seam is the missing **workload +
+  key identity** layer: how the *backend itself* proves who it is to OpenAI, to the DB, to the
+  secrets backend.
+- **What's missing.**
+  - **Workload identity** for the backend container (Azure Workload Identity / AWS IRSA / GKE
+    Workload Identity) so the runtime has no static cloud credentials — it federates with the
+    cloud IdP via OIDC.
+  - **Service-to-service OIDC** between any future tier (gateway → backend, eval-runner → backend)
+    instead of shared API keys.
+  - **KMS-backed keys** for the SQLite DB and any future managed SQL — encryption at rest with a
+    customer-managed key, rotation on schedule.
+- **What a spec would add.**
+  - A config selector for credential acquisition (`CREDENTIAL_MODE=env|workload-identity`) wired
+    through `Settings`; a small integration test using a fake OIDC issuer.
+  - A `secrets.acquire` `Stage` emitted once per cold start that records the source (env vs. IdP),
+    surfaced on the backend station's tech list.
+  - Cloud examples filled for all three (`clouds: { azure, aws, gcp }`) per constitution §5.
+- **Why it's separate from the user-auth seam.** User auth answers *"who is talking to the
+  agent?"*; this seam answers *"as whom is the agent talking to OpenAI, the DB and the vault?"* —
+  different threat model.
+
+### 🔧 Model abuse / jailbreak detection
+- **Where the seam would live.** Adjacent to the **Guardrails** tile (🟡 AIOps above), but worth
+  naming separately so it isn't confused with content safety. Guardrails today is scoped to
+  *injection · PII · toxicity*; abuse detection is the **identity-aware behavioural** layer.
+- **What's missing.**
+  - **Per-identity budgets** beyond a plain ingress rate-limit — *N tokens/minute per user*,
+    *M tool calls/minute*, *cost cap per session* — driven by the future user-auth seam.
+  - **Jailbreak classifier** on the prompt (a small classifier or an LLM-judge) flagging known
+    patterns; the result feeds the guardrails decision but is reported separately so we can tell
+    *content unsafe* from *user trying to jailbreak*.
+  - **Abuse-score telemetry** exported to the observability sink for trend analysis
+    (Lakera / Adversa / public jailbreak datasets are the obvious comparables).
+- **What a spec would add.**
+  - A `jailbreak.score` `Stage` between `route` and `think`, emitting a score + label; soft-fail
+    (warn + downgrade) below a threshold, hard-fail (refuse) above it.
+  - HUD chip showing the score on the current turn; an opt-out for the educational mode so the
+    canvas can demonstrate a flagged but allowed run.
+  - Tests using public jailbreak fixtures (e.g. a subset of DAN-style prompts) — structural
+    assertions, not exact-string.
+
 ---
 
 ## How to claim an item
@@ -470,6 +589,127 @@ genuíno para prontidão de produção.
   conversa.
 - **Checagem da constituição.** §7 atualmente exige *instância única* — mesma história que
   multi-provider: emendar a constituição como parte da spec.
+
+### 🔧 Segurança & confiança — as costuras de *cibersegurança*
+
+As cinco costuras abaixo são o cluster de segurança que o projeto deve a uma postura pronta para
+produção. O único bloco visível nessa área hoje é o **Guardrails** (🟡 AIOps acima), cujo escopo é
+*segurança de conteúdo* (injection · PII · toxicidade). Tudo abaixo é sobre **identidade,
+segredos, cadeia de suprimentos e isolamento de runtime** — nada disso está ligado ainda, e cada
+um é uma spec futura própria.
+
+### 🔧 Gestão de segredos & DLP de egress
+- **Onde a costura ficaria.** Hoje os segredos vêm do `backend/.env` (`OPENAI_API_KEY` lido via
+  `pydantic-settings`). Não há redação em prompts, respostas, traces ou logs — `prompt_preview` em
+  `backend/app/trace.py` e a tabela SQLite `trace_events` (spec
+  [048-persist-traces](../specs/048-persist-traces/)) guardam texto cru.
+- **O que falta.**
+  - Um backend real de segredos (KMS na nuvem / Vault / Key Vault / Secrets Manager / Secret
+    Manager) por trás do mesmo `Settings`, para que as chaves nunca fiquem em disco em texto puro.
+  - Um **filtro DLP de egress** em todo `TraceEvent` e em toda mensagem do assistente: redigir
+    chaves de API, credenciais de nuvem, JWTs, e-mails e strings tipo CPF/SSN antes de chegarem ao
+    stream SSE, ao SQLite *e* ao futuro sink de observabilidade.
+  - Um **scanner de segredos no lado do prompt** antes da chamada ao LLM (pega `OPENAI_API_KEY=…`
+    e parecidos colados pelo usuário) — o dual da checagem de PII do Guardrails.
+- **O que uma spec adicionaria.**
+  - Um `SecretRedactor` plugável invocado a partir de `TraceEmitter._persist` e do writer SSE; um
+    conjunto pequeno de regras de detecção (regex + entropia) com fixtures de teste bilíngues.
+  - Um `Stage` `secrets.redact` e um readout no inspetor que diz **o que** foi redigido (tipo +
+    contagem), nunca **o segredo**.
+  - Testes provando (a) uma chave conhecida no prompt nunca chega ao modelo; (b) uma chave
+    conhecida na resposta nunca chega ao stream SSE nem ao DB.
+- **Por que é uma costura própria (e não Guardrails).** Guardrails é *segurança de conteúdo*; isto
+  é *higiene de segredos* — um problema de detecção distinto cujo modo de falha é uma credencial
+  vazada, não uma frase insegura.
+
+### 🔧 Cadeia de suprimentos (SBOM · scan de dependências · confiança em MCP)
+- **Onde a costura ficaria.** Hoje o CI (`.github/workflows/ci.yml`) roda `ruff` + `pytest` +
+  `npm run build` + `npm test`. Sem SBOM, sem scan de dependências, sem verificação de imagem, sem
+  checagem de proveniência de MCP.
+- **O que falta.**
+  - **Geração de SBOM** no CI (CycloneDX ou SPDX) para o backend (`pip-audit` / `cyclonedx-py`) e
+    o frontend (`@cyclonedx/cyclonedx-npm`).
+  - **Scan de vulnerabilidades** que faz o build falhar em CVEs críticos (Snyk / Dependabot /
+    Trivy / `pip-audit`), com limiar de severidade documentado.
+  - **Verificação de imagem** nos `Dockerfile`s: digests da imagem base pinados (sem `:latest`) e a
+    imagem publicada assinada (ex.: cosign / Sigstore) para que os deploys verifiquem proveniência.
+  - **Confiança em servidor MCP.** Hoje `backend/app/mcp/client.py` aceita carregar tools de
+    qualquer processo stdio; produção precisa de uma **allowlist de servidores MCP confiáveis** (e
+    um dia, manifestos MCP assinados) — um servidor MCP não confiável pode devolver uma
+    *descrição* de tool que é em si um ataque de prompt-injection contra o agente.
+- **O que uma spec adicionaria.**
+  - Jobs de CI que produzem um artefato SBOM por release e rodam o dep-scanner; assinatura de
+    imagem no workflow de publicação.
+  - Uma config `MCP_SERVER_ALLOWLIST` em `backend/app/config.py` checada em `client.py` antes de
+    `ClientSession.initialize()`; um teste de que um servidor fora da lista levanta e o agente cai
+    para `local-fallback`.
+  - Blurbs bilíngues no readout do inspetor de Tools/MCP nomeando a postura de confiança.
+
+### 🔧 Isolamento de runtime de tools (sandbox · controle de egress)
+- **Onde a costura ficaria.** Hoje `backend/app/mcp/server.py` roda **no mesmo processo** do agente
+  no `local-fallback`, e por **stdio no mesmo container** no caminho normal. As tools `calculator`
+  e `current_time` são puras; `kb_lookup` e `load_skill` tocam o DB. Nenhuma está em sandbox.
+- **O que falta.**
+  - **Isolamento por tool (processo/container)** — um runner que execute cada tool MCP em sandbox
+    (gVisor / Kata / Firecracker / um container separado com FS read-only), para que uma tool
+    comprometida não consiga ler `.env` ou o SQLite.
+  - **Allowlist de egress por tool** — política de rede declarativa (`current_time` não pode
+    alcançar a internet; `search_knowledge_base` só pode alcançar o endpoint de embeddings e o
+    Chroma). Default deny; surfacear a allowlist no card de inspetor da tool.
+  - **Limites de recursos** — orçamento de CPU, memória e tempo por chamada de tool, aplicado no
+    runner (hoje só existe o limite `MAX_ITERATIONS=3` do agente).
+- **O que uma spec adicionaria.**
+  - Uma abstração `ToolRunner` em `mcp/client.py` com `LocalRunner` (hoje) e `SandboxedRunner`
+    (ex.: subprocess + seccomp no Linux, container em produção).
+  - Novos `Stage`s `tool.sandbox.start` / `tool.sandbox.deny` carregando o perfil + decisão de
+    egress; readouts na estação Tools.
+  - Testes provando que uma tool ofensiva (ex.: uma que tenta abrir `/etc/passwd`) é bloqueada e
+    o agente surfacia um erro tipado.
+
+### 🔧 Identidade (OIDC · workload identity · KMS)
+- **Onde a costura ficaria.** A costura *Autenticação, sessões & rate limiting* acima cobre a
+  **identidade do usuário** no ingress do FastAPI. Esta costura é a camada faltante de
+  **identidade de workload + de chaves**: como o *próprio backend* prova quem é para a OpenAI,
+  para o DB e para o backend de segredos.
+- **O que falta.**
+  - **Workload identity** para o container do backend (Azure Workload Identity / AWS IRSA / GKE
+    Workload Identity) para que o runtime não tenha credenciais estáticas de nuvem — ele federa
+    com o IdP da nuvem via OIDC.
+  - **OIDC serviço-a-serviço** entre qualquer tier futura (gateway → backend, eval-runner →
+    backend) em vez de chaves de API compartilhadas.
+  - **Chaves apoiadas em KMS** para o SQLite e qualquer SQL gerenciado futuro — criptografia em
+    repouso com chave gerenciada pelo cliente, rotação em cronograma.
+- **O que uma spec adicionaria.**
+  - Um seletor de config para aquisição de credencial (`CREDENTIAL_MODE=env|workload-identity`)
+    cabeado pelo `Settings`; um teste de integração pequeno usando um issuer OIDC fake.
+  - Um `Stage` `secrets.acquire` emitido uma vez por cold start registrando a fonte (env vs. IdP),
+    surfaceado na lista `tech` da estação backend.
+  - Exemplos de nuvem preenchidos para os três (`clouds: { azure, aws, gcp }`) pela constituição §5.
+- **Por que é separada da costura de user-auth.** User-auth responde *"quem está falando com o
+  agente?"*; esta responde *"como quem o agente fala com a OpenAI, o DB e o cofre?"* — modelo de
+  ameaça diferente.
+
+### 🔧 Abuso de modelo / detecção de jailbreak
+- **Onde a costura ficaria.** Adjacente ao bloco **Guardrails** (🟡 AIOps acima), mas vale nomear
+  separadamente para não confundir com segurança de conteúdo. Guardrails hoje tem escopo de
+  *injection · PII · toxicidade*; detecção de abuso é a camada **comportamental ciente de
+  identidade**.
+- **O que falta.**
+  - **Orçamentos por identidade** além de um rate-limit de ingress simples — *N tokens/minuto por
+    usuário*, *M chamadas de tool/minuto*, *teto de custo por sessão* — apoiados pela costura
+    futura de user-auth.
+  - **Classificador de jailbreak** no prompt (um classificador pequeno ou LLM-juiz) sinalizando
+    padrões conhecidos; o resultado alimenta a decisão do guardrails mas é reportado em separado
+    para distinguir *conteúdo inseguro* de *usuário tentando jailbreak*.
+  - **Telemetria de abuse-score** exportada para o sink de observabilidade para análise de
+    tendência (Lakera / Adversa / datasets públicos de jailbreak são os comparáveis óbvios).
+- **O que uma spec adicionaria.**
+  - Um `Stage` `jailbreak.score` entre `route` e `think`, emitindo score + label; soft-fail (warn +
+    downgrade) abaixo de um threshold, hard-fail (recusa) acima dele.
+  - Chip no HUD mostrando o score no turno atual; um opt-out para o modo educacional para que o
+    canvas possa demonstrar um run sinalizado mas permitido.
+  - Testes usando fixtures públicas de jailbreak (ex.: um subset de prompts tipo DAN) — asserções
+    estruturais, não string exata.
 
 ---
 

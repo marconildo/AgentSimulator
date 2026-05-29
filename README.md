@@ -118,11 +118,15 @@ Services — that talk over the **network**, with each hop labeled by its protoc
 in-cluster mTLS, MCP/stdio, …), a public/private **zone**, and an example cloud service mapping.
 You see the infrastructure, the hops, **and** the agent loop going back and forth.
 
+### 🔬 Execution traces — observability that comes with the run
+
+Every run also captures a **LangSmith-style span tree** — duration, tokens and cost per node —
+so you can see *where the latency goes*: `think` vs `retrieve` vs `generate` vs the LLM call itself.
+It's the same data a production observability stack gives you, surfaced inline.
+
 <p align="center">
-  <img src="docs/images/inspector-backend.png" alt="Backend tier: protocols, routes and network hops" width="420"/>
-  <img src="docs/images/inspector-mcp.png" alt="Inspecting discovered MCP tools" width="420"/>
+  <img src="docs/images/executiontrace.png" alt="Execution traces — hierarchical span tree of the run with duration, tokens and cost per node" width="900"/>
 </p>
-<p align="center"><sub>Click a station to inspect the real data — protocols, routes &amp; network hops (left) and discovered MCP tools (right).</sub></p>
 
 ---
 
@@ -150,6 +154,20 @@ The Agent node itself is **relabelled per rung** to mark this direction: `Agent`
 becomes **`DeepAgents`** on Intermediate and **`DeepAgents + Multi-agents`** on Advanced. Today this is
 a frontend label only (same underlying station) — a visual reminder of where the ladder heads, not yet
 a different runtime.
+
+---
+
+## 🧠 Agent anatomy — open the box
+
+Click **Open full view** on the Agent station to drill into the **anatomy of one LLM round**: the
+brain (model + ReAct loop), the **working memory** (tool calls #1/#2 with their args), the
+**long-term memory** (prior conversation pairs) and a real **context-window budget** broken down
+by category — system prompt, tool definitions, skills, memory, messages, completion — counted with
+`tiktoken` to match the model's billing.
+
+<p align="center">
+  <img src="docs/images/contextwindow.png" alt="Agent anatomy — ReAct loop, working/long-term memory and the real context-window budget by category" width="900"/>
+</p>
 
 ---
 
@@ -235,6 +253,17 @@ prefilled from the backend so nothing is hardcoded:
 
 An untouched panel reproduces the default behavior exactly.
 
+### 🛠️ Configure the agent (Configure agent dialog)
+
+Open **Configure agent** from the Agent node header to edit the agent like any other entity in the
+catalog: identity, **two-layer prompt** (platform-wide *guardrails* + agent-specific *role*), model,
+tools, knowledge base and skills. Agents are a real catalog — **shared across conversations**, so
+editing one propagates everywhere it's used.
+
+<p align="center">
+  <img src="docs/images/agentsetup.png" alt="Configure agent — identity, system/agent prompts, model, tools, knowledge base and skills, with a shared multi-agent catalog on the left" width="900"/>
+</p>
+
 ---
 
 ## 🌍 Bilingual + ☁️ Cloud overlay
@@ -256,7 +285,7 @@ at each layer, networking/infrastructure/containers, and where data lives — wi
 it's used here / where in the project" breakdown for every topic.
 
 <p align="center">
-  <img src="docs/images/learn.png" alt="Learn mode — interactive content map of the whole stack" width="860"/>
+  <img src="docs/images/learn.png" alt="Learn the stack — an interactive content map covering architecture, software engineering, Gen AI concepts, security, networking, data, AI-Ops and frontend" width="900"/>
 </p>
 
 ---
