@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
@@ -15,15 +15,17 @@ import {
   type DocumentMeta,
   type SessionMeta,
 } from "../lib/chatApi";
-import type { PendingBubble } from "../lib/chatStatus";
+import { isFlowSettled, type PendingBubble, replayBubble } from "../lib/chatStatus";
 import { formatTokens, formatUsd } from "../lib/cost";
+import { deriveView } from "../lib/derive";
 import { useHealth } from "../lib/health";
-import type { TimelinePhase } from "../lib/phases";
+import { activePhase, type TimelinePhase } from "../lib/phases";
 import { canSend as scenarioCanSend, useScenario } from "../lib/scenario";
 import { formatClock, formatRelative } from "../lib/time";
 import { estimateInputCostUsd, estimateTokens } from "../lib/tokenize";
 import { useChat } from "../store/useChat";
 import { useHud } from "../store/useHud";
+import { useSimulator } from "../store/useSimulator";
 
 interface ChatPanelProps {
   // What the in-flight agent bubble shows, projected from the paced playhead (012):
@@ -304,6 +306,23 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
   const activeId = useChat((s) => s.activeSessionId);
   const sessions = useChat((s) => s.sessions);
 
+  // 050-replay-bubble-streaming: the loaded turn's bubble follows the paced
+  // playhead (status → streaming answer → settled persisted text). Reads the
+  // same simulator state the canvas does so the chat + canvas walk in lockstep
+  // under step/replay. Re-derives `view` and `phase` here (cheap, pure) rather
+  // than threading them down from App — App already passes `bubble`; this is
+  // the parallel projection scoped to the loaded message.
+  const events = useSimulator((s) => s.events);
+  const cursor = useSimulator((s) => s.cursor);
+  const simStatus = useSimulator((s) => s.status);
+  const playing = useSimulator((s) => s.playing);
+  const replayView = useMemo(() => deriveView(events, cursor), [events, cursor]);
+  const replayPhase = useMemo(() => activePhase(events, cursor), [events, cursor]);
+  const replayIsSettled = isFlowSettled({ events, cursor, status: simStatus, playing });
+  // `traceExpired` short-circuits to the persisted answer (no events to project
+  // from); same fall-through `replayBubble` does when `hasEvents=false`.
+  const replayHasEvents = !traceExpired && events.length > 0;
+
   const activeSession = sessions.find((s) => s.id === activeId);
   const activeTitle = activeSession?.title;
   // 043-persisted-agent: the conversation's agent name labels every assistant
@@ -371,6 +390,13 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
                 onSelect={() => void selectMessage(m.id)}
                 active={m.id === loadedTraceId}
                 agentName={agentName}
+                // 050-replay-bubble-streaming: the canvas projection scoped to
+                // this turn. Only the active (loaded) bubble consumes it —
+                // others render `message.answer` verbatim regardless.
+                replayView={replayView}
+                replayPhase={replayPhase}
+                replayHasEvents={replayHasEvents}
+                replayIsSettled={replayIsSettled}
               />
             ))}
             {pending && (
@@ -383,14 +409,7 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
                   ts={null}
                 />
                 <AgentMessage t={t} lang={lang} ts={null} agentName={agentName}>
-                  {bubble.kind === "answer" ? (
-                    <>
-                      {bubble.text}
-                      {bubble.streaming && <span className="caret">▍</span>}
-                    </>
-                  ) : (
-                    <StageStatus phase={bubble.phase} t={t} />
-                  )}
+                  <BubbleBody bubble={bubble} t={t} />
                 </AgentMessage>
               </div>
             )}
@@ -473,6 +492,10 @@ function Exchange({
   onSelect,
   active,
   agentName,
+  replayView,
+  replayPhase,
+  replayHasEvents,
+  replayIsSettled,
 }: {
   message: ChatMessage;
   t: Strings;
@@ -484,7 +507,20 @@ function Exchange({
   // 043-persisted-agent: label every assistant bubble with the conversation's
   // agent name (falls back to the localized "Agent" / "Agente" inside).
   agentName?: string | null;
+  // 050-replay-bubble-streaming: the canvas projection inputs, scoped to this
+  // turn. Consumed only when this turn is the active (loaded) one and the
+  // simulator hasn't settled at the tail; otherwise we render `message.answer`
+  // verbatim, byte-for-byte identical to today's frame.
+  replayView: ReturnType<typeof deriveView>;
+  replayPhase: TimelinePhase | null;
+  replayHasEvents: boolean;
+  replayIsSettled: boolean;
 }) {
+  // The replay branch fires only when (a) this is the loaded turn AND (b) the
+  // simulator is mid-trace (events to project from + not settled at the tail).
+  // `replayBubble` itself handles the no-events / settled fall-through, but we
+  // gate the call site so non-loaded turns never re-derive on every cursor tick.
+  const replayActive = active && replayHasEvents && !replayIsSettled;
   return (
     <div className="space-y-3">
       <UserMessage
@@ -512,10 +548,37 @@ function Exchange({
         title={active ? t.trace.loaded : t.trace.clickToLoad}
         active={active}
       >
-        {message.answer}
+        {replayActive ? (
+          <BubbleBody
+            bubble={replayBubble(replayView, replayPhase, {
+              hasEvents: replayHasEvents,
+              isSettled: replayIsSettled,
+              persistedAnswer: message.answer,
+            })}
+            t={t}
+          />
+        ) : (
+          message.answer
+        )}
       </AgentMessage>
     </div>
   );
+}
+
+// 050-replay-bubble-streaming — shared renderer for a `PendingBubble`. Used by
+// (a) the live optimistic in-flight bubble (012, while `useChat.pending` is
+// set) and (b) the loaded turn's bubble during replay. Same DOM either way —
+// the projection helper picks which state to show.
+function BubbleBody({ bubble, t }: { bubble: PendingBubble; t: Strings }) {
+  if (bubble.kind === "answer") {
+    return (
+      <>
+        {bubble.text}
+        {bubble.streaming && <span className="caret">▍</span>}
+      </>
+    );
+  }
+  return <StageStatus phase={bubble.phase} t={t} />;
 }
 
 // `ts === null` means the exchange is still in flight → render "now".

@@ -204,6 +204,10 @@ vez, abre o inspetor certo para cada uma e legenda o que está acontecendo:
 Pause, retome ou pare a qualquer momento para assumir o controle. (Bilíngue — cada legenda vem em
 EN + PT.)
 
+<p align="center">
+  <img src="docs/tourdemo.gif" alt="Tour guiado — passeio narrado que percorre cada fase do pipeline e abre o inspetor correspondente" width="900"/>
+</p>
+
 ---
 
 ## ⚡ Stream vs Batch

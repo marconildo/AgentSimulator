@@ -8,6 +8,14 @@
 //
 // `isFlowSettled` is the gate `useChat` uses to hold the persisted message until
 // the playhead has drained to the end of a finished run.
+//
+// 050-replay-bubble-streaming — `replayBubble` extends the same projection to a
+// PERSISTED message whose trace is currently loaded on the canvas: when the
+// simulator is mid-replay (cursor not at the tail), the loaded turn's bubble
+// runs through the same status → streaming-answer states the live bubble shows;
+// when the cursor settles at the tail (or there are no events to project from),
+// the bubble returns to the persisted answer, byte-for-byte. Same engine, two
+// cursors.
 
 import type { DerivedView } from "./derive";
 import type { TimelinePhase } from "./phases";
@@ -24,6 +32,32 @@ export type PendingBubble =
 export function pendingBubble(view: DerivedView, phase: TimelinePhase | null): PendingBubble {
   if (view.answer) return { kind: "answer", text: view.answer, streaming: view.streaming };
   return { kind: "status", phase };
+}
+
+/**
+ * 050-replay-bubble-streaming — what the bubble of a PERSISTED, loaded turn
+ * should render at a given cursor. Two states:
+ *
+ * - **Settled / no events.** Either the simulator has drained to the tail of a
+ *   finished run (`isSettled`) or there is nothing to project from
+ *   (`!hasEvents` — empty trace, expired trace). Returns the persisted answer
+ *   VERBATIM (`streaming: false`) so the on-screen text is byte-for-byte
+ *   identical to today's "after the run" frame. Avoids any drift between the
+ *   reassembled-token text and what was persisted to the DB.
+ * - **Mid-replay.** Delegates to `pendingBubble(view, phase)` — the same
+ *   projection the live bubble uses, so step/replay teaches the exact "status
+ *   → streamed answer + caret" experience a live send does (`agent.think`
+ *   shows "Reasoning…", `llm.generate` progress streams tokens with a caret).
+ */
+export function replayBubble(
+  view: DerivedView,
+  phase: TimelinePhase | null,
+  opts: { hasEvents: boolean; isSettled: boolean; persistedAnswer: string },
+): PendingBubble {
+  if (opts.isSettled || !opts.hasEvents) {
+    return { kind: "answer", text: opts.persistedAnswer, streaming: false };
+  }
+  return pendingBubble(view, phase);
 }
 
 /**

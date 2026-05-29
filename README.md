@@ -197,6 +197,10 @@ opens the right inspector for each, and captions what's happening:
 
 Pause, resume or stop at any point to take the wheel. (Bilingual — every caption ships in EN + PT.)
 
+<p align="center">
+  <img src="docs/tourdemo.gif" alt="Guided tour — narrated walkthrough stepping through each phase of the pipeline and opening the matching inspector" width="900"/>
+</p>
+
 ---
 
 ## ⚡ Stream vs Batch
