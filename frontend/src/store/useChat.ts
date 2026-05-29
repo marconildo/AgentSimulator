@@ -362,6 +362,12 @@ export const useChat = create<ChatState>((set, get) => ({
       input: "",
       error: null,
       cancelled: false,
+      // 050-replay-bubble-streaming regression: the previously-loaded turn must
+      // stop being "the loaded trace" the moment a new run begins — otherwise
+      // its bubble flips into the replay branch and re-projects the *new* run's
+      // streaming events onto the old message ("duplicating the thinking"). The
+      // tail of send() resets it to the just-persisted turn's id.
+      loadedTraceId: null,
     });
 
     try {

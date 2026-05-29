@@ -20,17 +20,27 @@ const ev = (
 ): TraceEvent => ({ trace_id: "t", seq: seq++, ts: 0, stage, phase: "end", label: "", data, metrics });
 
 // One turn: a single LLM round (100 tokens, $0.001), one tool call, two RAG hits.
+// Post-026 the source of truth for "tool calls" is `agent.think.tool_calls` (the
+// elected list), not `mcp.call` ENDs alone — so the think round carries the
+// matching elected call, and the mcp.call END pairs as the observation.
 const turnEvents = (): TraceEvent[] => {
   seq = 0;
   return [
     ev("rag.retrieve", { chunks: [{ text: "a" }, { text: "b" }] }),
-    ev("agent.think", { decision: "answer" }, {
-      prompt_tokens: 80,
-      completion_tokens: 20,
-      total_tokens: 100,
-      cost_usd: 0.001,
-    }),
-    ev("mcp.call", { tool: "calculator" }),
+    ev(
+      "agent.think",
+      {
+        decision: "call_tools",
+        tool_calls: [{ name: "calculator", args: { expression: "2+2" } }],
+      },
+      {
+        prompt_tokens: 80,
+        completion_tokens: 20,
+        total_tokens: 100,
+        cost_usd: 0.001,
+      },
+    ),
+    ev("mcp.call", { tool: "calculator", args: { expression: "2+2" }, result: "4" }),
   ];
 };
 

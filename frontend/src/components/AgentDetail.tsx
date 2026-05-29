@@ -19,9 +19,10 @@ import {
   SECTIONS,
   type Section,
 } from "../lib/turnDiff";
+import { electedToolCalls } from "../lib/usage";
 import { useChat } from "../store/useChat";
 import { useSimulator } from "../store/useSimulator";
-import type { ToolResultData, TraceEvent } from "../types/events";
+import type { TraceEvent } from "../types/events";
 
 // Focused drill-in for the Agent: the **anatomy** of an AI agent — its brain (the
 // LLM, called on every reasoning round), its senses (the message), its memory
@@ -104,7 +105,6 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
 
   const agentEv = view.stations.agent.events;
   const llmEv = view.stations.llm.events;
-  const mcpEv = view.stations.mcp.events;
   const dbEv = view.stations.database.events;
   const ragEv = view.stations.rag.events;
   const usage = view.usage;
@@ -119,16 +119,15 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
     (thinks.length ? (thinks[thinks.length - 1].data.model as string | undefined) : undefined) ??
     "";
 
-  // 021-abstain-badge: each tool call carries the structured `found` signal so a
-  // call that returned empty/not-found can be badged (the agent abstained).
-  const toolCalls = mcpEv
-    .filter((e) => e.stage === "mcp.call" && e.phase === "end")
-    .map((e) => ({
-      tool: String(e.data.tool),
-      args: e.data.args,
-      result: String(e.data.result),
-      found: (e.data as ToolResultData).found,
-    }));
+  // 026-agent-tool-autonomy follow-up: tool calls live on `agent.think.tool_calls`
+  // (the canonical, station-agnostic source). The shared `electedToolCalls` helper
+  // pairs each elected call with its observation — `mcp.call` END for native MCP
+  // tools, `rag.retrieve` END (summarized) for `search_knowledge_base`. Before
+  // this fix the card only filtered `mcp.call` ENDs, so retrieval was invisible
+  // and "no tools called this run" lied any time the agent used the KB.
+  // 021-abstain-badge: each call carries the structured `found` signal so an
+  // empty/not-found result (zero MCP rows, zero retrieved chunks) is badged.
+  const toolCalls = useMemo(() => electedToolCalls(visible), [visible]);
 
   const read = lastEnd(dbEv, "db.read");
   const historyPairs = (read?.data.recent as { message: string; answer: string }[] | undefined) ?? [];
@@ -246,12 +245,21 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                 <div className="space-y-1">
                   {toolCalls.map((c, idx) => {
                     const isAbstain = abstained({ found: c.found });
+                    // search_knowledge_base has no `result` string — its observation
+                    // is the retrieved chunks. Render the compact summary instead.
+                    const display = c.retrievalSummary
+                      ? a.retrievalResult(
+                          c.retrievalSummary.count,
+                          c.retrievalSummary.topSource,
+                          c.retrievalSummary.topScore,
+                        )
+                      : (c.result ?? "");
                     return (
                       <div key={idx} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
                         <div className="font-mono text-[11px] text-[var(--color-ink)]">
                           {c.tool}({JSON.stringify(c.args)})
                         </div>
-                        <div className="font-mono text-[11px] text-[var(--color-ok-soft)]">→ {c.result}</div>
+                        <div className="font-mono text-[11px] text-[var(--color-ok-soft)]">→ {display}</div>
                         {isAbstain && (
                           <div
                             title={t.abstain.hint}

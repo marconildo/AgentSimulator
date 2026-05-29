@@ -390,6 +390,63 @@ describe("useChat — chat stays in lockstep with the paced flow", () => {
   });
 });
 
+// 050-replay-bubble-streaming regression: when a NEW send begins, the previously
+// loaded turn must stop being "the loaded trace" — otherwise its persisted
+// bubble flips into the replay branch and re-projects the *new* turn's streaming
+// events (so the old bubble visibly mirrors the live one, "duplicando o
+// thinking"). `send()` clears `loadedTraceId` at run start, then re-sets it to
+// the just-persisted turn's id once the flow settles.
+describe("useChat — sending a new message clears the loaded-trace marker", () => {
+  const trace = (stage: TraceEvent["stage"], phase: TraceEvent["phase"]): TraceEvent => ({
+    trace_id: "t",
+    seq: 0,
+    ts: 0,
+    stage,
+    phase,
+    label: "",
+    data: {},
+    metrics: {},
+  });
+
+  it("clears loadedTraceId as soon as the new run starts streaming", async () => {
+    vi.mocked(chatApi.listMessages).mockResolvedValue([]);
+    vi.mocked(chatApi.listSessions).mockResolvedValue([session("s")]);
+    // Stream is in flight; onDone is NOT called so the run stays "streaming".
+    let releaseStream: () => void = () => {};
+    const streamGate = new Promise<void>((resolve) => {
+      releaseStream = resolve;
+    });
+    vi.mocked(sse.streamChat).mockImplementation(async (_m, handlers) => {
+      handlers.onTrace(trace("frontend", "end"));
+      await streamGate;
+    });
+    useChat.setState({
+      input: "second turn",
+      activeSessionId: "s",
+      // A previous turn was loaded onto the canvas before this new send.
+      loadedTraceId: "m-prev",
+    });
+
+    const p = useChat.getState().send();
+
+    // The instant streamChat is called, the previous turn must no longer be
+    // flagged as the loaded trace — the canvas is now showing the new run.
+    await vi.waitFor(() => expect(sse.streamChat).toHaveBeenCalled());
+    expect(useChat.getState().loadedTraceId).toBeNull();
+
+    // Drain so send() can settle (no persisted message → loadedTraceId stays null).
+    releaseStream();
+    const evs = useSimulator.getState().events;
+    useSimulator.setState({
+      status: "done",
+      playing: false,
+      following: true,
+      cursor: evs.length - 1,
+    });
+    await p;
+  });
+});
+
 // 040-message-attachments: pending chips are a transient draft list. Send must
 // snapshot them atomically, ship the snapshot in the request, and reset the
 // composer's pending list — so a chip uploaded mid-send queues for the *next*

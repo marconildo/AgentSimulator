@@ -393,6 +393,11 @@ export interface Strings {
     userMessage: string;
     scratchpad: string;
     noToolCalls: string;
+    // 026-agent-tool-autonomy follow-up — compact summary the Tools card shows
+    // as the "result" for a `search_knowledge_base` call (its observation is N
+    // retrieved chunks, not a single string). Falls back to "no chunks" on an
+    // empty retrieval (the same row also flips the abstain badge via `found`).
+    retrievalResult: (count: number, topSource?: string, topScore?: number) => string;
     longTermMemory: string;
     longTermMemoryHint: string;
     conversationHistory: string;
@@ -1027,6 +1032,13 @@ const en: Strings = {
     userMessage: "user message",
     scratchpad: "tool scratchpad (act → observe)",
     noToolCalls: "no tools called this run",
+    retrievalResult: (count, topSource, topScore) => {
+      if (count === 0) return "no chunks retrieved";
+      const unit = count === 1 ? "chunk" : "chunks";
+      if (!topSource) return `${count} ${unit}`;
+      const score = typeof topScore === "number" ? ` · ${topScore.toFixed(2)}` : "";
+      return `${count} ${unit} (top: ${topSource}${score})`;
+    },
     longTermMemory: "Long-term memory",
     longTermMemoryHint: "survives across requests",
     conversationHistory: "conversation history · app DB",
@@ -1647,6 +1659,13 @@ const pt: Strings = {
     userMessage: "mensagem do usuário",
     scratchpad: "rascunho de ferramentas (agir → observar)",
     noToolCalls: "nenhuma ferramenta chamada nesta execução",
+    retrievalResult: (count, topSource, topScore) => {
+      if (count === 0) return "nenhum trecho recuperado";
+      const unit = count === 1 ? "trecho" : "trechos";
+      if (!topSource) return `${count} ${unit}`;
+      const score = typeof topScore === "number" ? ` · ${topScore.toFixed(2)}` : "";
+      return `${count} ${unit} (topo: ${topSource}${score})`;
+    },
     longTermMemory: "Memória de longo prazo",
     longTermMemoryHint: "sobrevive entre requisições",
     conversationHistory: "histórico de conversas · banco da app",
