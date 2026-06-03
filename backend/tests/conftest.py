@@ -25,9 +25,18 @@ def _has_openai_key() -> bool:
     return get_settings().has_openai_key
 
 
+def _has_tavily_key() -> bool:
+    from app.config import get_settings
+
+    return get_settings().has_tavily_key
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "openai: test needs a real OPENAI_API_KEY (skipped without one)"
+    )
+    config.addinivalue_line(
+        "markers", "tavily: test needs a real TAVILY_API_KEY (skipped without one)"
     )
 
     from app.config import get_settings
@@ -58,9 +67,12 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    if _has_openai_key():
-        return
-    skip = pytest.mark.skip(reason="needs OPENAI_API_KEY (OpenAI-only app)")
+    has_openai = _has_openai_key()
+    has_tavily = _has_tavily_key()
+    skip_openai = pytest.mark.skip(reason="needs OPENAI_API_KEY (OpenAI-only app)")
+    skip_tavily = pytest.mark.skip(reason="needs TAVILY_API_KEY (optional web search)")
     for item in items:
-        if "openai" in item.keywords:
-            item.add_marker(skip)
+        if not has_openai and "openai" in item.keywords:
+            item.add_marker(skip_openai)
+        if not has_tavily and "tavily" in item.keywords:
+            item.add_marker(skip_tavily)

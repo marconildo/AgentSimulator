@@ -171,6 +171,14 @@ export interface Strings {
     result: string;
     // 017-failure-injection — label for an injected (simulated) failure block.
     simulatedError: string;
+    // 051-failure-treatments — labels for the resilience treatment the simulator
+    // now exercises (retry / backoff / circuit breaker / graceful degradation).
+    attempt: string;
+    backoff: string;
+    circuit: string;
+    treatment: string;
+    treatmentFallback: string;
+    treatmentGraceful: string;
     // Raw protocol/data transparency (007-numeric-transparency).
     jsonrpc: string;
     request: string;
@@ -362,6 +370,10 @@ export interface Strings {
     // 017-failure-injection — badge shown on the MCP/LLM readout when a run
     // carries an injected (simulated) failure.
     simulatedError: string;
+    // 051-failure-treatments — the LLM readout while the timeout is being retried,
+    // and once the circuit breaker opens and hands off to the fallback.
+    retrying: (n: number, max: number) => string;
+    circuitOpen: string;
   };
   node: {
     expand: string;
@@ -745,6 +757,12 @@ const en: Strings = {
     args: "args",
     result: "result",
     simulatedError: "⚠️ Simulated failure (injected)",
+    attempt: "Attempt",
+    backoff: "Backoff",
+    circuit: "Circuit breaker",
+    treatment: "Treatment",
+    treatmentFallback: "Fallback — graceful degradation",
+    treatmentGraceful: "Graceful degradation (abstained)",
     jsonrpc: "JSON-RPC frames",
     request: "Request",
     response: "Response",
@@ -815,6 +833,7 @@ const en: Strings = {
         current_time: "Current time",
         kb_lookup: "Glossary lookup",
         load_skill: "Load skill",
+        web_search: "Web search",
       },
       failure: {
         label: "Simulate failure",
@@ -869,6 +888,13 @@ const en: Strings = {
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
     stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
+    retry: "Retry — re-attempt a failed call a bounded number of times before giving up.",
+    backoff:
+      "Backoff — wait longer between each retry (here, exponential) to relieve a struggling dependency.",
+    "circuit breaker":
+      "Circuit breaker — after repeated failures, stop calling and fail fast instead of hanging.",
+    "graceful degradation":
+      "Graceful degradation — return a reduced, honest result (abstain / fallback) instead of crashing.",
     ALB: "ALB (Application Load Balancer) — AWS's load balancer that terminates TLS and spreads requests across backend containers.",
     BLOB: "Blob storage — an object store for raw files (PDFs, images) the app keeps outside the databases.",
     INDEX: "Vector index (HNSW) — the graph structure that makes nearest-neighbour search over embeddings fast.",
@@ -1001,6 +1027,8 @@ const en: Strings = {
     storing: "storing…",
     storedObject: (name) => `stored ${name} ✓`,
     simulatedError: "⚠️ simulated failure",
+    retrying: (n, max) => `⚠️ retry ${n}/${max}`,
+    circuitOpen: "⚠️ circuit open → fallback",
   },
   node: {
     expand: "Expand",
@@ -1372,6 +1400,12 @@ const pt: Strings = {
     args: "args",
     result: "resultado",
     simulatedError: "⚠️ Falha simulada (injetada)",
+    attempt: "Tentativa",
+    backoff: "Espera (backoff)",
+    circuit: "Disjuntor (circuit breaker)",
+    treatment: "Tratamento",
+    treatmentFallback: "Fallback — degradação graciosa",
+    treatmentGraceful: "Degradação graciosa (abstenção)",
     jsonrpc: "Frames JSON-RPC",
     request: "Requisição",
     response: "Resposta",
@@ -1442,6 +1476,7 @@ const pt: Strings = {
         current_time: "Hora atual",
         kb_lookup: "Consulta ao glossário",
         load_skill: "Carregar skill",
+        web_search: "Busca na web",
       },
       failure: {
         label: "Simular falha",
@@ -1496,6 +1531,13 @@ const pt: Strings = {
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
     stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",
+    retry: "Retentativa — refaz uma chamada que falhou um número limitado de vezes antes de desistir.",
+    backoff:
+      "Backoff — espera crescente entre tentativas (aqui, exponencial) para aliviar uma dependência em apuros.",
+    "circuit breaker":
+      "Disjuntor (circuit breaker) — após falhas repetidas, para de chamar e falha rápido em vez de travar.",
+    "graceful degradation":
+      "Degradação graciosa — devolve um resultado reduzido e honesto (abstenção / fallback) em vez de quebrar.",
     ALB: "ALB (Application Load Balancer) — o balanceador de carga da AWS que encerra o TLS e distribui as requisições entre os containers.",
     BLOB: "Armazenamento de blobs — um object store para arquivos brutos (PDFs, imagens) que o app guarda fora dos bancos.",
     INDEX: "Índice vetorial (HNSW) — a estrutura em grafo que torna rápida a busca por vizinhos mais próximos sobre embeddings.",
@@ -1628,6 +1670,8 @@ const pt: Strings = {
     storing: "armazenando…",
     storedObject: (name) => `${name} armazenado ✓`,
     simulatedError: "⚠️ falha simulada",
+    retrying: (n, max) => `⚠️ retentativa ${n}/${max}`,
+    circuitOpen: "⚠️ circuito aberto → fallback",
   },
   node: {
     expand: "Expandir",

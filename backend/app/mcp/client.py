@@ -212,5 +212,18 @@ def _load_local() -> ToolRegistry:
             },
             runner=wrap(local_server._load_skill),
         ),
+        # 052-web-search-tool: real Tavily internet search. Mirrors the
+        # @mcp.tool() registration in server.py; the tool reads TAVILY_API_KEY
+        # from settings (the stdio subprocess inherits it via env=dict(os.environ)).
+        RegisteredTool(
+            name=local_server.WEB_SEARCH_TOOL,
+            description=local_server.WEB_SEARCH_DESCRIPTION,
+            schema={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            runner=wrap(local_server._web_search),
+        ),
     ]
     return ToolRegistry(tools, transport="local-fallback")

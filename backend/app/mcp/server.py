@@ -109,6 +109,73 @@ def _load_skill(name: str) -> str:
     return skill["body"]
 
 
+# --- web search (052-web-search-tool) ----------------------------------------
+
+# Wire name the model calls and the UI lists; a proper noun, not translated.
+WEB_SEARCH_TOOL = "web_search"
+
+# Functional description sent to the model (English, like the other tools).
+WEB_SEARCH_DESCRIPTION = (
+    "Search the live internet for current or external information and return a short "
+    "synthesized answer plus the top sources (title, URL, snippet). Use this when the "
+    "knowledge base is unlikely to cover the question (recent events, specific facts, "
+    "documentation, prices) — pass a focused natural-language `query`."
+)
+
+# How many sources to fold into the model's observation.
+_WEB_SEARCH_MAX_RESULTS = 5
+# Trim each source snippet so the observation stays compact.
+_WEB_SEARCH_SNIPPET_CHARS = 240
+
+
+def _web_search(query: str) -> str:
+    """Perform a real Tavily web search and return answer + sources as text.
+
+    Degrades honestly: with no ``TAVILY_API_KEY`` configured it returns an
+    ``error:`` string the model can read (never raises), so the agent keeps
+    running even though the tool is unavailable. ``TavilyClient`` is imported
+    lazily so importing this module — and the keyless guard tests — never
+    requires the package to be installed or a key to be set.
+    """
+    from ..config import get_settings
+
+    key = get_settings().tavily_api_key.strip()
+    if not key:
+        return "error: web search is unavailable — TAVILY_API_KEY is not configured"
+
+    try:
+        from tavily import TavilyClient
+
+        client = TavilyClient(api_key=key)
+        response = client.search(
+            query=query,
+            max_results=_WEB_SEARCH_MAX_RESULTS,
+            include_answer=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - return error text to the model
+        return f"error: {exc}"
+
+    answer = (response.get("answer") or "").strip()
+    results = response.get("results") or []
+
+    lines: list[str] = []
+    if answer:
+        lines.append(f"Answer: {answer}")
+        lines.append("")
+    if results:
+        lines.append("Sources:")
+        for i, r in enumerate(results, start=1):
+            title = (r.get("title") or "").strip() or "(untitled)"
+            url = (r.get("url") or "").strip()
+            snippet = " ".join((r.get("content") or "").split())[:_WEB_SEARCH_SNIPPET_CHARS]
+            lines.append(f"{i}. {title} — {url}")
+            if snippet:
+                lines.append(f"   {snippet}")
+
+    text = "\n".join(lines).strip()
+    return text or f"No web results found for '{query}'."
+
+
 def found_for(name: str, content: str) -> bool:
     """Structured not-found signal for a tool result — the single source of truth.
 
@@ -163,6 +230,17 @@ def load_skill(name: str) -> str:
     it fits the user's request, then follow the loaded instructions.
     """
     return _load_skill(name)
+
+
+@mcp.tool()
+def web_search(query: str) -> str:
+    """Search the live internet and return a synthesized answer plus top sources.
+
+    Use this when the knowledge base is unlikely to cover the question (recent
+    events, specific facts, documentation, prices). Pass a focused natural-language
+    `query`.
+    """
+    return _web_search(query)
 
 
 if __name__ == "__main__":

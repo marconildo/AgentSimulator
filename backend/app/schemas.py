@@ -99,6 +99,12 @@ class TraceEvent(BaseModel):
     ``limit`` and, since 039-memory-growth-visualization, ``recent_tokens``: a
     list of per-pair tiktoken counts aligned with ``recent`` (same order/length)
     that powers the Agent's turn-by-turn Memory growth panel.
+
+    051-failure-treatments adds (additively, only under an injected failure) the
+    *treatment* keys read by ``SimulatedError`` in ``events.ts``: a retried
+    ``llm.prompt`` END carries ``attempt``/``max_retries`` (+ ``backoff_ms`` between
+    attempts); the final ``agent.think`` END carries ``circuit``/``treatment``; a
+    failed ``mcp.call``/``rag.retrieve`` END carries ``treatment``. No new ``Stage``.
     """
 
     trace_id: str

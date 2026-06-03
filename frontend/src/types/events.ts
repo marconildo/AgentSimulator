@@ -77,6 +77,18 @@ export interface RequestBody {
 export interface SimulatedError {
   error: string;
   simulated: boolean;
+  // 051-failure-treatments — the *treatment* the simulator now exercises, carried
+  // as additive keys on the same END `data` (no new Stage). For `llm_timeout`: each
+  // retried `llm.prompt` span carries `attempt`/`max_retries` and (between attempts)
+  // the `backoff_ms` it waited; the final `agent.think` END carries `circuit:"open"`
+  // + `treatment:"fallback"`. For `tool_error`: the failed `mcp.call`/`rag.retrieve`
+  // END carries `treatment:"graceful_degradation"`. All optional (older traces lack
+  // them); mirrors backend/app/agent/resilience.py.
+  attempt?: number;
+  max_retries?: number;
+  backoff_ms?: number;
+  circuit?: string;
+  treatment?: string;
 }
 
 // 021-abstain-badge — the structured not-found signal on an `mcp.call` END

@@ -208,12 +208,14 @@ async def test_no_overrides_discovers_all_tools_with_default_prompt():
     discover = next(e for e in events if e.stage == "mcp.discover" and e.phase == "end")
     discovered = {t["name"] for t in discover.data["tools"]}
     # 027-skills adds load_skill to the advertised set (the agent can load a skill).
+    # 052-web-search-tool adds web_search (real Tavily internet search).
     assert {
         "calculator",
         "current_time",
         "kb_lookup",
         "search_knowledge_base",
         "load_skill",
+        "web_search",
     } == discovered
     prompt = next(e for e in events if e.stage == "llm.prompt" and e.phase == "end")
     assert "AI Agent Simulator" in prompt.data["system"]

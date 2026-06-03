@@ -551,7 +551,10 @@ const STATIONS_SRC: StationSrc[] = [
     tech: [
       { k: { en: "protocol", pt: "protocolo" }, v: "Model Context Protocol" },
       { k: { en: "transport", pt: "transporte" }, v: "stdio (JSON-RPC)" },
-      { k: { en: "tools", pt: "ferramentas" }, v: "calculator, current_time, kb_lookup" },
+      {
+        k: { en: "tools", pt: "ferramentas" },
+        v: "calculator, current_time, kb_lookup, web_search",
+      },
     ],
     stages: ["mcp.discover", "mcp.call"],
     position: { x: 980, y: 430 },

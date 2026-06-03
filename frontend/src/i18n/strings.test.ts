@@ -215,6 +215,39 @@ describe("failure-injection i18n (017-failure-injection)", () => {
   });
 });
 
+describe("failure-treatments i18n (051-failure-treatments)", () => {
+  it("has the retry/circuit readouts (incl. the retrying builder) in en and pt", () => {
+    for (const lang of [UI.en, UI.pt]) {
+      expect(lang.readout.circuitOpen.trim()).toBeTruthy();
+      expect(lang.readout.retrying(2, 3).trim()).toBeTruthy();
+      // The builder interpolates the attempt/max it was given.
+      expect(lang.readout.retrying(2, 3)).toContain("2");
+      expect(lang.readout.retrying(2, 3)).toContain("3");
+    }
+  });
+
+  it("has the inspector treatment labels in en and pt", () => {
+    for (const k of [
+      "attempt",
+      "backoff",
+      "circuit",
+      "treatment",
+      "treatmentFallback",
+      "treatmentGraceful",
+    ] as const) {
+      expect(UI.en.inspector[k]?.trim()).toBeTruthy();
+      expect(UI.pt.inspector[k]?.trim()).toBeTruthy();
+    }
+  });
+
+  it("has the resilience glossary entries in en and pt", () => {
+    for (const k of ["retry", "backoff", "circuit breaker", "graceful degradation"]) {
+      expect(UI.en.glossary[k]?.trim()).toBeTruthy();
+      expect(UI.pt.glossary[k]?.trim()).toBeTruthy();
+    }
+  });
+});
+
 describe("inline-citations i18n (019-inline-citations)", () => {
   it("has the citation chrome (+ the fromTool builder) in en and pt", () => {
     for (const k of ["sources", "fromChunk", "score", "none", "hint"] as const) {

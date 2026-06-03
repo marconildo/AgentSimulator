@@ -20,7 +20,14 @@ import {
 import { executionTree } from "../lib/executionTree";
 import { formatLatency } from "../lib/time";
 import { useSimulator } from "../store/useSimulator";
-import type { JsonRpcFrames, Phase, RequestBody, Stage, TraceEvent } from "../types/events";
+import type {
+  JsonRpcFrames,
+  Phase,
+  RequestBody,
+  SimulatedError,
+  Stage,
+  TraceEvent,
+} from "../types/events";
 import { ExecutionTracesDetail } from "./ExecutionTraces";
 
 type I = Strings["inspector"];
@@ -453,6 +460,10 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
             <Section key={idx} title={i.toolCall}>
               {/* 017-failure-injection: a forced tool error, badged. */}
               {Boolean(call.data.simulated) && <SimulatedBadge label={i.simulatedError} />}
+              {/* 051-failure-treatments: name the agent's reaction (graceful degradation). */}
+              {Boolean(call.data.simulated) && (
+                <TreatmentInfo data={call.data as unknown as SimulatedError} i={i} />
+              )}
               <KeyVal k={i.tool} v={String(call.data.tool)} />
               <KeyVal k={i.args} v={JSON.stringify(call.data.args)} />
               <KeyVal k={i.result} v={String(call.data.result)} />
@@ -474,6 +485,10 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
             <Section title={i.assembledPrompt}>
               {/* 017-failure-injection: a forced model timeout, badged. */}
               {Boolean(prompt.data.simulated) && <SimulatedBadge label={i.simulatedError} />}
+              {/* 051-failure-treatments: the retry/backoff treatment on this attempt. */}
+              {Boolean(prompt.data.simulated) && (
+                <TreatmentInfo data={prompt.data as unknown as SimulatedError} i={i} />
+              )}
               {preview.system && (
                 <Labeled label={i.system}>
                   <Scroll>{preview.system}</Scroll>
@@ -679,6 +694,28 @@ function KeyVal({ k, v }: { k: string; v: string }) {
 
 // 017-failure-injection — a dashed warning strip flagging an injected (simulated)
 // failure on a tool call / model reasoning block.
+// 051-failure-treatments — the resilience *treatment* read from the same END
+// `data` (additive keys). Renders whichever of attempt/backoff/circuit/treatment
+// are present, mapping the treatment enum to its bilingual label.
+function TreatmentInfo({ data, i }: { data: SimulatedError; i: I }) {
+  const treatmentLabel =
+    data.treatment === "fallback"
+      ? i.treatmentFallback
+      : data.treatment === "graceful_degradation"
+        ? i.treatmentGraceful
+        : undefined;
+  return (
+    <>
+      {Boolean(data.attempt) && Boolean(data.max_retries) && (
+        <KeyVal k={i.attempt} v={`${data.attempt}/${data.max_retries}`} />
+      )}
+      {typeof data.backoff_ms === "number" && <KeyVal k={i.backoff} v={`${data.backoff_ms} ms`} />}
+      {Boolean(data.circuit) && <KeyVal k={i.circuit} v={String(data.circuit)} />}
+      {treatmentLabel && <KeyVal k={i.treatment} v={treatmentLabel} />}
+    </>
+  );
+}
+
 function SimulatedBadge({ label }: { label: string }) {
   return (
     <p

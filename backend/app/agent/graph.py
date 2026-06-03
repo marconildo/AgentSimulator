@@ -22,6 +22,7 @@ the runnable ``config``, so the whole run is observable from the frontend.
 
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 from time import perf_counter
 from typing import Any, cast
@@ -37,13 +38,20 @@ from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
 from ..mcp.server import LOAD_SKILL_TOOL, found_for
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
-from ..trace import TraceEmitter
+from ..trace import StageRecord, TraceEmitter
 from .prompts import (
     AGENT_PROMPT,
     GUARDRAILS_PROMPT,
     compose_system,
     identity_block,
     skills_block,
+)
+from .resilience import (
+    CIRCUIT_OPEN,
+    MAX_RETRIES,
+    TREATMENT_FALLBACK,
+    TREATMENT_GRACEFUL,
+    backoff_ms,
 )
 from .state import AgentState
 from .tools import RETRIEVAL_TOOL, agent_tool_specs, is_retrieval
@@ -56,10 +64,14 @@ MAX_ITERATIONS = 3
 # degrades/abstains. Labelled ``simulated: true`` on the event so it is honest.
 SIMULATED_TOOL_ERROR = "error: simulated tool failure (injected by the failure simulator)"
 SIMULATED_TIMEOUT = "simulated LLM timeout (injected by the failure simulator)"
-# The degraded answer when the model "times out": a system fallback (the model
-# produced nothing), surfaced on the trace + persisted. The bilingual badge the
-# UI shows around it lives in the frontend i18n (constitution §4).
-DEGRADED_TIMEOUT_ANSWER = "The model timed out — no answer this turn."
+# The degraded answer when the model keeps "timing out": the *fallback* the circuit
+# breaker hands off to after retries are exhausted (051-failure-treatments). Framed
+# as a deliberate graceful degradation, not a raw crash — the model produced nothing,
+# so we abstain honestly rather than guess. The bilingual treatment labels the UI
+# shows around it live in the frontend i18n (constitution §4).
+DEGRADED_TIMEOUT_ANSWER = (
+    "The model timed out after several retries — degraded gracefully, no reliable answer this turn."
+)
 
 
 def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegistry]:
@@ -170,75 +182,110 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     return {}
 
 
+async def _degrade_llm_timeout(
+    rec: StageRecord,
+    emitter: TraceEmitter,
+    provider: LLMProvider,
+    state: AgentState,
+) -> dict[str, Any]:
+    """051-failure-treatments: the injected ``llm_timeout`` resilience ladder.
+
+    Retries the model call ``MAX_RETRIES`` times — each attempt its own ``llm.prompt``
+    span that "times out" — waiting a real, exponentially-growing ``backoff_ms``
+    between attempts. When the retries are exhausted the circuit breaker **opens**
+    (recorded on the ``agent.think`` END, ``rec``) and the run degrades to the labelled
+    fallback answer, routed straight to ``respond`` by ``_should_continue``. Real
+    control flow; only the underlying call is injected (§3).
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        async with emitter.stage(
+            Stage.LLM_PROMPT, f"Reasoning with the model (attempt {attempt})"
+        ) as prompt_rec:
+            prompt_rec.data = {
+                "error": SIMULATED_TIMEOUT,
+                "simulated": True,
+                "attempt": attempt,
+                "max_retries": MAX_RETRIES,
+            }
+            # Record the backoff only when another attempt follows (so the displayed
+            # value is exactly what we sleep — no phantom wait on the last attempt).
+            if attempt < MAX_RETRIES:
+                prompt_rec.data["backoff_ms"] = backoff_ms(attempt)
+        # Wait *between* attempts (outside the span) so the gap the learner sees is
+        # the backoff, and the breaker gets real breathing room before retrying.
+        if attempt < MAX_RETRIES:
+            await asyncio.sleep(backoff_ms(attempt) / 1000)
+
+    # Retries exhausted → trip the breaker and hand off to the fallback treatment.
+    rec.data = {
+        "model": provider.model_name,
+        "decision": "error",
+        "error": SIMULATED_TIMEOUT,
+        "simulated": True,
+        "attempt": MAX_RETRIES,
+        "max_retries": MAX_RETRIES,
+        "circuit": CIRCUIT_OPEN,
+        "treatment": TREATMENT_FALLBACK,
+    }
+    return {
+        "iterations": state["iterations"] + 1,
+        "answer": DEGRADED_TIMEOUT_ANSWER,
+    }
+
+
 async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, provider, registry = _deps(config)
     specs = agent_tool_specs(registry, state["enabled_tools"])
 
     async with emitter.stage(Stage.AGENT_THINK, "Agent reasoning") as rec:
+        # 051-failure-treatments: an injected llm_timeout no longer degrades on the
+        # first hit — it drives a *real* retry → exponential backoff → circuit-breaker
+        # → fallback ladder so the learner watches the treatment, not just the break.
+        if state.get("simulate_failure") == "llm_timeout":
+            return await _degrade_llm_timeout(rec, emitter, provider, state)
         # The agent reasons by *calling the model* — the LLM is its brain, used on
         # every round, not just to write the final answer. Wrap the decide call in
         # an llm.prompt span so the LLM station is observably active while it thinks
         # and the Agent → LLM round-trip animates (010-llm-as-brain). The span's END
-        # still carries the assembled prompt preview the inspector shows.
-        try:
-            async with emitter.stage(Stage.LLM_PROMPT, "Reasoning with the model") as prompt_rec:
-                # 017-failure-injection: a deterministic, *simulated* model timeout.
-                if state.get("simulate_failure") == "llm_timeout":
-                    prompt_rec.data = {"error": SIMULATED_TIMEOUT, "simulated": True}
-                    raise TimeoutError(SIMULATED_TIMEOUT)
-                decision = await provider.decide(
-                    system=_effective_system(state),
-                    thread=state["messages"],
+        # still carries the assembled prompt preview the inspector shows. A *real*
+        # model timeout (not the injected one) propagates to main.py's handler.
+        async with emitter.stage(Stage.LLM_PROMPT, "Reasoning with the model") as prompt_rec:
+            decision = await provider.decide(
+                system=_effective_system(state),
+                thread=state["messages"],
+                tools=specs,
+                history=state["history"],
+            )
+            # The retrieved-context readout (the inspector's "context window")
+            # comes from state — the thread carries it as a ToolMessage.
+            # 036-context-window-budget: attach the real model window + the
+            # per-category tiktoken split (a labelled estimate) so the Agent
+            # panel renders a /context-style budget against the real maximum.
+            # 042-agent-anatomy: the system layer now spans guardrails + role;
+            # the budget attributes their combined token count to ``system``.
+            # 049-agent-self-identity: when an identity line is rendered, it
+            # joins the same ``system`` slice so the per-category totals stay
+            # coherent with what the model actually received (the identity
+            # line ships as part of the same system message).
+            guardrails, role, skills = _system_parts(state)
+            identity = _identity_part(state)
+            system_text = f"{guardrails}\n\n{role}"
+            if identity:
+                system_text = f"{identity}\n\n{system_text}"
+            prompt_rec.data = {
+                **decision.prompt_preview,
+                "context": state["context"],
+                "context_window": context_window(provider.model_name),
+                "context_budget": context_budget(
+                    system=system_text,
                     tools=specs,
+                    skills=skills,
                     history=state["history"],
-                )
-                # The retrieved-context readout (the inspector's "context window")
-                # comes from state — the thread carries it as a ToolMessage.
-                # 036-context-window-budget: attach the real model window + the
-                # per-category tiktoken split (a labelled estimate) so the Agent
-                # panel renders a /context-style budget against the real maximum.
-                # 042-agent-anatomy: the system layer now spans guardrails + role;
-                # the budget attributes their combined token count to ``system``.
-                # 049-agent-self-identity: when an identity line is rendered, it
-                # joins the same ``system`` slice so the per-category totals stay
-                # coherent with what the model actually received (the identity
-                # line ships as part of the same system message).
-                guardrails, role, skills = _system_parts(state)
-                identity = _identity_part(state)
-                system_text = f"{guardrails}\n\n{role}"
-                if identity:
-                    system_text = f"{identity}\n\n{system_text}"
-                prompt_rec.data = {
-                    **decision.prompt_preview,
-                    "context": state["context"],
-                    "context_window": context_window(provider.model_name),
-                    "context_budget": context_budget(
-                        system=system_text,
-                        tools=specs,
-                        skills=skills,
-                        history=state["history"],
-                        retrieved=state["context"],
-                        thread=state["messages"],
-                        retrieval_tools={RETRIEVAL_TOOL},
-                        skill_tools={LOAD_SKILL_TOOL},
-                    ),
-                }
-        except TimeoutError as exc:
-            # Only the *injected* timeout degrades here; a real model timeout
-            # propagates unchanged to main.py's handler (preserves prior behavior).
-            if state.get("simulate_failure") != "llm_timeout":
-                raise
-            rec.data = {
-                "model": provider.model_name,
-                "decision": "error",
-                "error": str(exc),
-                "simulated": True,
-            }
-            # Degrade cleanly: set the fallback answer and route straight to
-            # respond (_should_continue), skipping tools + a real generation.
-            return {
-                "iterations": state["iterations"] + 1,
-                "answer": DEGRADED_TIMEOUT_ANSWER,
+                    retrieved=state["context"],
+                    thread=state["messages"],
+                    retrieval_tools={RETRIEVAL_TOOL},
+                    skill_tools={LOAD_SKILL_TOOL},
+                ),
             }
         rec.data = {
             "model": provider.model_name,
@@ -303,6 +350,9 @@ async def _run_mcp_tool(
         if fail_tool:
             rec.data["error"] = SIMULATED_TOOL_ERROR
             rec.data["simulated"] = True
+            # 051-failure-treatments: name the agent's reaction — it reasons over this
+            # error observation and abstains/degrades, which *is* graceful degradation.
+            rec.data["treatment"] = TREATMENT_GRACEFUL
     return output
 
 
@@ -327,6 +377,9 @@ async def _run_retrieval_tool(
                 "k": state["top_k"],
                 "error": SIMULATED_TOOL_ERROR,
                 "simulated": True,
+                # 051-failure-treatments: the agent abstains on this sub-query —
+                # graceful degradation, named so the learner reads handling, not break.
+                "treatment": TREATMENT_GRACEFUL,
             }
         return SIMULATED_TOOL_ERROR, state["context"], state["chunks"]
 

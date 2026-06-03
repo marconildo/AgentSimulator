@@ -28,6 +28,7 @@ import {
   type StationId,
 } from "../lib/stations";
 import { useSimulator } from "../store/useSimulator";
+import type { SimulatedError } from "../types/events";
 import { FlowEdge } from "./edges/FlowEdge";
 import { BoundaryNode } from "./nodes/BoundaryNode";
 import { PublicFrontierNode } from "./nodes/PublicFrontierNode";
@@ -231,7 +232,7 @@ function lastWith(events: StationRuntime["events"], pred: (e: StationRuntime["ev
   return undefined;
 }
 
-function readoutFor(
+export function readoutFor(
   id: StationId,
   rt: StationRuntime,
   ro: Strings["readout"],
@@ -305,7 +306,17 @@ function readoutFor(
       // 017-failure-injection: a simulated model timeout is recorded on the
       // llm.prompt END; surface the badge over the usual readout.
       const prompt = lastWith(rt.events, (e) => e.stage === "llm.prompt" && e.phase === "end");
-      if (prompt?.data.simulated) return ro.simulatedError;
+      if (prompt?.data.simulated) {
+        // 051-failure-treatments: while the timeout is being retried, show which
+        // attempt we're on; once the last attempt fails the breaker opens → fallback.
+        const sim = prompt.data as unknown as SimulatedError;
+        if (sim.attempt && sim.max_retries) {
+          return sim.attempt >= sim.max_retries
+            ? ro.circuitOpen
+            : ro.retrying(sim.attempt, sim.max_retries);
+        }
+        return ro.simulatedError;
+      }
       const tokens = rt.events.filter((e) => e.stage === "llm.generate" && e.phase === "progress").length;
       if (rt.status === "active" && tokens) return ro.streaming(tokens);
       // Real tokens + cost once a round has reported usage (011-token-cost).

@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
 
+    # --- Web search (052-web-search-tool) ---
+    # Optional. Enables the `web_search` MCP tool (real Tavily search). Unlike
+    # OPENAI_API_KEY this is NOT required: with no key the tool returns an honest
+    # error string and the rest of the app runs unchanged.
+    tavily_api_key: str = ""
+
     # --- RAG ---
     rag_top_k: int = 4
     chroma_dir: str = "app/data/chroma"
@@ -87,6 +93,10 @@ class Settings(BaseSettings):
     @property
     def has_openai_key(self) -> bool:
         return bool(self.openai_api_key.strip())
+
+    @property
+    def has_tavily_key(self) -> bool:
+        return bool(self.tavily_api_key.strip())
 
     @property
     def chroma_path(self) -> Path:
