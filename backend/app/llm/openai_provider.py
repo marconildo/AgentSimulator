@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from .provider import Decision, LLMProvider, TokenUsage, ToolCall, ToolSpec
@@ -88,24 +88,28 @@ class OpenAIProvider(LLMProvider):
                 yield text
 
 
-def _system_block(system: str, history: list[dict[str, str]] | None) -> str:
-    """The system prompt, with long-term-memory history folded in (if any).
+def _history_messages(history: list[dict[str, str]] | None) -> list[AnyMessage]:
+    """Long-term memory (prior {message, answer} turns) as **real conversation
+    turns**: each pair becomes a ``HumanMessage`` followed by an ``AIMessage``.
 
-    Retrieved context and tool results are NOT injected here anymore — they live
-    in the thread as ToolMessages (026), so the model sees them as observations of
-    its own tool calls, not as pre-supplied prompt text.
+    History is *not* folded into the system prompt — the model must see prior
+    turns as the actual dialogue so it can resolve short references ("é claro",
+    "sim, pode") to what it had just said. The system block stays instructions /
+    persona only; retrieved context and tool results live in the thread as
+    ToolMessages (026), never in the system prompt.
     """
-    block = system
-    if history:
-        rendered = "\n".join(f"- user: {h['message']}\n  assistant: {h['answer']}" for h in history)
-        block += f"\n\n# Recent conversation history (long-term memory)\n{rendered}"
-    return block
+    messages: list[AnyMessage] = []
+    for h in history or []:
+        messages.append(HumanMessage(content=h["message"]))
+        messages.append(AIMessage(content=h["answer"]))
+    return messages
 
 
 def _assemble(
     system: str, thread: list[AnyMessage], history: list[dict[str, str]] | None
 ) -> list[Any]:
-    return [SystemMessage(content=_system_block(system, history)), *thread]
+    # [System, ...prior turns as real Human/AI messages..., *current thread].
+    return [SystemMessage(content=system), *_history_messages(history), *thread]
 
 
 def _to_openai_tool(tool: ToolSpec) -> dict[str, Any]:

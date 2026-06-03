@@ -98,10 +98,12 @@ class LLMProvider(ABC):
 
         ``thread`` is the canonical ReAct conversation so far (a HumanMessage,
         then AIMessage(tool_calls) → ToolMessage pairs). The provider prepends a
-        SystemMessage (the prompt + long-term-memory ``history``), binds ``tools``,
-        and calls the model. The returned :class:`Decision` carries the raw
-        ``AIMessage`` (with any ``tool_calls``) so the agent can append it to the
-        thread. ``history`` is the long-term memory: prior {message, answer} turns.
+        SystemMessage (the prompt only) followed by the long-term-memory
+        ``history`` rendered as **real alternating turns** (Human/AI), then binds
+        ``tools`` and calls the model. The returned :class:`Decision` carries the
+        raw ``AIMessage`` (with any ``tool_calls``) so the agent can append it to
+        the thread. ``history`` is the long-term memory: prior {message, answer}
+        turns — sent as conversation turns, never folded into the system prompt.
         """
 
     @abstractmethod
