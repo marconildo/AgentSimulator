@@ -168,6 +168,29 @@ async def test_system_prompt_override_reaches_the_prompt():
     assert answer.strip()
 
 
+async def test_complex_request_delivers_in_turn_instead_of_promising():
+    """Regression: a "build me a complete X" request must come back as the
+    deliverable, not a bare promise to do it later.
+
+    Reproduces the observed failure where the agent answered "Vou preparar isso
+    para você. Aguarde um momento." and the turn ended with nothing built. The
+    assertion is structural + tolerant: the answer is substantive and does not
+    end on a deferral phrase (en/pt). The guardrail makes single-turn delivery
+    the contract; this guards the behavior end-to-end.
+    """
+    answer, _events = await _run(
+        "Monte um relatório completo, com seções, sobre como funciona um pipeline RAG."
+    )
+    body = answer.strip()
+    assert body, "expected a non-empty answer"
+    # A substantive deliverable, not a one-line promise.
+    assert len(body) > 200, f"answer too short to be the deliverable: {body!r}"
+    # It must not merely defer. These are the giveaway phrases from the failure.
+    tail = body[-120:].lower()
+    for defer in ("aguarde", "wait a moment", "vou preparar", "i will prepare", "em breve"):
+        assert defer not in tail, f"answer defers instead of delivering: {body!r}"
+
+
 async def test_blank_system_prompt_falls_back_to_default():
     # AC1 — a blank/whitespace override is ignored; the default prompt is used.
     _answer, events = await _run("What is RAG?", system_prompt="   ")

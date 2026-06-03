@@ -115,3 +115,20 @@ def test_default_constants_are_non_empty():
     assert isinstance(AGENT_PROMPT, str) and AGENT_PROMPT.strip()
     # They must be distinct (catching a bug where one alias the other).
     assert GUARDRAILS_PROMPT != AGENT_PROMPT
+
+
+def test_guardrails_forbid_deferring_the_deliverable():
+    """Regression: the agent must deliver in this turn, never promise it for 'later'.
+
+    A complex request ("monte um relatório completo …") used to come back as a
+    bare promise — "Vou preparar isso para você. Aguarde um momento." — and the
+    turn ended with no deliverable. The ReAct loop was fine; the *prompt* never
+    forbade deferral, and there is no 'later' (the turn ends when the agent
+    answers). The platform guardrail now instructs single-turn delivery, so pin
+    that the instruction ships.
+    """
+    text = GUARDRAILS_PROMPT.lower()
+    # It frames the run as a single turn …
+    assert "single turn" in text
+    # … and explicitly tells it not to defer / ask the user to wait.
+    assert "wait" in text
