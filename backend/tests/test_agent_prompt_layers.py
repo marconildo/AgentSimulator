@@ -117,6 +117,23 @@ def test_default_constants_are_non_empty():
     assert GUARDRAILS_PROMPT != AGENT_PROMPT
 
 
+def test_agent_prompt_routes_real_world_questions_to_web_search():
+    """Regression: real-world / current-events questions ("quem fez os gols?")
+    must route to ``web_search``, not ``search_knowledge_base``.
+
+    The knowledge base is an **AI-engineering** corpus only; the role prompt used
+    to demand ``search_knowledge_base`` for "anything that could be documented"
+    and never mentioned ``web_search`` (052), so the agent forced football
+    questions through RAG and abstained. Pin that the role now advertises
+    ``web_search`` with current-events guidance.
+    """
+    text = AGENT_PROMPT.lower()
+    assert "web_search" in text
+    assert "current events" in text
+    # And the KB tool is scoped to its actual domain, not "anything documented".
+    assert "ai engineering" in text or "ai-engineering" in text
+
+
 def test_guardrails_forbid_deferring_the_deliverable():
     """Regression: the agent must deliver in this turn, never promise it for 'later'.
 

@@ -168,6 +168,23 @@ async def test_system_prompt_override_reaches_the_prompt():
     assert answer.strip()
 
 
+async def test_real_world_question_routes_to_web_search():
+    """A current-events / real-world question (outside the AI-engineering KB)
+    must elect ``web_search``, not ground itself on ``search_knowledge_base``.
+
+    Reproduces the observed failure where "quem fez os gols?" was forced through
+    the AI-engineering knowledge base and abstained. Structural + tolerant: we
+    only require ``web_search`` to appear among the tools the agent called (it may
+    also try others). The decision is OpenAI's; the Tavily result is irrelevant
+    here (it degrades to an honest error without a key), so this needs only an
+    OpenAI key.
+    """
+    _answer, events = await _run("Quem ganhou o último Grande Prêmio de Fórmula 1?")
+    calls = [e for e in events if e.stage == "mcp.call" and e.phase == "end"]
+    tools_called = {c.data["tool"] for c in calls}
+    assert "web_search" in tools_called, f"expected web_search, got {tools_called}"
+
+
 async def test_complex_request_delivers_in_turn_instead_of_promising():
     """Regression: a "build me a complete X" request must come back as the
     deliverable, not a bare promise to do it later.
