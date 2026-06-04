@@ -128,9 +128,6 @@ export function StationNode(props: NodeProps) {
                 </button>
               )}
             </div>
-            <div title={meta.subtitle} className="truncate text-[10px] text-[var(--color-muted)]">
-              {meta.subtitle}
-            </div>
           </div>
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -153,6 +150,13 @@ export function StationNode(props: NodeProps) {
               {expanded ? "⊖" : "⊕"}
             </button>
           )}
+        </div>
+
+        {/* Subtitle gets its own full-width row (not squeezed beside the icon +
+            controls), so longer ones like "Agent Harness · LangGraph runtime"
+            fit without truncating. */}
+        <div title={meta.subtitle} className="mt-0.5 truncate text-[10px] text-[var(--color-muted)]">
+          {meta.subtitle}
         </div>
 
         <div className="mt-1.5 flex items-center gap-1.5">

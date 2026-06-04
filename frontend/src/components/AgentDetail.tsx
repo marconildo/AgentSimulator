@@ -189,7 +189,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
               as an "Agent Harness"; glossary tooltip on hover (canvas convention). */}
           <div
             title={t.glossary["Agent Harness"]}
-            className="mt-1 inline-block cursor-help rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-faint)]"
+            className="mt-1 inline-block cursor-help rounded border border-[var(--color-line)] px-1.5 py-0.5 text-[10px] text-[var(--color-faint)]"
           >
             {a.harness}
           </div>

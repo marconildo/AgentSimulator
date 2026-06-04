@@ -347,7 +347,9 @@ const STATIONS_SRC: StationSrc[] = [
     id: "agent",
     tier: "agent",
     title: "Agent",
-    subtitle: { en: "LangGraph runtime", pt: "runtime LangGraph" },
+    // 053-agent-harness — name the runtime on the canvas card itself (not the
+    // deployment tier): the agent station IS the harness. Glossary term explains it.
+    subtitle: { en: "Agent Harness · LangGraph runtime", pt: "Agent Harness · runtime LangGraph" },
     icon: "🧠",
     accent: "var(--color-pink)",
     tag: "ReAct",

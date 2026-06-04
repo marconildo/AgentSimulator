@@ -1049,7 +1049,7 @@ const en: Strings = {
     sendDisabled: "This scenario is a preview — switch to Simple to send a message.",
   },
   agentDetail: {
-    title: "Agent — anatomy",
+    title: "Agent Context Window",
     subtitle: "The anatomy of an AI agent: a brain (the LLM), memory, and tools",
     harness: "Agent Harness — the loop, tools, prompt layers, context window and memory wrapped around the LLM.",
     back: "Back to canvas",
@@ -1695,7 +1695,7 @@ const pt: Strings = {
     sendDisabled: "Este cenário é um preview — troque para Simples para enviar uma mensagem.",
   },
   agentDetail: {
-    title: "Agente — anatomia",
+    title: "Agent Context Window",
     subtitle: "A anatomia de um agente de IA: um cérebro (a LLM), memória e ferramentas",
     harness: "Agent Harness — o loop, as ferramentas, as camadas de prompt, a janela de contexto e a memória em volta da LLM.",
     back: "Voltar ao canvas",

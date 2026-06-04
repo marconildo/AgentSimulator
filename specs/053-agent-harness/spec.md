@@ -91,6 +91,16 @@ not a deployment unit, and conflating the two would break the n-tier parallelism
 - [x] Translate "harness" to pt? → **No** — keep the term "Agent Harness" (jargon
   proper noun, same as DeepAgents/Multi-agent); explanation is bilingual.
 
+## Addendum (2026-06-04, post-implementation feedback)
+
+The drill-in badge alone wasn't visible enough — the user pointed at the canvas
+Agent block expecting to *see* the term without opening "Open full view". Resolved
+by **also naming it on the agent station card's subtitle** (`stations.ts`:
+"Agent Harness · LangGraph runtime" / "Agent Harness · runtime LangGraph") — still
+the *station*, still not the deployment tier (AC4 holds). New test pins the subtitle
+in both langs. Also fixed a bad CSS var (`--color-border` → `--color-line`) on the
+drill-in badge border.
+
 ## Out of scope / deferred
 
 - Renaming the `agent` deployment tier (explicitly rejected — taxonomy clash).
