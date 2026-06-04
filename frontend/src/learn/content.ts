@@ -585,6 +585,31 @@ const SECTIONS_SRC: SectionSrc[] = [
         where: "backend/app/agent/graph.py",
       },
       {
+        id: "agent-harness",
+        title: { en: "Agent harness", pt: "Agent harness" },
+        what: {
+          en: "The runtime scaffolding wrapped around a plain LLM that turns a single stateless completion into an agent: the reasoning loop, tool calling, layered system-prompt assembly, the context window, and working + long-term memory.",
+          pt: "O arcabouço de runtime em volta de um LLM cru que transforma uma única completion sem estado em um agente: o loop de raciocínio, a chamada de ferramentas, a montagem do system prompt em camadas, a janela de contexto e a memória de trabalho + de longo prazo.",
+        },
+        why: {
+          en: "An LLM call on its own only maps text to text — it can't act, remember, or decide when to stop. The harness is what supplies all of that. Naming it matters because this whole app *is* a harness: the Agent station you drill into is the harness made visible, with each part shown as its own panel.",
+          pt: "Uma chamada de LLM sozinha só mapeia texto para texto — não age, não lembra e não decide quando parar. O harness é o que fornece tudo isso. Nomeá-lo importa porque todo este app *é* um harness: a station do Agente que você abre é o harness tornado visível, com cada parte mostrada em seu próprio painel.",
+        },
+        how: {
+          en: "Here the harness is a bounded LangGraph state machine: route → think ⇄ tools → generate → respond. `think` asks the model to either answer or emit tool calls; the runtime executes each tool, appends the observation as a message, and loops back — capped by MAX_ITERATIONS. Around that loop it assembles the system prompt in layers (guardrails + role + skills + identity), packs the context window, and reads recent turns from the database as long-term memory. The deployment tier ('Agent Tier' / Compute (private)) is just *where* this harness runs; the harness is *what* it is.",
+          pt: "Aqui o harness é uma máquina de estados LangGraph limitada: route → think ⇄ tools → generate → respond. O `think` pede ao modelo para responder ou emitir chamadas de ferramenta; o runtime executa cada ferramenta, anexa a observação como mensagem e volta ao loop — limitado por MAX_ITERATIONS. Em volta do loop ele monta o system prompt em camadas (guardrails + papel + skills + identidade), empacota a janela de contexto e lê os turnos recentes do banco como memória de longo prazo. O tier de deployment ('Agent Tier' / Compute (privado)) é só *onde* esse harness roda; o harness é *o que* ele é.",
+        },
+        options: {
+          en: "Alternatives differ in how much the harness gives you: a hand-rolled SDK loop (full control, most glue code), OpenAI's Assistants/Agents SDK or LangChain AgentExecutor (batteries-included), LangGraph (explicit, inspectable graph — used here), or higher-level frameworks like CrewAI and DeepAgents that add planning and sub-agents on top.",
+          pt: "As alternativas diferem em quanto o harness entrega: um loop feito à mão com o SDK (controle total, mais código de cola), o Assistants/Agents SDK da OpenAI ou o AgentExecutor do LangChain (baterias inclusas), o LangGraph (grafo explícito e inspecionável — usado aqui), ou frameworks de nível mais alto como CrewAI e DeepAgents que adicionam planejamento e subagentes por cima.",
+        },
+        cloudRef: "agent",
+        links: [
+          { label: "LangGraph — agent runtimes", url: "https://langchain-ai.github.io/langgraph/" },
+        ],
+        where: "backend/app/agent/graph.py",
+      },
+      {
         id: "tool-calling",
         title: { en: "Tool calling & MCP", pt: "Chamada de ferramentas e MCP" },
         what: {

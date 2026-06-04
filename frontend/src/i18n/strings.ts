@@ -391,6 +391,9 @@ export interface Strings {
   agentDetail: {
     title: string;
     subtitle: string;
+    // 053-agent-harness — names the runtime (loop + tools + prompt + context +
+    // memory) as an "Agent Harness"; tagged with the glossary term for a tooltip.
+    harness: string;
     back: string;
     waiting: string;
     reactLoop: string;
@@ -879,6 +882,8 @@ const en: Strings = {
     "TLS 1.3": "TLS 1.3 — the encryption that secures HTTPS between the browser and the server.",
     ASGI: "ASGI — the asynchronous Python web-server interface FastAPI runs on.",
     ReAct: "ReAct — the reason → act → observe loop the agent repeats until it can answer.",
+    "Agent Harness":
+      "Agent Harness — the runtime scaffolding around an LLM that makes it an agent: the reasoning loop, tool calling, layered prompt assembly, the context window and memory.",
     DeepAgents:
       "DeepAgents — a LangGraph agent pattern adding planning, sub-agents, and a virtual file system for longer-horizon tasks. (Planned — not yet implemented.)",
     "Multi-agent":
@@ -1046,6 +1051,7 @@ const en: Strings = {
   agentDetail: {
     title: "Agent — anatomy",
     subtitle: "The anatomy of an AI agent: a brain (the LLM), memory, and tools",
+    harness: "Agent Harness — the loop, tools, prompt layers, context window and memory wrapped around the LLM.",
     back: "Back to canvas",
     waiting: "Send a message to watch the agent reason, remember and act.",
     reactLoop: "ReAct loop",
@@ -1522,6 +1528,8 @@ const pt: Strings = {
     "TLS 1.3": "TLS 1.3 — a criptografia que protege o HTTPS entre o navegador e o servidor.",
     ASGI: "ASGI — a interface assíncrona de servidor web Python sobre a qual o FastAPI roda.",
     ReAct: "ReAct — o loop raciocinar → agir → observar que o agente repete até poder responder.",
+    "Agent Harness":
+      "Agent Harness — o arcabouço de runtime em volta de um LLM que o torna um agente: o loop de raciocínio, a chamada de ferramentas, a montagem do prompt em camadas, a janela de contexto e a memória.",
     DeepAgents:
       "DeepAgents — um padrão de agente LangGraph que adiciona planejamento, subagentes e um sistema de arquivos virtual para tarefas de horizonte mais longo. (Planejado — ainda não implementado.)",
     "Multi-agent":
@@ -1689,6 +1697,7 @@ const pt: Strings = {
   agentDetail: {
     title: "Agente — anatomia",
     subtitle: "A anatomia de um agente de IA: um cérebro (a LLM), memória e ferramentas",
+    harness: "Agent Harness — o loop, as ferramentas, as camadas de prompt, a janela de contexto e a memória em volta da LLM.",
     back: "Voltar ao canvas",
     waiting: "Envie uma mensagem para ver o agente raciocinar, lembrar e agir.",
     reactLoop: "Loop ReAct",

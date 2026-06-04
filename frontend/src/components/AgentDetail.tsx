@@ -185,6 +185,14 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
         <div>
           <div className="text-[15px] font-semibold text-[var(--color-ink)]">{a.title}</div>
           <div className="text-[11px] text-[var(--color-muted)]">{a.subtitle}</div>
+          {/* 053-agent-harness — name the runtime (loop+tools+prompt+context+memory)
+              as an "Agent Harness"; glossary tooltip on hover (canvas convention). */}
+          <div
+            title={t.glossary["Agent Harness"]}
+            className="mt-1 inline-block cursor-help rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-faint)]"
+          >
+            {a.harness}
+          </div>
         </div>
       </div>
 

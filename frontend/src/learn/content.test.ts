@@ -32,6 +32,7 @@ const REQUIRED_TOPIC_IDS = [
   "rag",
   "chunking",
   "agents-react",
+  "agent-harness",
   "tool-calling",
   "agent-memory",
   "context-window",
