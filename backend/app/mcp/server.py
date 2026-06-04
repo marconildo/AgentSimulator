@@ -117,9 +117,11 @@ WEB_SEARCH_TOOL = "web_search"
 # Functional description sent to the model (English, like the other tools).
 WEB_SEARCH_DESCRIPTION = (
     "Search the live internet for current or external information and return a short "
-    "synthesized answer plus the top sources (title, URL, snippet). Use this when the "
-    "knowledge base is unlikely to cover the question (recent events, specific facts, "
-    "documentation, prices) — pass a focused natural-language `query`."
+    "synthesized answer plus the top sources (title, URL, snippet). This is the right "
+    "tool for ANY question outside AI engineering — real-world facts, current events, "
+    "news, sports, people, prices, specific documentation. Prefer it over "
+    "`search_knowledge_base` whenever the question is not about LLMs, embeddings, RAG, "
+    "agents, MCP, or prompting. Pass a focused natural-language `query`."
 )
 
 # How many sources to fold into the model's observation.
@@ -236,8 +238,10 @@ def load_skill(name: str) -> str:
 def web_search(query: str) -> str:
     """Search the live internet and return a synthesized answer plus top sources.
 
-    Use this when the knowledge base is unlikely to cover the question (recent
-    events, specific facts, documentation, prices). Pass a focused natural-language
+    This is the right tool for ANY question outside AI engineering — real-world
+    facts, current events, news, sports, people, prices, specific documentation.
+    Prefer it over `search_knowledge_base` whenever the question is not about LLMs,
+    embeddings, RAG, agents, MCP, or prompting. Pass a focused natural-language
     `query`.
     """
     return _web_search(query)

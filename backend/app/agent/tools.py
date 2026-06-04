@@ -26,9 +26,20 @@ from ..mcp.client import ToolRegistry
 RETRIEVAL_TOOL = "search_knowledge_base"
 
 # Functional description sent to the model (English, like the MCP descriptions).
+# Scoped to the corpus's actual subject so the model does not treat it as a
+# general search engine: the RAG retriever always returns the nearest top-k
+# (it never comes back empty), so a vague description invites off-domain calls
+# that surface irrelevant passages. Off-domain / current-events questions must
+# go to `web_search` instead.
 RETRIEVAL_DESCRIPTION = (
-    "Search the knowledge base (vector RAG) for passages relevant to a query. "
-    "Use this to ground answers about concepts, definitions, or documented topics."
+    "Search the curated AI-engineering documentation corpus (vector RAG). It covers "
+    "ONLY these topics: large language models and tokens, embeddings and vector search, "
+    "retrieval-augmented generation (RAG), AI agents and the ReAct loop, the Model "
+    "Context Protocol (MCP), and prompt engineering — plus any documents the user has "
+    "uploaded. Use it to ground answers about those subjects. Do NOT use it for "
+    "real-world facts, current events, news, sports, people, prices, or anything outside "
+    "AI engineering — for those, use `web_search`. This corpus always returns its "
+    "closest passages even when nothing is truly relevant, so only call it on-topic."
 )
 
 RETRIEVAL_SCHEMA = {
