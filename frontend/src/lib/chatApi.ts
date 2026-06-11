@@ -228,6 +228,9 @@ export interface AppConfig {
   default_top_k: number;
   top_k_min: number;
   top_k_max: number;
+  // 055-rerank-score-threshold — the min rerank-score slider (Intermediate rung).
+  default_rerank_threshold: number;
+  rerank_threshold_step: number;
   tools: { name: string; description: string }[];
   // 008-scenario-framework: the maturity ladder, so the switcher prefills here.
   scenarios: ScenarioInfo[];

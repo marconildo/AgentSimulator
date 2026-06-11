@@ -21,11 +21,15 @@ export interface ConvExperiment {
   topK: number | null; // null = backend default top-k
   // 017-failure-injection — force a failure on the next run; "none" = unchanged.
   simulateFailure: string; // "none" | "tool_error" | "llm_timeout"
+  // 055-rerank-score-threshold — minimum rerank score (Intermediate); null/0 = no
+  // filter. The reranker drops kept chunks scoring below this before the prompt.
+  rerankThreshold: number | null;
 }
 
 export const DEFAULT_EXPERIMENT: ConvExperiment = {
   topK: null,
   simulateFailure: "none",
+  rerankThreshold: null,
 };
 
 // Draft conversations (not yet persisted) park their settings here until
@@ -41,6 +45,7 @@ interface ExperimentState {
   getFor: (conv: string | null) => ConvExperiment;
   setTopK: (conv: string | null, value: number | null) => void;
   setSimulateFailure: (conv: string | null, value: string) => void;
+  setRerankThreshold: (conv: string | null, value: number | null) => void;
   reset: (conv: string | null) => void;
   adopt: (from: string | null, to: string) => void;
 }
@@ -62,6 +67,13 @@ export const useExperiment = create<ExperimentState>((set, get) => ({
       const key = keyOf(conv);
       const cur = s.byConv[key] ?? DEFAULT_EXPERIMENT;
       return { byConv: { ...s.byConv, [key]: { ...cur, simulateFailure: value } } };
+    }),
+
+  setRerankThreshold: (conv, value) =>
+    set((s) => {
+      const key = keyOf(conv);
+      const cur = s.byConv[key] ?? DEFAULT_EXPERIMENT;
+      return { byConv: { ...s.byConv, [key]: { ...cur, rerankThreshold: value } } };
     }),
 
   reset: (conv) =>
@@ -93,6 +105,9 @@ export const useExperiment = create<ExperimentState>((set, get) => ({
 export interface ChatOverrides {
   top_k?: number;
   simulate_failure?: string;
+  // 055-rerank-score-threshold — sent only when raised above 0 (an untouched run
+  // sends nothing extra; 0 = no filter = today's behavior).
+  rerank_threshold?: number;
   // 008-scenario-framework / 054-rag-block-expansion: the active maturity-ladder
   // rung. Global (not per-conversation, so it reads from `useScenario`, not the
   // experiment store). Sent only when away from `simple` so an untouched run still
@@ -106,6 +121,7 @@ export function overridesFor(conv: string | null): ChatOverrides {
   const out: ChatOverrides = {};
   if (e.topK !== null) out.top_k = e.topK;
   if (e.simulateFailure && e.simulateFailure !== "none") out.simulate_failure = e.simulateFailure;
+  if (e.rerankThreshold && e.rerankThreshold > 0) out.rerank_threshold = e.rerankThreshold;
   const scenario = useScenario.getState().scenario;
   if (scenario !== "simple") out.scenario = scenario;
   return out;

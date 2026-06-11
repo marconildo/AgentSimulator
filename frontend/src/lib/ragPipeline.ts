@@ -122,21 +122,25 @@ export function deriveRagPipeline(
       : { query },
   };
 
-  // 3 — Retrieval (vector search + selected chunks).
+  // 3 — Retrieval (vector search). Shows the FULL candidate pool the search found
+  // (fetch_k wide on Intermediate); the reranker then trims to top-k. `kept` is how
+  // many survive into the prompt, so the UI can say "10 candidates · top 4 kept".
   const search = lastEnd("rag.search");
   const retrieve = lastEnd("rag.retrieve");
-  const chunks = (retrieve?.data.chunks as PipelineChunk[]) ?? [];
+  const pool = (search?.data.chunks as PipelineChunk[]) ?? [];
+  const kept = (retrieve?.data.chunks as PipelineChunk[])?.length ?? pool.length;
   const retrieval: RagStage = {
     id: "retrieval",
     status: status(["rag.search", "rag.retrieve"]),
     data: {
       metric: search?.data.metric,
       k: search?.data.k,
-      candidates: search?.data.candidates,
-      count: chunks.length,
-      chunks,
+      candidates: search?.data.candidates ?? pool.length,
+      count: pool.length,
+      kept,
+      chunks: pool,
       query,
-      top: chunks[0] ? { source: chunks[0].source, score: chunks[0].score } : undefined,
+      top: pool[0] ? { source: pool[0].source, score: pool[0].score } : undefined,
     },
   };
 
@@ -152,6 +156,8 @@ export function deriveRagPipeline(
           model: rerank.data.model,
           k: rerank.data.k,
           fetch_k: rerank.data.fetch_k,
+          // 055 — the min-score threshold; a kept chunk below it is dropped.
+          threshold: rerank.data.threshold,
           movement,
         }
       : {},

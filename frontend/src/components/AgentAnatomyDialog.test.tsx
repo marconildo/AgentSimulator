@@ -16,6 +16,8 @@ vi.mock("../lib/chatApi", () => {
     default_top_k: 4,
     top_k_min: 1,
     top_k_max: 8,
+    default_rerank_threshold: 0,
+    rerank_threshold_step: 0.05,
     tools: [
       { name: "calculator", description: "math" },
       { name: "current_time", description: "time" },

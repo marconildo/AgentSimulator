@@ -50,6 +50,27 @@ def test_chat_request_accepts_optional_model():
     assert req.model == "gpt-4o-mini"
 
 
+def test_chat_request_rerank_threshold_bounds():
+    """055 AC1 — ``rerank_threshold`` is optional, bounded 0..1; None = no filter."""
+    assert ChatRequest(message="hi").rerank_threshold is None
+    assert ChatRequest(message="hi", rerank_threshold=0).rerank_threshold == 0
+    assert ChatRequest(message="hi", rerank_threshold=0.35).rerank_threshold == 0.35
+    for bad in (-0.1, 1.5):
+        try:
+            ChatRequest(message="hi", rerank_threshold=bad)
+        except Exception:
+            pass
+        else:
+            raise AssertionError(f"rerank_threshold {bad} should be rejected (0..1)")
+
+
+def test_chat_rejects_out_of_range_rerank_threshold_over_http():
+    """055 AC1 — the API surfaces the same bound as a 422."""
+    with TestClient(app) as client:
+        resp = client.post("/api/chat", json={"message": "hi", "rerank_threshold": 2})
+        assert resp.status_code == 422
+
+
 def test_chat_omits_model_uses_server_default():
     """AC2 — omitting ``model`` keeps today's behavior (settings.llm_model
     is used). We assert by intercepting the request body the backend echoes."""

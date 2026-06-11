@@ -73,6 +73,21 @@ describe("useExperiment", () => {
     });
   });
 
+  // 055-rerank-score-threshold — per-conversation min rerank score; sent only when raised.
+  describe("rerankThreshold (055)", () => {
+    it("omits the field by default and at 0 (no filtering, today's behavior)", () => {
+      expect(overridesFor("a").rerank_threshold).toBeUndefined();
+      useExperiment.getState().setRerankThreshold("a", 0);
+      expect(overridesFor("a").rerank_threshold).toBeUndefined();
+    });
+
+    it("sends rerank_threshold once raised above 0, isolated per conversation", () => {
+      useExperiment.getState().setRerankThreshold("a", 0.35);
+      expect(overridesFor("a").rerank_threshold).toBe(0.35);
+      expect(overridesFor("b").rerank_threshold).toBeUndefined();
+    });
+  });
+
   // 017-failure-injection — the per-conversation failure selector.
   describe("simulateFailure", () => {
     it("defaults to none and omits the field from overrides (AC1)", () => {

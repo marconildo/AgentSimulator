@@ -389,6 +389,7 @@ async def _run_retrieval_tool(
         emitter,
         session_id=state["session_id"],
         scenario=state["scenario"],
+        rerank_threshold=state["rerank_threshold"],
     )
     observation = context or "(no relevant passages found in the knowledge base)"
     return observation, context, chunks
@@ -542,6 +543,7 @@ async def run_agent_state(
     model: str | None = None,
     agent_name: str | None = None,
     agent_description: str | None = None,
+    rerank_threshold: float = 0.0,
 ) -> AgentState:
     """Run the agent for one message and return the final graph state.
 
@@ -556,6 +558,7 @@ async def run_agent_state(
         "message": message,
         "session_id": session_id,
         "top_k": top_k,
+        "rerank_threshold": rerank_threshold,
         "mode": mode,
         "system_prompt": system_prompt,
         "agent_prompt": agent_prompt,
@@ -597,6 +600,7 @@ async def run_agent(
     model: str | None = None,
     agent_name: str | None = None,
     agent_description: str | None = None,
+    rerank_threshold: float = 0.0,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -636,5 +640,6 @@ async def run_agent(
         model=model,
         agent_name=agent_name,
         agent_description=agent_description,
+        rerank_threshold=rerank_threshold,
     )
     return final_state["answer"]

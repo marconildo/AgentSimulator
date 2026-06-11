@@ -142,6 +142,7 @@ export interface Strings {
     rerankModel: string;
     rerankScore: string;
     rerankKept: string;
+    rerankBelowThreshold: string; // 055 — a top-k chunk dropped by the score threshold
     // PDF ingestion (002-interactive-chat).
     ingestion: string;
     chunkStrategy: string;
@@ -252,6 +253,8 @@ export interface Strings {
       toolsDisambig: string;
       topK: string;
       topKHint: string;
+      rerankThreshold: string;
+      rerankThresholdHint: string;
       // Friendly per-tool labels, keyed by MCP tool name.
       toolLabels: Record<string, string>;
       // 017-failure-injection — the "Simulate failure" selector + its options,
@@ -502,7 +505,7 @@ export interface Strings {
     // Per-stage detail view (054 amendment 3) — clicking a card drills in.
     inputLabel: string;
     tokensLabel: string;
-    vectorLabel: (dim: number) => string;
+    vectorLabel: (shown: number, dim: number) => string;
     tokenizerNote: string;
     vectorSearch: string;
     cosineFormula: string;
@@ -513,6 +516,14 @@ export interface Strings {
     showingOf: (shown: number, total: number) => string;
     clickHint: string;
     noRetrieval: string;
+    zoomHint: string;
+    resetView: string;
+    chunkNote: string;
+    vizNote: string;
+    legend: string;
+    queryLabel: string;
+    keptNote: (candidates: number, kept: number) => string;
+    thresholdLabel: string;
   };
   // 019-inline-citations — provenance chips on the settled answer. Chrome only;
   // tool args / chunk snippets / proper nouns stay verbatim (not translated).
@@ -776,6 +787,7 @@ const en: Strings = {
     rerankModel: "reranker model",
     rerankScore: "rerank score",
     rerankKept: "kept",
+    rerankBelowThreshold: "below threshold",
     ingestion: "PDF ingestion",
     chunkStrategy: "chunking strategy",
     chunkSize: "size / overlap",
@@ -878,6 +890,9 @@ const en: Strings = {
         "Knowledge base search is full vector retrieval over the corpus and your PDFs; Glossary lookup is a tiny canned term list. Any tool can be turned off — disabling Knowledge base search makes the run ungrounded (LLM-only).",
       topK: "Retrieved chunks (top-k)",
       topKHint: "How many chunks RAG pulls per query.",
+      rerankThreshold: "Rerank score threshold",
+      rerankThresholdHint:
+        "Intermediate only: drop chunks the reranker scored below this — fewer but cleaner grounding (0 = off).",
       toolLabels: {
         search_knowledge_base: "Knowledge base search",
         calculator: "Calculator",
@@ -1314,7 +1329,7 @@ const en: Strings = {
     close: "Close",
     inputLabel: "Input text",
     tokensLabel: "Tokens",
-    vectorLabel: (dim) => `Embedding vector (first 8 of ${dim})`,
+    vectorLabel: (shown, dim) => `Embedding vector (first ${shown} of ${dim} dims)`,
     tokenizerNote: "tiktoken · o200k_base",
     vectorSearch: "Vector search · cosine similarity",
     cosineFormula: "cos(θ) = (q·d)/(|q||d|) = similarity = 1 − distance",
@@ -1325,6 +1340,17 @@ const en: Strings = {
     showingOf: (shown, total) => `showing ${shown} of ${total}`,
     clickHint: "Click a stage to inspect it",
     noRetrieval: "This turn didn't use the knowledge base — the agent answered without retrieval.",
+    zoomHint: "scroll to zoom · drag to pan",
+    resetView: "reset",
+    chunkNote:
+      "Each point is one chunk (≈900 chars) embedded as a single vector — the label is its source file, so several chunks can share one file.",
+    vizNote:
+      "Vectors are unit-length (cosine ignores magnitude); only the angle to q matters — the wider the angle, the less similar. A 2-D illustration of a 1536-D space.",
+    legend: "q = your query embedding · colored vectors = candidate chunks (green = closest)",
+    queryLabel: "q · query",
+    keptNote: (candidates, kept) =>
+      `${candidates} candidates found — the reranker trims to the top ${kept} for the prompt.`,
+    thresholdLabel: "score threshold",
   },
 };
 
@@ -1467,6 +1493,7 @@ const pt: Strings = {
     rerankModel: "modelo do reranker",
     rerankScore: "score do rerank",
     rerankKept: "mantido",
+    rerankBelowThreshold: "abaixo do limiar",
     ingestion: "Ingestão de PDF",
     chunkStrategy: "estratégia de chunking",
     chunkSize: "tamanho / sobreposição",
@@ -1569,6 +1596,9 @@ const pt: Strings = {
         "A Busca na base de conhecimento é recuperação vetorial completa sobre o corpus e seus PDFs; a Consulta ao glossário é uma lista enlatada de termos. Qualquer tool pode ser desligada — desligar a Busca na base de conhecimento deixa a execução sem fundamentação (só o LLM).",
       topK: "Trechos recuperados (top-k)",
       topKHint: "Quantos trechos o RAG busca por consulta.",
+      rerankThreshold: "Limiar de score do rerank",
+      rerankThresholdHint:
+        "Só no Intermediário: descarta chunks com score abaixo disso — fundamentação menor, porém mais limpa (0 = desligado).",
       toolLabels: {
         search_knowledge_base: "Busca na base de conhecimento",
         calculator: "Calculadora",
@@ -2006,7 +2036,7 @@ const pt: Strings = {
     close: "Fechar",
     inputLabel: "Texto de entrada",
     tokensLabel: "Tokens",
-    vectorLabel: (dim) => `Vetor de embedding (8 de ${dim})`,
+    vectorLabel: (shown, dim) => `Vetor de embedding (primeiras ${shown} de ${dim} dims)`,
     tokenizerNote: "tiktoken · o200k_base",
     vectorSearch: "Busca vetorial · similaridade de cosseno",
     cosineFormula: "cos(θ) = (q·d)/(|q||d|) = similaridade = 1 − distância",
@@ -2017,6 +2047,17 @@ const pt: Strings = {
     showingOf: (shown, total) => `mostrando ${shown} de ${total}`,
     clickHint: "Clique numa etapa para inspecioná-la",
     noRetrieval: "Este turno não usou a base de conhecimento — o agente respondeu sem recuperação.",
+    zoomHint: "role para dar zoom · arraste para mover",
+    resetView: "resetar",
+    chunkNote:
+      "Cada ponto é um chunk (≈900 chars) embeddado como um único vetor — o rótulo é o arquivo de origem, então vários chunks podem compartilhar o mesmo arquivo.",
+    vizNote:
+      "Os vetores têm comprimento unitário (o cosseno ignora a magnitude); só o ângulo até q importa — quanto maior o ângulo, menos similar. Uma ilustração 2-D de um espaço de 1536-D.",
+    legend: "q = o embedding da sua pergunta · vetores coloridos = chunks candidatos (verde = mais próximo)",
+    queryLabel: "q · query",
+    keptNote: (candidates, kept) =>
+      `${candidates} candidatos encontrados — o reranker corta para os top ${kept} no prompt.`,
+    thresholdLabel: "limiar de score",
   },
 };
 

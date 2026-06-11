@@ -31,9 +31,11 @@ export function SettingsExperiment() {
   }, [config]);
 
   const topK = exp.topK ?? config?.default_top_k ?? 4;
+  const rerankThreshold = exp.rerankThreshold ?? config?.default_rerank_threshold ?? 0;
   const failureModes = config?.failure_modes ?? ["none"];
   const simulateFailure = exp.simulateFailure ?? "none";
-  const dirty = exp.topK !== null || simulateFailure !== "none";
+  const dirty =
+    exp.topK !== null || simulateFailure !== "none" || (exp.rerankThreshold ?? 0) > 0;
 
   return (
     <section>
@@ -75,11 +77,32 @@ export function SettingsExperiment() {
       <p className="mb-1.5 text-[10.5px] leading-snug text-[var(--color-muted)]">{ex.topKHint}</p>
       <input
         type="range"
+        aria-label={ex.topK}
         min={config?.top_k_min ?? 1}
         max={config?.top_k_max ?? 8}
         value={topK}
         disabled={!config}
         onChange={(e) => exp_.setTopK(conv, Number(e.target.value))}
+        className="w-full accent-[var(--color-accent)]"
+      />
+
+      {/* 055-rerank-score-threshold — min rerank score (Intermediate rung). */}
+      <div className="mt-3 mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--color-ink)]">
+        <span>{ex.rerankThreshold}</span>
+        <span className="font-mono text-[var(--color-indigo-soft)]">{rerankThreshold.toFixed(2)}</span>
+      </div>
+      <p className="mb-1.5 text-[10.5px] leading-snug text-[var(--color-muted)]">
+        {ex.rerankThresholdHint}
+      </p>
+      <input
+        type="range"
+        aria-label={ex.rerankThreshold}
+        min={0}
+        max={1}
+        step={config?.rerank_threshold_step ?? 0.05}
+        value={rerankThreshold}
+        disabled={!config}
+        onChange={(e) => exp_.setRerankThreshold(conv, Number(e.target.value))}
         className="w-full accent-[var(--color-accent)]"
       />
 

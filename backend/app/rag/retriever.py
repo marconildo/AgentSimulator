@@ -84,6 +84,7 @@ async def retrieve(
     session_id: str | None = None,
     *,
     scenario: str = "simple",
+    rerank_threshold: float = 0.0,
 ) -> tuple[str, list[dict[str, Any]]]:
     store = get_vectorstore()
     where = _scope_filter(session_id)
@@ -101,32 +102,44 @@ async def retrieve(
         rec.data = {
             "model": embedding_model_name(),
             "dim": len(query_vec),
-            "preview": [round(float(x), 4) for x in query_vec[:8]],
+            # A slice of the real query vector for the Embedding drill-in's vector
+            # strip (054). 64 dims is enough to look like a vector without shipping
+            # all 1536; the UI shows the first ~12 as numbers + a heatmap strip.
+            "preview": [round(float(x), 4) for x in query_vec[:64]],
         }
         rec.metrics["dim"] = float(len(query_vec))
 
     async with emitter.stage(Stage.RAG_SEARCH, "Searching the vector store") as rec:
         # Re-embeds the query internally; fine for a small-k educational demo.
         results = _search_with_recovery(query, k=fetch_k, where=where)
+        # Chroma returns results sorted by ascending distance, so the enumeration
+        # index is a stable pre-rerank rank (1-based).
+        candidates = [
+            _to_chunk(doc, dist, rank) for rank, (doc, dist) in enumerate(results, start=1)
+        ]
         rec.data = {
             "metric": "cosine",
             "k": fetch_k,
             "candidates": len(results),
             "scope": "corpus + this conversation's uploads" if session_id else "corpus",
+            # The full candidate pool the vector search found (fetch_k wide on the
+            # Intermediate rung). The Retrieval drill-in shows these; the reranker
+            # then trims to top-k (054). On Simple this pool IS the returned top-k.
+            "chunks": candidates,
         }
-
-    # Chroma returns results sorted by ascending distance, so the enumeration index is
-    # a stable pre-rerank rank (1-based).
-    candidates = [_to_chunk(doc, dist, rank) for rank, (doc, dist) in enumerate(results, start=1)]
 
     if rerank_on:
         async with emitter.stage(Stage.RAG_RERANK, "Reranking candidates") as rec:
             result = rerank(query, candidates, top_k=k)
-            selected = result.ranked
+            # 055-rerank-score-threshold: after trimming to top-k, drop chunks whose
+            # cross-encoder score is below the threshold — precision over recall, so a
+            # clearly-irrelevant chunk never reaches the prompt. `0` filters nothing.
+            selected = [c for c in result.ranked if c["rerank_score"] >= rerank_threshold]
             rec.data = {
                 "model": settings.rerank_model,
                 "k": k,
                 "fetch_k": fetch_k,
+                "threshold": rerank_threshold,
                 # Per-candidate rank movement (prev_rank → new_rank + score) for the
                 # inspector's before/after view.
                 "candidates": result.movement,

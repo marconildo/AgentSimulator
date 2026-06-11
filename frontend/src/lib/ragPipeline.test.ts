@@ -19,7 +19,16 @@ function log(): TraceEvent[] {
     ev("rag.embed", "start"),
     ev("rag.embed", "end", { model: "text-embedding-3-small", dim: 1536 }),
     ev("rag.search", "start"),
-    ev("rag.search", "end", { metric: "cosine", k: 10, candidates: 10 }),
+    ev("rag.search", "end", {
+      metric: "cosine",
+      k: 10,
+      candidates: 10,
+      // The wider candidate pool the vector search found (rerank trims it to top-k).
+      chunks: [
+        { source: "rag.md", score: 0.88, similarity: 0.88 },
+        { source: "agents.md", score: 0.41, similarity: 0.41 },
+      ],
+    }),
     ev("rag.rerank", "start"),
     ev("rag.rerank", "end", {
       model: "ms-marco-MiniLM-L-12-v2",
@@ -70,6 +79,16 @@ describe("deriveRagPipeline (054)", () => {
     expect(s.augmented.status).toBe("pending");
   });
 
+  it("carries the rerank score threshold onto the rerank stage (055)", () => {
+    const events = log().map((e) =>
+      e.stage === "rag.rerank" && e.phase === "end"
+        ? { ...e, data: { ...e.data, threshold: 0.3 } }
+        : e,
+    );
+    const p = deriveRagPipeline(events, events.length - 1, "intermediate");
+    expect(byId(p).rerank.data.threshold).toBe(0.3);
+  });
+
   it("shows rerank as inactive on the Simple rung (it's an Intermediate upgrade)", () => {
     // A Simple run never emits rag.rerank.
     const simple = log().filter((e) => e.stage !== "rag.rerank");
@@ -93,8 +112,11 @@ describe("deriveRagPipeline (054)", () => {
     const p = deriveRagPipeline(events, events.length - 1, "intermediate");
     const s = byId(p);
     expect(s.embedding.data.query).toBe("why does chunk size matter?");
+    // Retrieval shows the full candidate POOL (from rag.search), not the trimmed set.
     expect(Array.isArray(s.retrieval.data.chunks)).toBe(true);
-    expect((s.retrieval.data.chunks as unknown[]).length).toBe(1);
+    expect((s.retrieval.data.chunks as unknown[]).length).toBe(2);
+    // `kept` is how many survive the rerank into the prompt (rag.retrieve count).
+    expect(s.retrieval.data.kept).toBe(1);
     expect(s.augmented.data.context).toContain("rag.md");
   });
 

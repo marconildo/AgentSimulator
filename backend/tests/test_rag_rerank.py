@@ -91,6 +91,45 @@ async def test_rerank_end_carries_movement_and_reorders_to_top_k():
     assert chunks[0]["text"] in context
 
 
+async def test_rerank_threshold_drops_below_score_chunks():
+    # 055 AC2/AC4 — a high rerank-score threshold keeps only chunks at/above it; the
+    # rag.rerank END records the threshold, and the grounding holds only survivors.
+    (context, chunks), events = await _collect(
+        lambda em: rag_retrieve(_Q, 4, em, scenario="intermediate", rerank_threshold=0.5)
+    )
+    rerank_end = next(e for e in events if e.stage == "rag.rerank" and e.phase == "end")
+    assert rerank_end.data["threshold"] == 0.5
+    assert len(chunks) <= 4
+    for c in chunks:
+        assert c["rerank_score"] >= 0.5
+    # The grounding context is built only from the surviving chunks.
+    assert isinstance(context, str)
+
+
+async def test_rerank_threshold_near_one_completes_without_crash():
+    # 055 AC3 — an aggressive threshold may drop (almost) everything; the call still
+    # returns cleanly with a (possibly empty) context.
+    (context, chunks), _events = await _collect(
+        lambda em: rag_retrieve(_Q, 4, em, scenario="intermediate", rerank_threshold=0.99)
+    )
+    assert isinstance(context, str)
+    for c in chunks:
+        assert c["rerank_score"] >= 0.99
+
+
+async def test_rerank_threshold_zero_keeps_full_top_k():
+    # 055 AC2/AC7 — threshold 0 (and the default) filter nothing: the kept set equals
+    # 054's top-k, byte-for-byte.
+    (_c0, chunks0), _ = await _collect(
+        lambda em: rag_retrieve(_Q, 4, em, scenario="intermediate", rerank_threshold=0.0)
+    )
+    (_cd, chunks_default), _ = await _collect(
+        lambda em: rag_retrieve(_Q, 4, em, scenario="intermediate")
+    )
+    assert len(chunks0) == len(chunks_default)
+    assert len(chunks0) == 4
+
+
 async def test_agent_intermediate_run_emits_rerank_stage():
     # AC1 (integration) — a full agent run on the Intermediate rung that retrieves
     # surfaces the rag.rerank stage; the same run on Simple never does.

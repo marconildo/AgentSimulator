@@ -384,6 +384,7 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
       const rerank = pick(events, "rag.rerank", "end");
       const movement = (rerank?.data.candidates as RerankMove[]) ?? [];
       const rerankK = (rerank?.data.k as number | undefined) ?? movement.length;
+      const rerankThreshold = (rerank?.data.threshold as number | undefined) ?? 0;
       return (
         <>
           {embed && (
@@ -391,7 +392,9 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
               <KeyVal k={i.model} v={String(embed.data.model ?? "—")} />
               <KeyVal k={i.dimensions} v={String(embed.data.dim ?? "—")} />
               {Array.isArray(embed.data.preview) && (
-                <Mono>[{(embed.data.preview as number[]).map((n) => n.toFixed(3)).join(", ")}, …]</Mono>
+                <Mono>
+                  [{(embed.data.preview as number[]).slice(0, 8).map((n) => n.toFixed(3)).join(", ")}, …]
+                </Mono>
               )}
             </Section>
           )}
@@ -399,7 +402,7 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
             <Section title={i.rerankMovement(movement.length)}>
               <KeyVal k={i.rerankModel} v={String(rerank.data.model ?? "—")} />
               <div className="mt-2">
-                <RerankMovementList movement={movement} k={rerankK} i={i} />
+                <RerankMovementList movement={movement} k={rerankK} i={i} threshold={rerankThreshold} />
               </div>
             </Section>
           )}
@@ -599,23 +602,32 @@ export function RerankMovementList({
   movement,
   k,
   i,
+  threshold = 0,
 }: {
   movement: RerankMove[];
   k: number;
   i: I;
+  // 055-rerank-score-threshold — a top-k chunk scoring below this is dropped, not kept.
+  threshold?: number;
 }) {
   const byNew = [...movement].sort((a, b) => a.new_rank - b.new_rank);
   return (
     <div className="space-y-1">
       {byNew.map((m, idx) => {
-        const kept = m.new_rank <= k;
+        const inTopK = m.new_rank <= k;
+        const belowThreshold = inTopK && m.score < threshold;
+        const kept = inTopK && !belowThreshold;
         const moved = m.new_rank - m.prev_rank;
         return (
           <div
             key={idx}
             className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1 text-[11px]"
             style={{
-              borderColor: kept ? "var(--color-ok)" : "var(--color-line)",
+              borderColor: kept
+                ? "var(--color-ok)"
+                : belowThreshold
+                  ? "var(--color-warn)"
+                  : "var(--color-line)",
               opacity: kept ? 1 : 0.6,
             }}
           >
@@ -639,8 +651,17 @@ export function RerankMovementList({
                   {i.rerankKept}
                 </span>
               )}
+              {belowThreshold && (
+                <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-warn)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-warn)]">
+                  {i.rerankBelowThreshold}
+                </span>
+              )}
             </div>
-            <span className="shrink-0 font-mono text-[var(--color-ok-soft)]" title={i.rerankScore}>
+            <span
+              className="shrink-0 font-mono"
+              style={{ color: belowThreshold ? "var(--color-warn)" : "var(--color-ok-soft)" }}
+              title={i.rerankScore}
+            >
               {m.score.toFixed(3)}
             </span>
           </div>

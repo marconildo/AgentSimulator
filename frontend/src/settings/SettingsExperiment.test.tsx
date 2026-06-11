@@ -14,6 +14,8 @@ vi.mock("../lib/chatApi", () => ({
     default_top_k: 3,
     top_k_min: 1,
     top_k_max: 8,
+    default_rerank_threshold: 0,
+    rerank_threshold_step: 0.05,
     tools: [
       { name: "calculator", description: "Math" },
       { name: "current_time", description: "Now" },
@@ -68,7 +70,7 @@ describe("SettingsExperiment — 043 shape", () => {
 
   it("the top-k slider still updates byConv[conv].topK (AC6d regression)", async () => {
     render(<SettingsExperiment />);
-    const range = (await screen.findByRole("slider")) as HTMLInputElement;
+    const range = (await screen.findByRole("slider", { name: /top-k/i })) as HTMLInputElement;
     setRange(range, 6);
     expect(useExperiment.getState().byConv[DRAFT_KEY]?.topK).toBe(6);
   });

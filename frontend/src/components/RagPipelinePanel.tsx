@@ -164,7 +164,7 @@ export function RagPipelinePanel() {
                 </div>
                 {/* The drilled-in detail of the selected stage (real data + an
                     illustration of the algorithm). Scrolls if it outgrows the panel. */}
-                <div className="mt-2 max-h-[360px] overflow-y-auto border-t border-[var(--color-line)] pt-2">
+                <div className="mt-2 max-h-[480px] overflow-y-auto border-t border-[var(--color-line)] pt-2">
                   <RagStageDetail stage={selected} />
                 </div>
               </>

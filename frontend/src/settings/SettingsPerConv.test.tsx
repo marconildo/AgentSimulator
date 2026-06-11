@@ -12,6 +12,8 @@ vi.mock("../lib/chatApi", () => ({
     default_top_k: 3,
     top_k_min: 1,
     top_k_max: 8,
+    default_rerank_threshold: 0,
+    rerank_threshold_step: 0.05,
     tools: [],
     scenarios: [],
     failure_modes: ["none"],
@@ -36,7 +38,7 @@ afterEach(() => {
 describe("SettingsExperiment — per-conversation scope (AC7)", () => {
   it("switching activeSessionId surfaces the new conversation's top-k", async () => {
     const { rerender } = render(<SettingsExperiment />);
-    const range = (await screen.findByRole("slider")) as HTMLInputElement;
+    const range = (await screen.findByRole("slider", { name: /top-k/i })) as HTMLInputElement;
 
     // Drag in c1.
     fireEvent.change(range, { target: { value: "7" } });
@@ -46,7 +48,7 @@ describe("SettingsExperiment — per-conversation scope (AC7)", () => {
     useChat.setState({ activeSessionId: "c2" });
     rerender(<SettingsExperiment />);
 
-    const range2 = (await screen.findByRole("slider")) as HTMLInputElement;
+    const range2 = (await screen.findByRole("slider", { name: /top-k/i })) as HTMLInputElement;
     expect(range2.value).toBe("3"); // server default top-k
     expect(useExperiment.getState().byConv.c2).toBeUndefined();
   });

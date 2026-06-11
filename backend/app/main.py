@@ -191,6 +191,9 @@ async def config() -> dict:
         "default_top_k": settings.rag_top_k,
         "top_k_min": 1,
         "top_k_max": 8,
+        # 055-rerank-score-threshold — the minimum rerank-score slider (Intermediate).
+        "default_rerank_threshold": settings.rerank_threshold_default,
+        "rerank_threshold_step": 0.05,
         # The full tool list the agent sees — knowledge-base retrieval plus the
         # MCP tools (026-agent-tool-autonomy) — so the experiment panel lists every
         # tool the agent can choose, not just the MCP ones.
@@ -227,6 +230,11 @@ async def chat(req: ChatRequest):
             },
         )
     top_k = req.top_k or settings.rag_top_k
+    # 055-rerank-score-threshold: explicit `is None` so a deliberate 0 from the FE
+    # isn't overridden by a (future) non-zero default.
+    rerank_threshold = (
+        settings.rerank_threshold_default if req.rerank_threshold is None else req.rerank_threshold
+    )
     trace_id = uuid.uuid4().hex
     emitter = TraceEmitter(trace_id, req.message)
 
@@ -281,6 +289,7 @@ async def chat(req: ChatRequest):
         "message": req.message,
         "session_id": session_id,
         "top_k": top_k,
+        "rerank_threshold": rerank_threshold,
         "mode": req.mode,
         "scenario": req.scenario.value,
         # 042-agent-anatomy: always echo the **resolved** model (override or
@@ -352,6 +361,7 @@ async def chat(req: ChatRequest):
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,
                     model=effective_model,
+                    rerank_threshold=rerank_threshold,
                     # 049-agent-self-identity: server-resolved from the bound
                     # agent row above; never a request override.
                     agent_name=effective_agent_name,

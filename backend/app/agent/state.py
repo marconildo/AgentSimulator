@@ -14,6 +14,9 @@ class AgentState(TypedDict):
     # plus this conversation's uploaded documents (None = corpus only).
     session_id: str | None
     top_k: int
+    # Minimum rerank-score threshold (055). 0 = no filtering. Only the Intermediate
+    # rung reranks, so this is a no-op on Simple.
+    rerank_threshold: float
     # Delivery mode ("stream" | "batch"); batch generates the answer in one shot.
     mode: str
     # Experiment overrides (006-interactive-experiments), request-only inputs:

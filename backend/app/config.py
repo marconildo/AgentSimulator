@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     rerank_model: str = "ms-marco-MiniLM-L-12-v2"
     rerank_cache_dir: str = "app/data/flashrank"
     rerank_fetch_k: int = 10
+    # 055-rerank-score-threshold: the default minimum rerank score (0 = no filter, the
+    # 054 behavior). The UI slider overrides it per conversation.
+    rerank_threshold_default: float = 0.0
 
     # --- Application database (relational system of record) ---
     app_db_path: str = "app/data/app.sqlite3"

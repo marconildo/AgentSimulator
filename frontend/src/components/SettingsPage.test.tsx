@@ -31,6 +31,8 @@ vi.mock("../lib/chatApi", () => ({
     default_top_k: 3,
     top_k_min: 1,
     top_k_max: 8,
+    default_rerank_threshold: 0,
+    rerank_threshold_step: 0.05,
     tools: [],
     scenarios: [],
     failure_modes: ["none"],

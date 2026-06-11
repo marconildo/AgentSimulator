@@ -154,6 +154,12 @@ class ChatRequest(BaseModel):
     # Lets the UI override RAG top-k for experimentation; bounded to the slider's
     # range (1..8). ``None`` = the configured default (``rag_top_k``).
     top_k: int | None = Field(default=None, ge=1, le=8)
+    # Minimum rerank-score threshold (055-rerank-score-threshold). After the
+    # Intermediate reranker trims to top-k, chunks scoring below this are dropped
+    # from the grounding context (precision over recall). Bounded 0..1; ``None`` or
+    # ``0`` = no filtering (054 behavior, byte-for-byte). Only the Intermediate rung
+    # reranks, so it is a no-op on Simple.
+    rerank_threshold: float | None = Field(default=None, ge=0, le=1)
     # Per-conversation OpenAI model override (042-agent-anatomy). The API
     # validates this against the curated allowlist (``app.llm.models``) and
     # returns 422 on an unlisted value, so the agent never sees an unvetted id.
