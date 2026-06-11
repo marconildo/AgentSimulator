@@ -127,8 +127,11 @@ export function deriveRagPipeline(
   // many survive into the prompt, so the UI can say "10 candidates · top 4 kept".
   const search = lastEnd("rag.search");
   const retrieve = lastEnd("rag.retrieve");
-  const pool = (search?.data.chunks as PipelineChunk[]) ?? [];
-  const kept = (retrieve?.data.chunks as PipelineChunk[])?.length ?? pool.length;
+  const retrieved = (retrieve?.data.chunks as PipelineChunk[]) ?? [];
+  // Prefer the wider candidate pool from rag.search; fall back to the retrieved
+  // (kept) chunks so the plot/list never go blank if the pool isn't present.
+  const pool = (search?.data.chunks as PipelineChunk[]) ?? retrieved;
+  const kept = retrieved.length || pool.length;
   const retrieval: RagStage = {
     id: "retrieval",
     status: status(["rag.search", "rag.retrieve"]),

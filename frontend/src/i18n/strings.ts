@@ -143,6 +143,9 @@ export interface Strings {
     rerankScore: string;
     rerankKept: string;
     rerankBelowThreshold: string; // 055 — a top-k chunk dropped by the score threshold
+    // The dashed cutoff line separating chunks kept (→ Augmented) from those excluded.
+    rerankCutoffScore: (threshold: number) => string;
+    rerankCutoffTopK: (k: number) => string;
     // PDF ingestion (002-interactive-chat).
     ingestion: string;
     chunkStrategy: string;
@@ -524,6 +527,8 @@ export interface Strings {
     queryLabel: string;
     keptNote: (candidates: number, kept: number) => string;
     thresholdLabel: string;
+    thresholdOff: string;
+    thresholdOffHint: string;
   };
   // 019-inline-citations — provenance chips on the settled answer. Chrome only;
   // tool args / chunk snippets / proper nouns stay verbatim (not translated).
@@ -788,6 +793,8 @@ const en: Strings = {
     rerankScore: "rerank score",
     rerankKept: "kept",
     rerankBelowThreshold: "below threshold",
+    rerankCutoffScore: (t) => `min score ${t.toFixed(2)} — below excluded from the prompt`,
+    rerankCutoffTopK: (k) => `top-${k} cutoff — below excluded from the prompt`,
     ingestion: "PDF ingestion",
     chunkStrategy: "chunking strategy",
     chunkSize: "size / overlap",
@@ -1351,6 +1358,9 @@ const en: Strings = {
     keptNote: (candidates, kept) =>
       `${candidates} candidates found — the reranker trims to the top ${kept} for the prompt.`,
     thresholdLabel: "score threshold",
+    thresholdOff: "0.00 · off",
+    thresholdOffHint:
+      "No score filter — the top-k are kept regardless of relevance. Raise the Rerank score threshold (Settings → Experiment) to drop low-score chunks like this one.",
   },
 };
 
@@ -1494,6 +1504,8 @@ const pt: Strings = {
     rerankScore: "score do rerank",
     rerankKept: "mantido",
     rerankBelowThreshold: "abaixo do limiar",
+    rerankCutoffScore: (t) => `score mín ${t.toFixed(2)} — abaixo fica fora do prompt`,
+    rerankCutoffTopK: (k) => `corte top-${k} — abaixo fica fora do prompt`,
     ingestion: "Ingestão de PDF",
     chunkStrategy: "estratégia de chunking",
     chunkSize: "tamanho / sobreposição",
@@ -2058,6 +2070,9 @@ const pt: Strings = {
     keptNote: (candidates, kept) =>
       `${candidates} candidatos encontrados — o reranker corta para os top ${kept} no prompt.`,
     thresholdLabel: "limiar de score",
+    thresholdOff: "0.00 · desligado",
+    thresholdOffHint:
+      "Sem filtro de score — o top-k é mantido independente da relevância. Suba o limiar de score do rerank (Settings → Experiment) para descartar chunks de score baixo como este.",
   },
 };
 

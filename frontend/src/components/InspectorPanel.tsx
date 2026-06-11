@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
@@ -611,6 +611,12 @@ export function RerankMovementList({
   threshold?: number;
 }) {
   const byNew = [...movement].sort((a, b) => a.new_rank - b.new_rank);
+  // The kept set (→ Augmented) is contiguous at the top: the list is sorted by
+  // new_rank, which the reranker assigns by score descending, so the top-k AND
+  // ≥ threshold survivors lead. The dashed cutoff line is drawn right after them.
+  const keptCount = byNew.filter((m) => m.new_rank <= k && m.score >= threshold).length;
+  // The binding cut: the score threshold when it's the one excluding chunks, else top-k.
+  const cutByScore = threshold > 0 && byNew.some((m) => m.new_rank <= k && m.score < threshold);
   return (
     <div className="space-y-1">
       {byNew.map((m, idx) => {
@@ -618,53 +624,68 @@ export function RerankMovementList({
         const belowThreshold = inTopK && m.score < threshold;
         const kept = inTopK && !belowThreshold;
         const moved = m.new_rank - m.prev_rank;
+        // The dashed cutoff line is drawn right after the last kept chunk: above it
+        // goes to Augmented, below it is excluded.
+        const showCutoff = idx + 1 === keptCount && keptCount < byNew.length;
         return (
-          <div
-            key={idx}
-            className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1 text-[11px]"
-            style={{
-              borderColor: kept
-                ? "var(--color-ok)"
-                : belowThreshold
-                  ? "var(--color-warn)"
-                  : "var(--color-line)",
-              opacity: kept ? 1 : 0.6,
-            }}
-          >
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 font-mono text-[10px] text-[var(--color-muted)]">
-                #{m.prev_rank} → #{m.new_rank}
-              </span>
-              {moved !== 0 && (
-                <span
-                  className="shrink-0 font-mono text-[10px]"
-                  style={{ color: moved < 0 ? "var(--color-ok-soft)" : "var(--color-label)" }}
-                >
-                  {moved < 0 ? `▲${-moved}` : `▼${moved}`}
-                </span>
-              )}
-              {m.source && (
-                <span className="truncate font-mono text-[var(--color-text-soft)]">{m.source}</span>
-              )}
-              {kept && (
-                <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-ok-soft)]">
-                  {i.rerankKept}
-                </span>
-              )}
-              {belowThreshold && (
-                <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-warn)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-warn)]">
-                  {i.rerankBelowThreshold}
-                </span>
-              )}
-            </div>
-            <span
-              className="shrink-0 font-mono"
-              style={{ color: belowThreshold ? "var(--color-warn)" : "var(--color-ok-soft)" }}
-              title={i.rerankScore}
+          <Fragment key={idx}>
+            <div
+              className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1 text-[11px]"
+              style={{
+                borderColor: kept
+                  ? "var(--color-ok)"
+                  : belowThreshold
+                    ? "var(--color-warn)"
+                    : "var(--color-line)",
+                opacity: kept ? 1 : 0.6,
+              }}
             >
-              {m.score.toFixed(3)}
-            </span>
-          </div>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 font-mono text-[10px] text-[var(--color-muted)]">
+                  #{m.prev_rank} → #{m.new_rank}
+                </span>
+                {moved !== 0 && (
+                  <span
+                    className="shrink-0 font-mono text-[10px]"
+                    style={{ color: moved < 0 ? "var(--color-ok-soft)" : "var(--color-label)" }}
+                  >
+                    {moved < 0 ? `▲${-moved}` : `▼${moved}`}
+                  </span>
+                )}
+                {m.source && (
+                  <span className="truncate font-mono text-[var(--color-text-soft)]">
+                    {m.source}
+                  </span>
+                )}
+                {kept && (
+                  <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-ok-soft)]">
+                    {i.rerankKept}
+                  </span>
+                )}
+                {belowThreshold && (
+                  <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-warn)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-warn)]">
+                    {i.rerankBelowThreshold}
+                  </span>
+                )}
+              </div>
+              <span
+                className="shrink-0 font-mono"
+                style={{ color: belowThreshold ? "var(--color-warn)" : "var(--color-ok-soft)" }}
+                title={i.rerankScore}
+              >
+                {m.score.toFixed(3)}
+              </span>
+            </div>
+            {showCutoff && (
+              <div className="flex items-center gap-2 py-0.5" aria-hidden>
+                <div className="h-0 flex-1 border-t border-dashed border-[var(--color-warn)]" />
+                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--color-warn)]">
+                  {cutByScore ? i.rerankCutoffScore(threshold) : i.rerankCutoffTopK(k)}
+                </span>
+                <div className="h-0 flex-1 border-t border-dashed border-[var(--color-warn)]" />
+              </div>
+            )}
+          </Fragment>
         );
       })}
     </div>

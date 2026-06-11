@@ -430,7 +430,12 @@ function RerankDetail({
       {fetchK !== undefined && k !== undefined && (
         <p className="text-[10.5px] text-[var(--color-muted)]">{r.rerankPoolNote(fetchK, k)}</p>
       )}
-      {threshold > 0 && <Row k={r.thresholdLabel} v={threshold.toFixed(2)} />}
+      <Row k={r.thresholdLabel} v={threshold > 0 ? threshold.toFixed(2) : r.thresholdOff} />
+      {threshold === 0 && (
+        <p className="text-[10px] italic leading-snug text-[var(--color-label)]">
+          {r.thresholdOffHint}
+        </p>
+      )}
       {movement.length > 0 && (
         <Field label={i.rerankMovement(movement.length)}>
           <RerankMovementList
