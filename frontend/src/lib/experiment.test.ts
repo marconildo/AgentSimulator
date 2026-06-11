@@ -88,6 +88,28 @@ describe("useExperiment", () => {
     });
   });
 
+  // 056-ragless-pageindex — per-conversation RAGLESS toggle; sent only when on AND
+  // away from the simple rung (it's an Intermediate-rung feature).
+  describe("ragless (056)", () => {
+    it("defaults off and omits the field from overrides (byte-for-byte)", () => {
+      expect(useExperiment.getState().getFor("a").ragless).toBe(false);
+      expect(overridesFor("a").ragless).toBeUndefined();
+    });
+
+    it("stays omitted on the simple rung even when the toggle is on", () => {
+      useScenario.setState({ scenario: "simple" });
+      useExperiment.getState().setRagless("a", true);
+      expect(overridesFor("a").ragless).toBeUndefined();
+    });
+
+    it("sends ragless once on AND away from simple, isolated per conversation", () => {
+      useScenario.setState({ scenario: "intermediate" });
+      useExperiment.getState().setRagless("a", true);
+      expect(overridesFor("a").ragless).toBe(true);
+      expect(overridesFor("b").ragless).toBeUndefined();
+    });
+  });
+
   // 017-failure-injection — the per-conversation failure selector.
   describe("simulateFailure", () => {
     it("defaults to none and omits the field from overrides (AC1)", () => {

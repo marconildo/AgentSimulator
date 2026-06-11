@@ -13,6 +13,14 @@ export type Stage =
   // DB) station and is detailed in the RAG drill-in.
   | "rag.rerank"
   | "rag.retrieve"
+  // 056-ragless-pageindex: the RAGLESS / PageIndex path — a reasoning-based
+  // retrieval that runs alongside Vector RAG when the `ragless` toggle is on
+  // (Intermediate rung only). Build a document tree → the LLM navigates it →
+  // select sections (the grounding). Maps to the `pageindex` station; never
+  // emitted on Simple or when ragless is off.
+  | "pageindex.tree"
+  | "pageindex.navigate"
+  | "pageindex.select"
   | "rag.ingest.chunk"
   | "rag.ingest.embed"
   | "rag.ingest.store"

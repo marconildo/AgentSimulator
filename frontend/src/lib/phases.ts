@@ -49,6 +49,10 @@ export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   // 054-rag-block-expansion — reranking is part of the same retrieval phase.
   "rag.rerank": "retrieve",
   "rag.retrieve": "retrieve",
+  // 056-ragless-pageindex — reasoning-based retrieval is still the retrieve phase.
+  "pageindex.tree": "retrieve",
+  "pageindex.navigate": "retrieve",
+  "pageindex.select": "retrieve",
   "rag.ingest.chunk": "retrieve",
   "rag.ingest.embed": "retrieve",
   "rag.ingest.store": "retrieve",

@@ -43,6 +43,11 @@ class AgentState(TypedDict):
     # Maturity-ladder rung (008-scenario-framework), request-only. Carried for
     # later specs to branch on; node logic does not read it yet.
     scenario: str
+    # RAGLESS / PageIndex (056-ragless-pageindex), request-only. When True and
+    # ``scenario == "intermediate"``, the retrieval tool runs the vector path (for
+    # display) AND the reasoning-based PageIndex path (which grounds the answer).
+    # False (default) and the Simple rung reproduce today's behavior byte-for-byte.
+    ragless: bool
     # Forced failure for this run (017-failure-injection), request-only:
     #   "none" (default, unchanged) | "tool_error" | "llm_timeout".
     simulate_failure: str

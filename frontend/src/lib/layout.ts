@@ -34,6 +34,7 @@ const EXPANDED_H: Record<StationId, number> = {
   database: 184,
   storage: 192,
   rag: 220,
+  pageindex: 212,
   ingestion: 236,
   mcp: 208,
   llm: 208,
@@ -77,7 +78,11 @@ const COLUMNS: Column[] = [
   { x: 372, gap: 168, members: ["backend", "agent"] },
   // 034: storage → ingestion → rag are stacked in write-path order so the upload
   // edges flow downward (storage→ingestion→rag all source-bottom → target-top).
-  { x: 1016, gap: 36, members: ["database", "storage", "ingestion", "rag", "mcp", "llm"] },
+  {
+    x: 1016,
+    gap: 36,
+    members: ["database", "storage", "ingestion", "rag", "pageindex", "mcp", "llm"],
+  },
   { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
 
@@ -90,6 +95,7 @@ const TIER_OF: Record<StationId, TierId> = {
   database: "services",
   storage: "services",
   rag: "services",
+  pageindex: "services",
   ingestion: "services",
   mcp: "services",
   llm: "services",
@@ -137,10 +143,13 @@ export function computeLayout(
   // 035-conditional-upload-nodes — when false (default), the upload write-path
   // nodes (storage, ingestion) are excluded so the data column reflows shorter.
   showUpload = false,
+  // 056-ragless-pageindex — when false (default), the RAGLESS box is excluded so the
+  // data column reflows shorter; the toggle reveals it (Intermediate rung).
+  showRagless = false,
 ): LayoutResult {
   const positions = {} as Record<StationId, { x: number; y: number }>;
   const heights = {} as Record<StationId, number>;
-  const visible = new Set(visibleStationIdsFor(scenario, showUpload));
+  const visible = new Set(visibleStationIdsFor(scenario, showUpload, showRagless));
 
   for (const col of COLUMNS) {
     let y = TOP;

@@ -105,6 +105,15 @@ async def lifespan(_app: FastAPI):
             print("[startup] Seeded default agent.")
     except Exception as exc:  # noqa: BLE001 - app should still start
         print(f"[startup] Could not seed default agent: {exc!r}")
+    # 056-ragless-pageindex: pre-build the PageIndex document tree (cached) so the
+    # RAGLESS path is "pre-indexed" like the vector store, not built on first request.
+    try:
+        from .rag.pageindex import build_tree
+
+        tree = build_tree()
+        print(f"[startup] Built PageIndex tree ({len(tree.children)} documents).")
+    except Exception as exc:  # noqa: BLE001 - app should still start
+        print(f"[startup] Could not build PageIndex tree: {exc!r}")
     yield
 
 
@@ -194,6 +203,8 @@ async def config() -> dict:
         # 055-rerank-score-threshold — the minimum rerank-score slider (Intermediate).
         "default_rerank_threshold": settings.rerank_threshold_default,
         "rerank_threshold_step": 0.05,
+        # 056-ragless-pageindex — default state of the RAGLESS (PageIndex) toggle.
+        "ragless_default": False,
         # The full tool list the agent sees — knowledge-base retrieval plus the
         # MCP tools (026-agent-tool-autonomy) — so the experiment panel lists every
         # tool the agent can choose, not just the MCP ones.
@@ -307,6 +318,10 @@ async def chat(req: ChatRequest):
     # extra, so the body still reflects exactly what executed (AC1).
     if req.simulate_failure != SimulateFailure.NONE:
         request_body["simulate_failure"] = req.simulate_failure.value
+    # 056-ragless-pageindex: echo the toggle only when on, so a default run's body
+    # is byte-for-byte unchanged (AC1).
+    if req.ragless:
+        request_body["ragless"] = True
 
     async def producer() -> None:
         try:
@@ -362,6 +377,9 @@ async def chat(req: ChatRequest):
                     skills_catalog=skills_catalog,
                     model=effective_model,
                     rerank_threshold=rerank_threshold,
+                    # 056-ragless-pageindex: run the reasoning-based PageIndex path
+                    # alongside Vector RAG (Intermediate rung only; no-op otherwise).
+                    ragless=req.ragless,
                     # 049-agent-self-identity: server-resolved from the bound
                     # agent row above; never a request override.
                     agent_name=effective_agent_name,

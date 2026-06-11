@@ -157,6 +157,11 @@ export interface Strings {
     totalInCollection: string;
     vectorPreview: string;
     fromDocument: string;
+    // 056-ragless-pageindex — RAGLESS box at-a-glance rows + inspector detail.
+    treeNodes: string;
+    selectedSections: string;
+    navReasoning: string;
+    documentTree: string;
     // 033-ingestion-node — the offline-indexer concept rows (real values).
     indexerTitle: string;
     chunking: string;
@@ -259,6 +264,15 @@ export interface Strings {
       topKHint: string;
       rerankThreshold: string;
       rerankThresholdHint: string;
+      // 056-ragless-pageindex — the RAGLESS (PageIndex) toggle + its help, and the
+      // note shown when it's unavailable (Simple rung).
+      ragless: {
+        label: string;
+        hint: string;
+        on: string;
+        off: string;
+        simpleOnly: string;
+      };
       // Friendly per-tool labels, keyed by MCP tool name.
       toolLabels: Record<string, string>;
       // 017-failure-injection — the "Simulate failure" selector + its options,
@@ -372,6 +386,11 @@ export interface Strings {
     // 054-rag-block-expansion — the Vector DB readout when the Intermediate rerank
     // sub-stage has run: the rerank pool → kept top-k.
     reranked: (from: number, to: number) => string;
+    // 056-ragless-pageindex — the RAGLESS box's compact readout, following the
+    // reasoning pipeline: building tree → navigating → selected N sections.
+    buildingTree: string;
+    navigating: string;
+    selected: (n: number) => string;
     dbQuerying: string;
     dbHistory: (n: number) => string;
     dbPersisted: string;
@@ -395,6 +414,7 @@ export interface Strings {
     collapse: string;
     openFull: string;
     openPipeline: string; // 054 — the rag node's button label (opens the RAG pipeline panel)
+    openRagless: string; // 056 — the pageindex node's button (opens the RAGLESS pipeline panel)
     memory: string;
     latency: string;
     tip: string;
@@ -530,6 +550,29 @@ export interface Strings {
     thresholdLabel: string;
     thresholdOff: string;
     thresholdOffHint: string;
+  };
+  // 056-ragless-pageindex — the RAGLESS drill-in panel (tree → navigate → select →
+  // augmented). A pure projection like ragDetail, but for reasoning-based retrieval.
+  pageindexDetail: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    noRetrieval: string;
+    clickHint: string;
+    close: string;
+    tree: string;
+    treeBlurb: string;
+    navigate: string;
+    navigateBlurb: string;
+    select: string;
+    selectBlurb: string;
+    augmented: string;
+    augmentedBlurb: string;
+    toLlm: string;
+    reasoningLabel: string;
+    selectedLabel: string;
+    queryLabel: string;
+    nodesLabel: (nodes: number, leaves: number) => string;
   };
   // 019-inline-citations — provenance chips on the settled answer. Chrome only;
   // tool args / chunk snippets / proper nouns stay verbatim (not translated).
@@ -806,6 +849,10 @@ const en: Strings = {
     totalInCollection: "total in collection",
     vectorPreview: "vector preview",
     fromDocument: "from your PDF",
+    treeNodes: "tree nodes",
+    selectedSections: "selected sections",
+    navReasoning: "Navigation reasoning",
+    documentTree: "Document tree",
     indexerTitle: "Offline indexer",
     chunking: "chunking",
     chunkingValue: "900-char windows · 150 overlap · paragraph-packing",
@@ -902,6 +949,13 @@ const en: Strings = {
       rerankThreshold: "Rerank score threshold",
       rerankThresholdHint:
         "Intermediate only: drop chunks the reranker scored below this — fewer but cleaner grounding (0 = off).",
+      ragless: {
+        label: "RAGLESS (PageIndex)",
+        hint: "Run reasoning-based retrieval alongside Vector RAG to compare. The LLM navigates a document tree instead of vector search — PageIndex grounds the answer.",
+        on: "On",
+        off: "Off",
+        simpleOnly: "Intermediate rung only — switch the scenario to Intermediate to enable.",
+      },
       toolLabels: {
         search_knowledge_base: "Knowledge base search",
         calculator: "Calculator",
@@ -963,6 +1017,8 @@ const en: Strings = {
     SQL: "SQL — the query language of the relational database that stores the conversation.",
     RAG: "RAG (Retrieval-Augmented Generation) — embed the query, pull the closest chunks from the vector DB, and ground the answer in them.",
     "VECTOR DB": "Vector database — stores chunk embeddings and runs the nearest-neighbour (cosine) search the RAG pipeline relies on.",
+    RAGLESS:
+      "RAGLESS — reasoning-based retrieval (PageIndex): the LLM navigates a document tree to pick the relevant section instead of vector similarity. No embeddings, no vector DB.",
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
     stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
@@ -1097,6 +1153,9 @@ const en: Strings = {
     tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
     reranked: (from, to) => `reranked ${from}→${to}`,
+    buildingTree: "building tree…",
+    navigating: "navigating…",
+    selected: (n) => `selected ${n} section${n === 1 ? "" : "s"}`,
     dbQuerying: "querying…",
     dbHistory: (n) => `history: ${n} rows`,
     dbPersisted: "persisted ✓",
@@ -1114,6 +1173,7 @@ const en: Strings = {
     collapse: "Collapse",
     openFull: "Open full view",
     openPipeline: "Open RAG pipeline",
+    openRagless: "Open RAGLESS pipeline",
     memory: "memory",
     latency: "latency",
     tip: "Click a station to inspect · ⊕ to expand",
@@ -1364,6 +1424,30 @@ const en: Strings = {
     thresholdOffHint:
       "No score filter — the top-k are kept regardless of relevance. Raise the Rerank score threshold (Settings → Experiment) to drop low-score chunks like this one.",
   },
+  pageindexDetail: {
+    title: "RAGLESS Pipeline",
+    subtitle: "Document tree → Navigate → Select → Augmented",
+    empty: "Send a message to watch the RAGLESS (PageIndex) pipeline run.",
+    noRetrieval: "This turn didn't use the knowledge base, so PageIndex didn't navigate.",
+    clickHint: "Click a stage to drill in.",
+    close: "Close",
+    tree: "Document tree",
+    treeBlurb:
+      "A hierarchical table of contents is built from the documents' headings — the index PageIndex navigates (no embeddings).",
+    navigate: "Navigate",
+    navigateBlurb:
+      "The LLM reasons over the tree and picks the relevant section(s) — an explainable path, not a cosine score.",
+    select: "Select",
+    selectBlurb: "The chosen sections' text becomes the grounding context.",
+    augmented: "Augmented",
+    augmentedBlurb:
+      'The selected sections are assembled into the prompt context sent to the LLM — the "A" in RAG.',
+    toLlm: "→ LLM",
+    reasoningLabel: "Reasoning",
+    selectedLabel: "Selected sections",
+    queryLabel: "Query",
+    nodesLabel: (nodes, leaves) => `${nodes} nodes · ${leaves} sections`,
+  },
 };
 
 const pt: Strings = {
@@ -1518,6 +1602,10 @@ const pt: Strings = {
     totalInCollection: "total na coleção",
     vectorPreview: "prévia do vetor",
     fromDocument: "do seu PDF",
+    treeNodes: "nós da árvore",
+    selectedSections: "seções selecionadas",
+    navReasoning: "Raciocínio da navegação",
+    documentTree: "Árvore do documento",
     indexerTitle: "Indexador offline",
     chunking: "chunking",
     chunkingValue: "janelas de 900 chars · 150 de sobreposição · empacotamento por parágrafo",
@@ -1614,6 +1702,13 @@ const pt: Strings = {
       rerankThreshold: "Limiar de score do rerank",
       rerankThresholdHint:
         "Só no Intermediário: descarta chunks com score abaixo disso — fundamentação menor, porém mais limpa (0 = desligado).",
+      ragless: {
+        label: "RAGLESS (PageIndex)",
+        hint: "Roda recuperação por raciocínio junto do RAG vetorial para comparar. A LLM navega uma árvore do documento em vez de busca vetorial — o PageIndex fundamenta a resposta.",
+        on: "Ligado",
+        off: "Desligado",
+        simpleOnly: "Só no nível Intermediário — troque o cenário para Intermediário para habilitar.",
+      },
       toolLabels: {
         search_knowledge_base: "Busca na base de conhecimento",
         calculator: "Calculadora",
@@ -1675,6 +1770,8 @@ const pt: Strings = {
     SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
     RAG: "RAG (Retrieval-Augmented Generation) — embeda a pergunta, busca os trechos mais próximos no vector DB e fundamenta a resposta neles.",
     "VECTOR DB": "Banco de dados vetorial — armazena os embeddings dos chunks e roda a busca por vizinhos mais próximos (cosseno) que o pipeline RAG usa.",
+    RAGLESS:
+      "RAGLESS — recuperação por raciocínio (PageIndex): a LLM navega uma árvore do documento para escolher a seção relevante, em vez de similaridade vetorial. Sem embeddings, sem banco vetorial.",
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
     stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",
@@ -1809,6 +1906,9 @@ const pt: Strings = {
     tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
     reranked: (from, to) => `reordenado ${from}→${to}`,
+    buildingTree: "montando árvore…",
+    navigating: "navegando…",
+    selected: (n) => `${n} seç${n === 1 ? "ão" : "ões"} selecionada${n === 1 ? "" : "s"}`,
     dbQuerying: "consultando…",
     dbHistory: (n) => `histórico: ${n} linhas`,
     dbPersisted: "persistido ✓",
@@ -1826,6 +1926,7 @@ const pt: Strings = {
     collapse: "Recolher",
     openFull: "Abrir visão completa",
     openPipeline: "Abrir pipeline RAG",
+    openRagless: "Abrir pipeline RAGLESS",
     memory: "memória",
     latency: "latência",
     tip: "Clique numa estação para inspecionar · ⊕ para expandir",
@@ -2076,6 +2177,30 @@ const pt: Strings = {
     thresholdOff: "0.00 · desligado",
     thresholdOffHint:
       "Sem filtro de score — o top-k é mantido independente da relevância. Suba o limiar de score do rerank (Settings → Experiment) para descartar chunks de score baixo como este.",
+  },
+  pageindexDetail: {
+    title: "Pipeline RAGLESS",
+    subtitle: "Árvore do documento → Navegar → Selecionar → Aumentado",
+    empty: "Envie uma mensagem para ver o pipeline RAGLESS (PageIndex) rodar.",
+    noRetrieval: "Este turno não usou a base de conhecimento, então o PageIndex não navegou.",
+    clickHint: "Clique em uma etapa para detalhar.",
+    close: "Fechar",
+    tree: "Árvore do documento",
+    treeBlurb:
+      "Um sumário hierárquico é montado a partir dos headings dos documentos — o índice que o PageIndex navega (sem embeddings).",
+    navigate: "Navegar",
+    navigateBlurb:
+      "A LLM raciocina sobre a árvore e escolhe a(s) seção(ões) relevante(s) — um caminho explicável, não um escore de cosseno.",
+    select: "Selecionar",
+    selectBlurb: "O texto das seções escolhidas vira o contexto de fundamentação.",
+    augmented: "Aumentado",
+    augmentedBlurb:
+      'As seções selecionadas são montadas no contexto do prompt enviado à LLM — o "A" de RAG.',
+    toLlm: "→ LLM",
+    reasoningLabel: "Raciocínio",
+    selectedLabel: "Seções selecionadas",
+    queryLabel: "Consulta",
+    nodesLabel: (nodes, leaves) => `${nodes} nós · ${leaves} seções`,
   },
 };
 

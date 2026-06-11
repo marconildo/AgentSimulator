@@ -451,6 +451,53 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
         </>
       );
     }
+    case "pageindex": {
+      // 056-ragless-pageindex — the RAGLESS box's inspector detail: tree size, the
+      // LLM navigation reasoning, and the sections it selected as grounding.
+      const tree = pick(events, "pageindex.tree", "end");
+      const nav = pick(events, "pageindex.navigate", "end");
+      const select = pick(events, "pageindex.select", "end");
+      const sections = (select?.data.chunks as Array<RagChunk & { title?: string }>) ?? [];
+      return (
+        <>
+          {tree && (
+            <Section title={i.documentTree}>
+              <KeyVal k={i.treeNodes} v={String(tree.data.nodes ?? 0)} />
+              <KeyVal k={i.selectedSections} v={String(select?.data.count ?? 0)} />
+            </Section>
+          )}
+          {nav?.data.reasoning ? (
+            <Section title={i.navReasoning}>
+              <Mono>{String(nav.data.reasoning)}</Mono>
+            </Section>
+          ) : null}
+          {sections.length > 0 && (
+            <Section title={i.selectedSections}>
+              <div className="space-y-2">
+                {sections.map((c, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2"
+                  >
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <span className="shrink-0 rounded bg-[var(--color-line)] px-1 font-mono text-[10px] text-[var(--color-muted)]">
+                        #{c.rank ?? idx + 1}
+                      </span>
+                      <span className="truncate font-mono text-[var(--color-text-soft)]">
+                        {c.source}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-[var(--color-muted)]">
+                      {c.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+        </>
+      );
+    }
     case "mcp": {
       const discover = pick(events, "mcp.discover", "end");
       const tools = (discover?.data.tools as Array<{ name: string; description: string }>) ?? [];

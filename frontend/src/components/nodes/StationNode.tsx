@@ -29,7 +29,11 @@ export interface StationNodeData {
 
 // Stations that have a dedicated focused drill-in view.
 // 054-rag-block-expansion: the RAG station opens a full RAG-pipeline drill-in.
-const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true, rag: true };
+const HAS_DETAIL: Partial<Record<StationId, boolean>> = {
+  agent: true,
+  rag: true,
+  pageindex: true,
+};
 
 export function StationNode(props: NodeProps) {
   const { meta, runtime, isActive, isEmphasized, readout, isSelected, expanded, height, width, comingSoon, usage } =
@@ -215,7 +219,12 @@ export function StationNode(props: NodeProps) {
               background: detailOpen ? accent : "transparent",
             }}
           >
-            {meta.id === "rag" ? t.node.openPipeline : t.node.openFull} {detailOpen ? "▾" : "▸"}
+            {meta.id === "rag"
+              ? t.node.openPipeline
+              : meta.id === "pageindex"
+                ? t.node.openRagless
+                : t.node.openFull}{" "}
+            {detailOpen ? "▾" : "▸"}
           </button>
         )}
       </div>
@@ -359,6 +368,16 @@ function innerRows(
       } else if (tokens) {
         rows.push({ k: i.totalTokens, v: String(tokens) });
       }
+      return rows;
+    }
+    case "pageindex": {
+      // 056-ragless-pageindex — the RAGLESS box's at-a-glance facts: tree size +
+      // how many sections the LLM navigation selected.
+      const tree = lastWith(events, (e) => e.stage === "pageindex.tree" && e.phase === "end");
+      const sel = lastWith(events, (e) => e.stage === "pageindex.select" && e.phase === "end");
+      const rows: Row[] = [];
+      if (tree) rows.push({ k: i.treeNodes, v: String(tree.data.nodes ?? 0) });
+      if (sel) rows.push({ k: i.selectedSections, v: String(sel.data.count ?? 0) });
       return rows;
     }
     // 008 preview nodes have no live events to summarize.

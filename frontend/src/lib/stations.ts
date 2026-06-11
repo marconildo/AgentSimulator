@@ -23,6 +23,7 @@ export type StationId =
   | "backend"
   | "agent"
   | "rag"
+  | "pageindex" // 056-ragless-pageindex — reasoning-based retrieval box (owns pageindex.*)
   | "ingestion" // 033-ingestion-node — the offline RAG indexer (owns rag.ingest.*)
   | "storage" // 034-storage-ingestion-flow — durable object storage for uploads
   | "mcp"
@@ -496,6 +497,49 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 980, y: 320 },
   },
   {
+    // 056-ragless-pageindex: a second, reasoning-based retrieval path (PageIndex).
+    // Appears below the RAG node only when the per-conversation `ragless` toggle is on
+    // (Intermediate rung). It builds a document tree, the LLM navigates it, and the
+    // selected sections become the grounding — no embeddings, no vector DB.
+    id: "pageindex",
+    tier: "services",
+    title: "RAGLESS",
+    subtitle: { en: "PageIndex · tree search", pt: "PageIndex · busca em árvore" },
+    icon: "🧭",
+    accent: "var(--color-ok)",
+    tag: "RAGLESS",
+    blurb: {
+      en: "Reasoning-based retrieval. Instead of embeddings and vector similarity, it builds a hierarchical tree (a table of contents) of the documents and lets the LLM navigate that tree by reasoning to pick the relevant section. No chunking, no embeddings, no vector DB — 'why this passage?' is an explainable path, not a cosine score. Runs alongside Vector RAG so you can compare the two.",
+      pt: "Recuperação por raciocínio. Em vez de embeddings e similaridade vetorial, monta uma árvore hierárquica (um índice/sumário) dos documentos e deixa a LLM navegar essa árvore por raciocínio para escolher a seção relevante. Sem chunking, sem embeddings, sem banco vetorial — 'por que esta passagem?' é um caminho explicável, não um escore de cosseno. Roda junto do RAG vetorial para você comparar os dois.",
+    },
+    why: {
+      en: "Embeddings are not the only way to retrieve. When documents are long and well-structured, navigating their table of contents by reasoning can beat similarity search and yields an auditable selection trace — the trade is a vector index for model calls.",
+      pt: "Embeddings não são a única forma de recuperar. Quando os documentos são longos e bem estruturados, navegar o sumário por raciocínio pode superar a busca por similaridade e gera um rastro de seleção auditável — a troca é um índice vetorial por chamadas de modelo.",
+    },
+    whatBreaks: {
+      en: "Skip reasoning-based retrieval and you only ever have similarity search: questions whose answer depends on document structure (which section, which step) lose the explainable navigation path, and a poorly-embedded chunk can never be recovered by reasoning over the hierarchy.",
+      pt: "Sem a recuperação por raciocínio você só tem busca por similaridade: perguntas cuja resposta depende da estrutura do documento (qual seção, qual etapa) perdem o caminho de navegação explicável, e um chunk mal embeddado nunca é recuperado raciocinando sobre a hierarquia.",
+    },
+    generic: {
+      en: "Reasoning-based retrieval (LLM tree search)",
+      pt: "Recuperação por raciocínio (busca em árvore com LLM)",
+    },
+    clouds: {
+      azure: "Azure OpenAI + AI Search (semantic)",
+      aws: "Amazon Bedrock + Kendra",
+      gcp: "Vertex AI + LLM tree search",
+    },
+    tech: [
+      { k: { en: "index", pt: "índice" }, v: "heading tree (ToC)" },
+      { k: { en: "retrieval", pt: "recuperação" }, v: "LLM navigation (reasoning)" },
+      { k: { en: "embeddings", pt: "embeddings" }, v: "none" },
+      { k: { en: "pipeline", pt: "pipeline" }, v: "tree → navigate → select" },
+    ],
+    stages: ["pageindex.tree", "pageindex.navigate", "pageindex.select"],
+    scenarios: ["intermediate", "advanced"],
+    position: { x: 980, y: 360 },
+  },
+  {
     id: "ingestion",
     tier: "services",
     title: { en: "Ingestion / Indexer", pt: "Ingestão / Indexador" },
@@ -883,6 +927,25 @@ const HOPS_SRC: HopSrc[] = [
     targetHandle: "left",
   },
   {
+    // 056-ragless-pageindex — the reasoning-based retrieval call. Shown only when the
+    // RAGLESS toggle is on (Intermediate rung); mirrors the agent→rag hop.
+    source: "agent",
+    target: "pageindex",
+    label: "HTTPS · TLS",
+    protocol: "HTTPS / TLS",
+    detail: {
+      en: "LLM navigation over the document tree (no vector query)",
+      pt: "Navegação por LLM sobre a árvore do documento (sem consulta vetorial)",
+    },
+    comm: "sync", // blocking navigation call
+    secure: true,
+    zone: "private",
+    controls: { en: "Private Endpoint · TLS (egress)", pt: "Private Endpoint · TLS (egress)" },
+    sourceHandle: "right",
+    targetHandle: "left",
+    scenarios: ["intermediate", "advanced"],
+  },
+  {
     source: "agent",
     target: "mcp",
     label: "MCP",
@@ -1156,6 +1219,11 @@ function relabelAgentForScenario(s: StationMeta, lang: Lang, scenario: Scenario)
 // They stay **real** stations (not `comingSoon`); this is render-gating only.
 export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["storage", "ingestion"]);
 
+// 056-ragless-pageindex — the RAGLESS box only appears when the per-conversation
+// `ragless` toggle is on (a config), so it's hidden by default even on the
+// Intermediate rung. Render-gating only (it is a real, executing station).
+export const RAGLESS_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["pageindex"]);
+
 // Per-station glossary key for the dense, jargon-y compact readout each node
 // shows ("decision: answer", "top-4 · score 0.50"). `StationNode` appends the
 // matching one-line hint to the readout's native tooltip so the term isn't
@@ -1164,27 +1232,41 @@ export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["storage", 
 export const READOUT_GLOSSARY_KEY: Partial<Record<StationId, string>> = {
   agent: "decision",
   rag: "top-k",
+  pageindex: "RAGLESS",
 };
 
 function isUploadOnlyHop(h: { source: StationId; target: StationId }): boolean {
   return UPLOAD_ONLY_STATIONS.has(h.source) || UPLOAD_ONLY_STATIONS.has(h.target);
 }
 
+function isRaglessOnlyHop(h: { source: StationId; target: StationId }): boolean {
+  return RAGLESS_ONLY_STATIONS.has(h.source) || RAGLESS_ONLY_STATIONS.has(h.target);
+}
+
 export function visibleStationsFor(
   lang: Lang,
   scenario: Scenario,
   showUpload = false,
+  // 056-ragless-pageindex — gate the RAGLESS box on the toggle (off by default).
+  showRagless = false,
 ): StationMeta[] {
   return stationsFor(lang)
     .filter((s) => s.scenarios.includes(scenario))
     .filter((s) => showUpload || !UPLOAD_ONLY_STATIONS.has(s.id))
+    .filter((s) => showRagless || !RAGLESS_ONLY_STATIONS.has(s.id))
     .map((s) => relabelAgentForScenario(s, lang, scenario));
 }
 
-export function visibleHopsFor(lang: Lang, scenario: Scenario, showUpload = false): HopMeta[] {
+export function visibleHopsFor(
+  lang: Lang,
+  scenario: Scenario,
+  showUpload = false,
+  showRagless = false,
+): HopMeta[] {
   return hopsFor(lang)
     .filter((h) => h.scenarios.includes(scenario))
-    .filter((h) => showUpload || !isUploadOnlyHop(h));
+    .filter((h) => showUpload || !isUploadOnlyHop(h))
+    .filter((h) => showRagless || !isRaglessOnlyHop(h));
 }
 
 export function visibleTiersFor(lang: Lang, scenario: Scenario): TierMeta[] {
@@ -1192,8 +1274,13 @@ export function visibleTiersFor(lang: Lang, scenario: Scenario): TierMeta[] {
 }
 
 /** Lang-independent visible station ids for a scenario — used by the layout. */
-export function visibleStationIdsFor(scenario: Scenario, showUpload = false): StationId[] {
+export function visibleStationIdsFor(
+  scenario: Scenario,
+  showUpload = false,
+  showRagless = false,
+): StationId[] {
   return STATIONS_SRC.filter((s) => (s.scenarios ?? ALL_SCENARIOS).includes(scenario))
     .filter((s) => showUpload || !UPLOAD_ONLY_STATIONS.has(s.id))
+    .filter((s) => showRagless || !RAGLESS_ONLY_STATIONS.has(s.id))
     .map((s) => s.id);
 }

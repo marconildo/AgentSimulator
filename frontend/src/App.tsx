@@ -8,6 +8,7 @@ import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
 import { ConfigToggle } from "./components/ConfigToggle";
 import { FlowCanvas } from "./components/FlowCanvas";
+import { PageIndexPipelinePanel } from "./components/PageIndexPipelinePanel";
 import { RagPipelinePanel } from "./components/RagPipelinePanel";
 import {
   BackIcon,
@@ -331,6 +332,8 @@ export default function App() {
                 {/* 054 — the RAG pipeline panel anchors to the Vector DB node, so it
                     lives inside the provider to read the live viewport transform. */}
                 {detail === "rag" && <RagPipelinePanel />}
+                {/* 056 — the RAGLESS pipeline panel anchors to the PageIndex node. */}
+                {detail === "pageindex" && <PageIndexPipelinePanel />}
               </ReactFlowProvider>
               {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
             </main>

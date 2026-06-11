@@ -24,12 +24,16 @@ export interface ConvExperiment {
   // 055-rerank-score-threshold — minimum rerank score (Intermediate); null/0 = no
   // filter. The reranker drops kept chunks scoring below this before the prompt.
   rerankThreshold: number | null;
+  // 056-ragless-pageindex — run the reasoning-based PageIndex path alongside Vector
+  // RAG (Intermediate rung only). false = today's behavior, byte-for-byte.
+  ragless: boolean;
 }
 
 export const DEFAULT_EXPERIMENT: ConvExperiment = {
   topK: null,
   simulateFailure: "none",
   rerankThreshold: null,
+  ragless: false,
 };
 
 // Draft conversations (not yet persisted) park their settings here until
@@ -46,6 +50,7 @@ interface ExperimentState {
   setTopK: (conv: string | null, value: number | null) => void;
   setSimulateFailure: (conv: string | null, value: string) => void;
   setRerankThreshold: (conv: string | null, value: number | null) => void;
+  setRagless: (conv: string | null, value: boolean) => void;
   reset: (conv: string | null) => void;
   adopt: (from: string | null, to: string) => void;
 }
@@ -74,6 +79,13 @@ export const useExperiment = create<ExperimentState>((set, get) => ({
       const key = keyOf(conv);
       const cur = s.byConv[key] ?? DEFAULT_EXPERIMENT;
       return { byConv: { ...s.byConv, [key]: { ...cur, rerankThreshold: value } } };
+    }),
+
+  setRagless: (conv, value) =>
+    set((s) => {
+      const key = keyOf(conv);
+      const cur = s.byConv[key] ?? DEFAULT_EXPERIMENT;
+      return { byConv: { ...s.byConv, [key]: { ...cur, ragless: value } } };
     }),
 
   reset: (conv) =>
@@ -114,6 +126,10 @@ export interface ChatOverrides {
   // sends nothing extra — but on `intermediate` it's what makes the backend run
   // the reranker (without it the backend defaults to simple and never reranks).
   scenario?: string;
+  // 056-ragless-pageindex — run the reasoning-based PageIndex path alongside Vector
+  // RAG. Sent only when the toggle is on AND away from `simple` (RAGLESS is an
+  // Intermediate-rung feature), so an untouched / Simple run sends nothing extra.
+  ragless?: boolean;
 }
 
 export function overridesFor(conv: string | null): ChatOverrides {
@@ -124,5 +140,6 @@ export function overridesFor(conv: string | null): ChatOverrides {
   if (e.rerankThreshold && e.rerankThreshold > 0) out.rerank_threshold = e.rerankThreshold;
   const scenario = useScenario.getState().scenario;
   if (scenario !== "simple") out.scenario = scenario;
+  if (e.ragless && scenario !== "simple") out.ragless = true;
   return out;
 }

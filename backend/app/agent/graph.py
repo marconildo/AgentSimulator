@@ -36,6 +36,7 @@ from ..llm.pricing import usage_metrics
 from ..llm.provider import LLMProvider, get_provider
 from ..mcp.client import ToolRegistry, get_registry, jsonrpc_frames
 from ..mcp.server import LOAD_SKILL_TOOL, found_for
+from ..rag.pageindex import pageindex_retrieve
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import StageRecord, TraceEmitter
@@ -391,6 +392,15 @@ async def _run_retrieval_tool(
         scenario=state["scenario"],
         rerank_threshold=state["rerank_threshold"],
     )
+
+    # 056-ragless-pageindex: on the Intermediate rung with the `ragless` toggle on, run
+    # the reasoning-based PageIndex path *as well* so the learner can compare them. The
+    # vector pipeline above still ran (and animated) for display, but PageIndex REPLACES
+    # it as the grounding the model answers from (D3) — so the observation, context and
+    # chunk mirrors below come from PageIndex. Off / Simple leaves this untouched.
+    if state.get("ragless") and state["scenario"] == "intermediate":
+        context, chunks = await pageindex_retrieve(query, emitter, session_id=state["session_id"])
+
     observation = context or "(no relevant passages found in the knowledge base)"
     return observation, context, chunks
 
@@ -544,6 +554,7 @@ async def run_agent_state(
     agent_name: str | None = None,
     agent_description: str | None = None,
     rerank_threshold: float = 0.0,
+    ragless: bool = False,
 ) -> AgentState:
     """Run the agent for one message and return the final graph state.
 
@@ -567,6 +578,7 @@ async def run_agent_state(
         "agent_name": agent_name,
         "agent_description": agent_description,
         "scenario": scenario,
+        "ragless": ragless,
         "simulate_failure": simulate_failure,
         "history": history or [],
         "skills_catalog": skills_catalog or [],
@@ -601,6 +613,7 @@ async def run_agent(
     agent_name: str | None = None,
     agent_description: str | None = None,
     rerank_threshold: float = 0.0,
+    ragless: bool = False,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -641,5 +654,6 @@ async def run_agent(
         agent_name=agent_name,
         agent_description=agent_description,
         rerank_threshold=rerank_threshold,
+        ragless=ragless,
     )
     return final_state["answer"]

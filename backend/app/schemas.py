@@ -38,6 +38,14 @@ class Stage(StrEnum):
     # Simple rung never emits it (byte-for-byte). Maps to the `reranker` station.
     RAG_RERANK = "rag.rerank"
     RAG_RETRIEVE = "rag.retrieve"
+    # RAGLESS / PageIndex (056-ragless-pageindex): a second, reasoning-based retrieval
+    # path that runs alongside Vector RAG when the request's `ragless` toggle is on
+    # (Intermediate rung only). It builds a document tree, the LLM navigates it, and the
+    # selected sections become the grounding context — no embeddings, no vector DB. These
+    # map to the `pageindex` station; the Simple rung (and ragless=False) never emit them.
+    PAGEINDEX_TREE = "pageindex.tree"
+    PAGEINDEX_NAVIGATE = "pageindex.navigate"
+    PAGEINDEX_SELECT = "pageindex.select"
     # PDF ingestion (002-interactive-chat): chunk -> embed -> store. These animate
     # the same `rag` station as retrieval, but for *writing* user documents.
     RAG_INGEST_CHUNK = "rag.ingest.chunk"
@@ -170,6 +178,15 @@ class ChatRequest(BaseModel):
     # Which rung of the maturity ladder this run targets. Request-only, carried
     # through to state but not yet branched on (only ``simple`` executes today).
     scenario: Scenario = Scenario.SIMPLE
+
+    # --- RAGLESS / PageIndex (056-ragless-pageindex) -------------------------
+    # Opt-in reasoning-based retrieval that runs *alongside* Vector RAG so the
+    # learner can compare them. When True (and ``scenario=intermediate``), the
+    # turn runs both the vector pipeline (for display) and PageIndex (which builds
+    # a document tree, navigates it with the LLM, and grounds the answer). Request-
+    # only; ``False`` (default) and the Simple rung reproduce today's behavior
+    # byte-for-byte (no ``pageindex.*`` stages).
+    ragless: bool = False
 
     # --- Failure injection (017-failure-injection) ---------------------------
     # Forces a chosen failure on this run so the learner can watch the agent
