@@ -571,6 +571,7 @@ export interface Strings {
     toLlm: string;
     reasoningLabel: string;
     selectedLabel: string;
+    navigatedTo: string;
     queryLabel: string;
     nodesLabel: (nodes: number, leaves: number) => string;
   };
@@ -1445,6 +1446,7 @@ const en: Strings = {
     toLlm: "→ LLM",
     reasoningLabel: "Reasoning",
     selectedLabel: "Selected sections",
+    navigatedTo: "Navigated to",
     queryLabel: "Query",
     nodesLabel: (nodes, leaves) => `${nodes} nodes · ${leaves} sections`,
   },
@@ -2199,6 +2201,7 @@ const pt: Strings = {
     toLlm: "→ LLM",
     reasoningLabel: "Raciocínio",
     selectedLabel: "Seções selecionadas",
+    navigatedTo: "Navegou até",
     queryLabel: "Consulta",
     nodesLabel: (nodes, leaves) => `${nodes} nós · ${leaves} seções`,
   },

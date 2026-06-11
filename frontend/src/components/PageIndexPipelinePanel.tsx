@@ -18,6 +18,7 @@ import { useT } from "../i18n";
 import { computeLayout } from "../lib/layout";
 import {
   derivePageIndexPipeline,
+  type NavigatedNode,
   type PageIndexPipeline,
   type PageIndexStage,
   type PageIndexStageId,
@@ -240,12 +241,18 @@ function StageBody({ stage, r }: { stage: PageIndexStage; r: PiStrings }): React
       ) : (
         <Pending />
       );
-    case "navigate":
-      return d.reasoning ? (
-        <span className="line-clamp-3 text-[var(--color-text-soft)]">{String(d.reasoning)}</span>
-      ) : (
-        <Pending />
+    case "navigate": {
+      const navigated = (d.navigatedNodes as NavigatedNode[] | undefined) ?? [];
+      if (!d.reasoning) return <Pending />;
+      return (
+        <>
+          {navigated.length > 0 && (
+            <div className="mb-0.5 font-mono text-[var(--color-ok-soft)]">→ {navigated.length} node{navigated.length === 1 ? "" : "s"}</div>
+          )}
+          <span className="line-clamp-2 text-[var(--color-text-soft)]">{String(d.reasoning)}</span>
+        </>
       );
+    }
     case "select": {
       const chunks = (d.chunks as SelectedSection[] | undefined) ?? [];
       return typeof d.count === "number" ? (
@@ -278,13 +285,43 @@ function StageDetail({ stage, r }: { stage: PageIndexStage; r: PiStrings }): Rea
           )}
         </DetailWrap>
       );
-    case "navigate":
+    case "navigate": {
+      const navigated = (d.navigatedNodes as NavigatedNode[] | undefined) ?? [];
+      const highlight = new Set((d.selected as string[] | undefined) ?? []);
       return (
         <DetailWrap blurb={r.navigateBlurb}>
           {d.query != null && <Field label={r.queryLabel} value={String(d.query)} mono />}
           {d.reasoning != null && <Field label={r.reasoningLabel} value={String(d.reasoning)} />}
+          {navigated.length > 0 && (
+            <div className="mt-1.5">
+              <div className="text-[10px] font-semibold text-[var(--color-label)]">
+                {r.navigatedTo}
+                {typeof d.model === "string" && (
+                  <span className="ml-1.5 font-normal text-[var(--color-faint)]">· {d.model}</span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {navigated.map((n) => (
+                  <span
+                    key={n.id}
+                    className="rounded-full border border-[var(--color-ok)] bg-[color-mix(in_srgb,var(--color-ok)_12%,transparent)] px-1.5 py-px text-[10px] text-[var(--color-ok-soft)]"
+                  >
+                    <span className="font-mono text-[9px] opacity-70">{n.id}</span> {n.title}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* The tree with the navigated path highlighted (rest dimmed) — the "tree
+              search" made visible: the LLM walked the ToC to these nodes. */}
+          {d.tree != null && (
+            <div className="mt-2 max-h-[220px] overflow-y-auto rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
+              <TreeView node={d.tree as TreeNode} highlight={highlight} />
+            </div>
+          )}
         </DetailWrap>
       );
+    }
     case "select": {
       const chunks = (d.chunks as SelectedSection[] | undefined) ?? [];
       return (
@@ -337,25 +374,42 @@ interface TreeNode {
   children?: TreeNode[];
 }
 
-function TreeView({ node }: { node: TreeNode }) {
+function TreeView({ node, highlight }: { node: TreeNode; highlight?: Set<string> }) {
   return (
     <ul className="text-[10.5px] leading-snug">
       {(node.children ?? []).map((child) => (
-        <TreeBranch key={child.id} node={child} depth={0} />
+        <TreeBranch key={child.id} node={child} depth={0} highlight={highlight} />
       ))}
     </ul>
   );
 }
 
-function TreeBranch({ node, depth }: { node: TreeNode; depth: number }) {
+function TreeBranch({
+  node,
+  depth,
+  highlight,
+}: {
+  node: TreeNode;
+  depth: number;
+  highlight?: Set<string>;
+}) {
+  // When a highlight set is given, the navigated-to nodes stand out and the rest is
+  // dimmed — so the Navigate view reads as the path the LLM reasoned to.
+  const lit = highlight?.has(node.id) ?? false;
+  const dimmed = highlight && highlight.size > 0 && !lit;
   return (
-    <li style={{ paddingLeft: depth * 12 }}>
+    <li style={{ paddingLeft: depth * 12, opacity: dimmed ? 0.45 : 1 }}>
       <span className="font-mono text-[9.5px] text-[var(--color-faint)]">{node.id}</span>{" "}
-      <span className="text-[var(--color-text-soft)]">{node.title}</span>
+      <span
+        className={lit ? "font-semibold text-[var(--color-ok-soft)]" : "text-[var(--color-text-soft)]"}
+      >
+        {lit ? "▸ " : ""}
+        {node.title}
+      </span>
       {node.children && node.children.length > 0 && (
         <ul>
           {node.children.map((c) => (
-            <TreeBranch key={c.id} node={c} depth={depth + 1} />
+            <TreeBranch key={c.id} node={c} depth={depth + 1} highlight={highlight} />
           ))}
         </ul>
       )}

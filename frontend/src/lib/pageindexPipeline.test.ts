@@ -79,6 +79,30 @@ describe("derivePageIndexPipeline", () => {
     expect(sel.data.count).toBe(1);
   });
 
+  it("resolves the navigated nodes against the tree so Navigate shows the path", () => {
+    // The tree (from the tree stage) is reachable in the navigate stage, and the
+    // selected ids resolve to concrete nodes (id + title + source) for the drill-in.
+    const e = [
+      ev("pageindex.tree", "end", {
+        nodes: 3,
+        leaves: 2,
+        tree: {
+          id: "root",
+          children: [
+            { id: "rag.md-h0", title: "RAG", source: "rag.md", children: [
+              { id: "rag.md-p1", title: "Chunking matters", source: "rag.md" },
+            ] },
+          ],
+        },
+      }),
+      ev("pageindex.navigate", "end", { selected: ["rag.md-p1"], reasoning: "r" }),
+    ];
+    const nav = derivePageIndexPipeline(e, e.length - 1).stages.find((s) => s.id === "navigate")!;
+    const nodes = nav.data.navigatedNodes as Array<{ id: string; title: string }>;
+    expect(nodes).toEqual([{ id: "rag.md-p1", title: "Chunking matters", source: "rag.md" }]);
+    expect(nav.data.tree).toBeTruthy();
+  });
+
   it("reads the tree size and the augmented (retrieved) token slice", () => {
     const e = fullRun();
     const p = derivePageIndexPipeline(e, e.length - 1);

@@ -56,6 +56,28 @@ export interface TreeNodeView {
   children?: TreeNodeView[];
 }
 
+// A node the navigation landed on (resolved from a selected id against the tree),
+// so the Navigate drill-in can show *where* in the tree the LLM reasoned to.
+export interface NavigatedNode {
+  id: string;
+  title: string;
+  source: string;
+}
+
+/** Resolve selected node ids against the tree → the nodes (in tree order). */
+export function findNodes(tree: TreeNodeView, ids: string[]): NavigatedNode[] {
+  const want = new Set(ids);
+  const out: NavigatedNode[] = [];
+  const walk = (n: TreeNodeView): void => {
+    for (const child of n.children ?? []) {
+      if (want.has(child.id)) out.push({ id: child.id, title: child.title, source: child.source });
+      walk(child);
+    }
+  };
+  walk(tree);
+  return out;
+}
+
 export function derivePageIndexPipeline(
   events: TraceEvent[],
   cursor: number,
@@ -92,8 +114,12 @@ export function derivePageIndexPipeline(
   };
 
   // 2 — Navigate: the LLM reasons over the tree and picks node id(s). The reasoning
-  // trace is the explainable "why this passage?" — not a cosine score.
+  // trace is the explainable "why this passage?" — not a cosine score. We resolve the
+  // selected ids back against the tree (from the tree stage) so the drill-in can show
+  // WHERE the navigation landed — the chosen nodes + the path highlighted in the tree.
   const nav = lastEnd("pageindex.navigate");
+  const treeForNav = (tree?.data.tree as TreeNodeView | undefined) ?? undefined;
+  const selectedIds = (nav?.data.selected as string[]) ?? [];
   const navigate: PageIndexStage = {
     id: "navigate",
     status: status("pageindex.navigate"),
@@ -102,7 +128,9 @@ export function derivePageIndexPipeline(
           model: nav.data.model,
           query: nav.data.query,
           reasoning: nav.data.reasoning,
-          selected: nav.data.selected,
+          selected: selectedIds,
+          tree: treeForNav,
+          navigatedNodes: treeForNav ? findNodes(treeForNav, selectedIds) : [],
         }
       : {},
   };
