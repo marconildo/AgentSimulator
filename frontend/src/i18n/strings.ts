@@ -141,6 +141,7 @@ export interface Strings {
     rerankMovement: (n: number) => string;
     rerankModel: string;
     rerankScore: string;
+    rerankCosine: string; // tooltip — the original vector-search cosine similarity
     rerankKept: string;
     rerankBelowThreshold: string; // 055 — a top-k chunk dropped by the score threshold
     // The dashed cutoff line separating chunks kept (→ Augmented) from those excluded.
@@ -790,7 +791,8 @@ const en: Strings = {
     retrievedChunks: (n) => `Retrieved chunks (top-${n})`,
     rerankMovement: (n) => `Rerank movement (${n} candidates)`,
     rerankModel: "reranker model",
-    rerankScore: "rerank score",
+    rerankScore: "rerank score (cross-encoder)",
+    rerankCosine: "original cosine similarity (vector search)",
     rerankKept: "kept",
     rerankBelowThreshold: "below threshold",
     rerankCutoffScore: (t) => `min score ${t.toFixed(2)} — below excluded from the prompt`,
@@ -1501,7 +1503,8 @@ const pt: Strings = {
     retrievedChunks: (n) => `Trechos recuperados (top-${n})`,
     rerankMovement: (n) => `Movimento do rerank (${n} candidatos)`,
     rerankModel: "modelo do reranker",
-    rerankScore: "score do rerank",
+    rerankScore: "score do rerank (cross-encoder)",
+    rerankCosine: "similaridade de cosseno original (busca vetorial)",
     rerankKept: "mantido",
     rerankBelowThreshold: "abaixo do limiar",
     rerankCutoffScore: (t) => `score mín ${t.toFixed(2)} — abaixo fica fora do prompt`,

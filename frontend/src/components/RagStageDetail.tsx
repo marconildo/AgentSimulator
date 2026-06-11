@@ -350,36 +350,52 @@ function CosinePlot({ chunks, r }: { chunks: PipelineChunk[]; r: RagStrings }) {
               </text>
             </>
           )}
-          {/* chunk vectors — all fan UP from q, ordered by rank (monotonic) */}
-          {shown.map((c, idx) => {
-            const sim = sims[idx];
-            const ang = (angles[idx] * Math.PI) / 180;
-            const ex = ox + Math.cos(ang) * L;
-            const ey = oy - Math.sin(ang) * L; // always upward
-            const lead = idx === 0;
-            // Closeness gradient: nearest (max similarity) → full green, farthest → blue.
-            const pct = Math.round((sim / maxSim) * 100);
-            const color = `color-mix(in srgb, var(--color-ok) ${pct}%, var(--color-blue))`;
-            return (
-              <g key={idx}>
-                <title>
-                  {`#${idx + 1} ${c.source} · similarity ${sim.toFixed(3)} · θ ${Math.round(angles[idx])}°`}
-                </title>
-                {lead && <circle cx={ex} cy={ey} r={9} fill="var(--color-ok)" opacity={0.2} />}
-                <line x1={ox} y1={oy} x2={ex} y2={ey} stroke={color} strokeWidth={lead ? 2.4 : 1.2 + sim} />
-                <circle cx={ex} cy={ey} r={lead ? 4 : 3} fill={color} />
-                <text
-                  x={ex + 6}
-                  y={ey - 4}
-                  fontSize={10}
-                  fill="var(--color-muted)"
-                  fontFamily="monospace"
-                >
-                  #{idx + 1} {c.source} {sim.toFixed(2)}
-                </text>
-              </g>
-            );
-          })}
+          {/* chunk vectors — all fan UP from q, ordered by rank (monotonic). Only
+              the top few are labelled; the rest (often a bunched low-similarity
+              cluster) render as faint unlabelled lines to keep the plot readable.
+              Drawn farthest-first so the closest (#1) sits on top. */}
+          {shown
+            .map((c, idx) => ({ c, idx }))
+            .reverse()
+            .map(({ c, idx }) => {
+              const sim = sims[idx];
+              const ang = (angles[idx] * Math.PI) / 180;
+              const ex = ox + Math.cos(ang) * L;
+              const ey = oy - Math.sin(ang) * L; // always upward
+              const lead = idx === 0;
+              const labelled = idx < 5; // only the top 5 carry a label
+              // Closeness gradient: nearest (max similarity) → full green, farthest → blue.
+              const pct = Math.round((sim / maxSim) * 100);
+              const color = `color-mix(in srgb, var(--color-ok) ${pct}%, var(--color-blue))`;
+              return (
+                <g key={idx} opacity={labelled ? 1 : 0.5}>
+                  <title>
+                    {`#${idx + 1} ${c.source} · cosine ${sim.toFixed(3)} · θ ${Math.round(angles[idx])}°`}
+                  </title>
+                  {lead && <circle cx={ex} cy={ey} r={9} fill="var(--color-ok)" opacity={0.2} />}
+                  <line
+                    x1={ox}
+                    y1={oy}
+                    x2={ex}
+                    y2={ey}
+                    stroke={color}
+                    strokeWidth={lead ? 2.4 : labelled ? 1.4 : 0.9}
+                  />
+                  <circle cx={ex} cy={ey} r={lead ? 4 : labelled ? 3 : 2} fill={color} />
+                  {labelled && (
+                    <text
+                      x={ex + 6}
+                      y={ey - 4}
+                      fontSize={10}
+                      fill="var(--color-muted)"
+                      fontFamily="monospace"
+                    >
+                      #{idx + 1} {c.source} {sim.toFixed(2)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
         </g>
         <defs>
           <marker id="qhead" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">

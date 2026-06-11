@@ -591,6 +591,9 @@ export interface RerankMove {
   prev_rank: number;
   new_rank: number;
   score: number;
+  // 055/follow-up — the original vector-search cosine similarity, shown beside the
+  // (differently-scaled) cross-encoder rerank `score` so the re-scoring is explicit.
+  similarity?: number;
   source?: string;
   title?: string;
 }
@@ -668,12 +671,18 @@ export function RerankMovementList({
                   </span>
                 )}
               </div>
-              <span
-                className="shrink-0 font-mono"
-                style={{ color: belowThreshold ? "var(--color-warn)" : "var(--color-ok-soft)" }}
-                title={i.rerankScore}
-              >
-                {m.score.toFixed(3)}
+              <span className="flex shrink-0 items-baseline gap-1 font-mono">
+                {m.similarity !== undefined && (
+                  <span className="text-[9.5px] text-[var(--color-label)]" title={i.rerankCosine}>
+                    cos {m.similarity.toFixed(2)} →
+                  </span>
+                )}
+                <span
+                  style={{ color: belowThreshold ? "var(--color-warn)" : "var(--color-ok-soft)" }}
+                  title={i.rerankScore}
+                >
+                  {m.score.toFixed(3)}
+                </span>
               </span>
             </div>
             {showCutoff && (

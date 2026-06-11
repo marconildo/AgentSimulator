@@ -72,6 +72,9 @@ def rerank(query: str, candidates: list[dict[str, Any]], top_k: int) -> RerankRe
                 "prev_rank": idx + 1,
                 "new_rank": new_rank,
                 "score": score,
+                # The original vector-search cosine similarity, so the UI can show
+                # "cosine → rerank" side by side (they're different metrics/scales).
+                "similarity": cand.get("similarity", cand.get("score")),
                 "source": cand.get("source", ""),
                 "title": cand.get("title", ""),
             }
