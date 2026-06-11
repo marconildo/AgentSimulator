@@ -23,6 +23,7 @@ the runnable ``config``, so the whole run is observable from the frontend.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from functools import lru_cache
 from time import perf_counter
 from typing import Any, cast
@@ -40,10 +41,13 @@ from ..rag.pageindex import pageindex_retrieve
 from ..rag.retriever import retrieve as rag_retrieve
 from ..schemas import Phase, Stage
 from ..trace import StageRecord, TraceEmitter
+from .deepagents import run_deepagents_tool
 from .prompts import (
     AGENT_PROMPT,
     GUARDRAILS_PROMPT,
     compose_system,
+    deepagents_block,
+    deepagents_state_block,
     identity_block,
     skills_block,
 )
@@ -55,9 +59,18 @@ from .resilience import (
     backoff_ms,
 )
 from .state import AgentState
-from .tools import RETRIEVAL_TOOL, agent_tool_specs, is_retrieval
+from .tools import RETRIEVAL_TOOL, agent_tool_specs, is_deepagents_tool, is_retrieval
 
 MAX_ITERATIONS = 3
+# 057-deepagents-runtime: a DeepAgent's loop is longer (plan → work steps → write files →
+# delegate → answer), so the Intermediate rung gets more reasoning-round headroom than the
+# Simple ReAct loop. Bounded all the same (and by ``recursion_limit``).
+DEEPAGENTS_MAX_ITERATIONS = 8
+
+
+def _max_iterations(state: AgentState) -> int:
+    return DEEPAGENTS_MAX_ITERATIONS if _with_deepagents(state) else MAX_ITERATIONS
+
 
 # 017-failure-injection — deterministic, clearly-labelled *simulated* failures.
 # The observation fed back to the model uses the MCP error convention
@@ -78,6 +91,16 @@ DEGRADED_TIMEOUT_ANSWER = (
 def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegistry]:
     c = config["configurable"]  # type: ignore[index]
     return c["emitter"], c["provider"], c["registry"]
+
+
+def _with_deepagents(state: Mapping[str, Any]) -> bool:
+    """Whether the DeepAgents tools (057) are offered this run.
+
+    Intermediate rung only, and **not** when RAGLESS (056) is active — the two are
+    separate Intermediate experiments that do not compose (RAGLESS wants the agent to
+    elect the plain retrieval tool so it can compare reasoning-based vs vector retrieval).
+    """
+    return state.get("scenario") == "intermediate" and not state.get("ragless")
 
 
 def _skills_advertised(state: AgentState) -> bool:
@@ -126,6 +149,13 @@ def _system_parts(state: AgentState) -> tuple[str, str, str]:
     agent_override = state.get("agent_prompt")
     guardrails = sys_override if (sys_override and sys_override.strip()) else GUARDRAILS_PROMPT
     role = agent_override if (agent_override and agent_override.strip()) else AGENT_PROMPT
+    # 057-deepagents-runtime: on the Intermediate rung append the DeepAgents guidance to
+    # the role layer so the model knows it has the planning / file-system / delegation
+    # tools (and to skip them for trivial requests). Empty off Intermediate (Simple
+    # byte-for-byte). Part of the role ⇒ 036's budget attributes it to the system slice.
+    block = deepagents_block(state.get("scenario", "simple")) if _with_deepagents(state) else ""
+    if block:
+        role = f"{role}\n\n{block}"
     catalog = state.get("skills_catalog") or []
     skills = skills_block(catalog) if (catalog and _skills_advertised(state)) else ""
     return guardrails, role, skills
@@ -143,7 +173,15 @@ def _effective_system(state: AgentState) -> str:
     # drift on the join separator. An empty catalog yields just the two layers.
     catalog = state.get("skills_catalog") or []
     catalog_for_block = catalog if skills else []
-    return compose_system(guardrails, role, catalog_for_block, identity=_identity_part(state))
+    composed = compose_system(guardrails, role, catalog_for_block, identity=_identity_part(state))
+    # 057-deepagents-runtime: re-inject the live plan + scratchpad on the Intermediate
+    # rung so the agent SEES its todos/files every round (the TodoListMiddleware feedback
+    # loop) — this is what makes it maintain a plan rather than ignore the planning tool.
+    if _with_deepagents(state):
+        block = deepagents_state_block(state.get("plan") or [], state.get("vfs") or {})
+        if block:
+            composed = f"{composed}\n\n{block}"
+    return composed
 
 
 async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -158,7 +196,9 @@ async def route_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         }
 
     async with emitter.stage(Stage.MCP_DISCOVER, "Discovering available tools") as rec:
-        specs = agent_tool_specs(registry, state["enabled_tools"])
+        specs = agent_tool_specs(
+            registry, state["enabled_tools"], with_deepagents=_with_deepagents(state)
+        )
         rec.data = {
             "transport": registry.transport,
             "tools": [{"name": s.name, "description": s.description} for s in specs],
@@ -236,7 +276,9 @@ async def _degrade_llm_timeout(
 
 async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, provider, registry = _deps(config)
-    specs = agent_tool_specs(registry, state["enabled_tools"])
+    specs = agent_tool_specs(
+        registry, state["enabled_tools"], with_deepagents=_with_deepagents(state)
+    )
 
     async with emitter.stage(Stage.AGENT_THINK, "Agent reasoning") as rec:
         # 051-failure-treatments: an injected llm_timeout no longer degrades on the
@@ -303,7 +345,7 @@ async def think_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     # when we will actually execute it, so the thread never ends with a dangling
     # AIMessage(tool_calls) that has no matching ToolMessage (which OpenAI rejects).
     iterations = state["iterations"] + 1
-    continue_loop = bool(decision.tool_calls) and iterations <= MAX_ITERATIONS
+    continue_loop = bool(decision.tool_calls) and iterations <= _max_iterations(state)
     update: dict[str, Any] = {"iterations": iterations}
     if continue_loop:
         update["messages"] = [decision.message]
@@ -406,7 +448,7 @@ async def _run_retrieval_tool(
 
 
 async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
-    emitter, _provider, registry = _deps(config)
+    emitter, provider, registry = _deps(config)
     # The pending calls are the tool_calls on the AIMessage think just appended.
     last = state["messages"][-1]
     pending = getattr(last, "tool_calls", None) or []
@@ -415,6 +457,12 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     context = state["context"]
     chunks = list(state["chunks"])
     fail_tool = state.get("simulate_failure") == "tool_error"
+    # 057-deepagents-runtime: working copies of the DeepAgents state the tools mutate (the
+    # virtual file system + the recorded plan). Returned as state updates so they persist
+    # across the think ⇄ tools loop, the same way the message thread accumulates. Read
+    # defensively (empty default) so a tool call works even on a minimal hand-built state.
+    vfs = dict(state.get("vfs") or {})
+    plan = list(state.get("plan") or [])
 
     tool_messages: list[ToolMessage] = []
     for tc in pending:
@@ -423,6 +471,13 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         call_id = tc.get("id", "")
         if is_retrieval(name):
             output, context, chunks = await _run_retrieval_tool(args, state, emitter, fail_tool)
+        elif is_deepagents_tool(name):
+            # The agent elected a DeepAgents tool (plan / file system / task). The handler
+            # emits its agent.* stage and mutates vfs/plan in place; `task` spawns a real
+            # sub-agent, so it needs the provider + registry.
+            output = await run_deepagents_tool(
+                name, args, dict(state), emitter, vfs, plan, provider=provider, registry=registry
+            )
         else:
             output = await _run_mcp_tool(name, args, state, registry, emitter, fail_tool)
         # Feed the observation back as a ToolMessage so the next reasoning round
@@ -436,6 +491,8 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         "used_tools": used,
         "context": context,
         "chunks": chunks,
+        "vfs": vfs,
+        "plan": plan,
     }
 
 
@@ -523,6 +580,9 @@ def get_compiled_graph():
     builder.add_node("respond", respond_node)
 
     builder.add_edge(START, "route")
+    # 057-deepagents-runtime is tool-driven (no preamble node): on the Intermediate rung
+    # the agent elects the DeepAgents tools (plan / file system / delegate) inside the
+    # canonical think ⇄ tools loop, so the topology is unchanged from the ReAct loop.
     builder.add_edge("route", "think")
     builder.add_conditional_edges(
         "think",
@@ -588,10 +648,14 @@ async def run_agent_state(
         "used_tools": [],
         "iterations": 0,
         "answer": "",
+        "plan": [],
+        "vfs": {},
     }
     config: RunnableConfig = {
         "configurable": {"emitter": emitter, "provider": provider, "registry": registry},
-        "recursion_limit": 25,
+        # Headroom for the DeepAgents loop (plan → work → files → delegate → answer);
+        # each round is ~2 nodes, so this comfortably bounds DEEPAGENTS_MAX_ITERATIONS.
+        "recursion_limit": 50,
     }
     return cast(AgentState, await graph.ainvoke(initial, config=config))
 

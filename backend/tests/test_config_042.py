@@ -51,6 +51,15 @@ def test_config_default_model_is_in_models_list():
     assert default in {m["id"] for m in body["models"]}
 
 
+def test_config_default_rerank_threshold_is_0_05():
+    """The reranker score filter ships ON by default at 0.05 — drops near-zero-score
+    chunks (e.g. an off-topic greeting) from the grounding context on the Intermediate
+    rung. The frontend slider prefills from this value via /api/config."""
+    with TestClient(app) as client:
+        body = client.get("/api/config").json()
+    assert body["default_rerank_threshold"] == 0.05
+
+
 def test_config_preserves_existing_keys():
     """Adding 042 keys did not remove existing 006 / 008 / 017 keys."""
     with TestClient(app) as client:

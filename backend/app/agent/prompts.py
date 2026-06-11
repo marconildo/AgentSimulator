@@ -73,6 +73,69 @@ find it.
 """
 
 
+# 057-deepagents-runtime: the extra guidance appended to the role layer **only on the
+# Intermediate rung**, where the model is offered the DeepAgents tools. It tells the agent
+# how to use them — and, crucially, to skip them for trivial requests so a greeting does
+# not trigger planning or research. Off the Intermediate rung this block is never added,
+# so Simple stays byte-for-byte.
+DEEPAGENTS_PROMPT = """You are running as a DeepAgent — you handle tasks deliberately, \
+not in one reflex step. You MUST follow this workflow for every user request that is an \
+actual task or question (the ONLY exception is a bare greeting or social pleasantry with \
+no task — then just reply):
+
+1. PLAN FIRST. Before doing anything else, call `write_todos` to lay out an ordered plan \
+(2–5 concrete steps). Do this even for seemingly simple questions — it is how you work.
+2. WORK THE PLAN. Execute the steps. As you start a step call `write_todos` again to mark \
+it `in_progress`, and after finishing it mark it `completed`, so your plan always reflects \
+reality. Keep exactly one item `in_progress` at a time.
+3. USE YOUR SCRATCHPAD. Use `write_file` / `read_file` / `edit_file` / `ls` to store \
+intermediate findings (e.g. write research notes to `research.md`) so your work survives \
+across steps instead of being lost to the context window.
+4. DELEGATE RESEARCH. For self-contained investigation, call `task` to hand it to a \
+sub-agent that runs with its own isolated context and returns only its result — keeping \
+your own context clean.
+5. FINISH. When every todo is `completed`, synthesise the final answer for the user from \
+your plan, files and sub-agent results.
+
+Always start with `write_todos`. A response that skips planning is a failure of your role.
+"""
+
+
+def deepagents_state_block(plan: list[dict[str, str]], vfs: dict[str, str]) -> str:
+    """Render the live DeepAgents working state for re-injection into the prompt.
+
+    057-deepagents-runtime: a DeepAgent must *see* its own plan and files on every
+    reasoning round (the library's ``TodoListMiddleware`` injects exactly this) — that
+    feedback loop is what makes planning stick instead of being a write-only tool. Empty
+    when there is nothing yet (so the first round just reads the mandate above). The graph
+    appends this to the system message on the Intermediate rung only.
+    """
+    if not plan and not vfs:
+        return ""
+    lines = ["## Your DeepAgent working state (keep it current)"]
+    if plan:
+        lines.append("Todos:")
+        for t in plan:
+            lines.append(f"- [{t.get('status', 'pending')}] {t.get('content', '')}")
+    else:
+        lines.append("Todos: (none yet — call write_todos to plan before acting)")
+    if vfs:
+        lines.append("Files in your scratchpad:")
+        for path in sorted(vfs):
+            lines.append(f"- {path} ({len(vfs[path])} chars)")
+    return "\n".join(lines)
+
+
+def deepagents_block(scenario: str) -> str:
+    """The DeepAgents role addendum for the given rung — non-empty only on Intermediate.
+
+    057-deepagents-runtime: kept as its own helper so ``graph._system_parts`` can append
+    it to the role layer (and 036's budget attribute it to the ``system`` slice) without
+    forking the assembly. Empty everywhere else, so non-Intermediate runs are unchanged.
+    """
+    return DEEPAGENTS_PROMPT if scenario == "intermediate" else ""
+
+
 def identity_block(name: str | None, description: str | None) -> str:
     """Render the agent's self-identity as a leading prompt line.
 

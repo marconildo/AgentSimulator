@@ -379,7 +379,16 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "flow", pt: "fluxo" }, v: "route → think ⇄ tools (search KB · calc · …) → generate" },
       { k: { en: "state", pt: "estado" }, v: "in-process per request" },
     ],
-    stages: ["agent.route", "agent.think"],
+    // 057-deepagents-runtime: the Intermediate-rung DeepAgents preamble (plan →
+    // fs.write → delegate → fs.read) rides this same `agent` station — no new node.
+    stages: [
+      "agent.route",
+      "agent.plan",
+      "agent.fs.write",
+      "agent.fs.read",
+      "agent.delegate",
+      "agent.think",
+    ],
     position: { x: 340, y: 430 },
   },
   {

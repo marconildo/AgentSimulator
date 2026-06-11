@@ -5,6 +5,14 @@ export type Stage =
   | "backend"
   | "db.read"
   | "agent.route"
+  // 057-deepagents-runtime: the DeepAgents preamble (Intermediate rung only) — an
+  // explicit plan, a delegated researcher sub-agent, and a virtual file system the
+  // orchestrator writes to and reads back. All four map to the `agent` station; the
+  // Simple rung never emits them. Order: plan → fs.write → delegate → fs.write → fs.read.
+  | "agent.plan"
+  | "agent.fs.write"
+  | "agent.fs.read"
+  | "agent.delegate"
   | "agent.think"
   | "rag.embed"
   | "rag.search"
@@ -136,6 +144,48 @@ export interface PromptPreview {
   history?: { message: string; answer: string }[];
   context_window?: number;
   context_budget?: ContextBudget;
+}
+
+// 057-deepagents-runtime — typed read shapes for the DeepAgents event `data`
+// (additive, like 036's ContextBudget). The drill-in reads these via pure
+// projections in `lib/deepagents.ts`. `data` stays an open record.
+
+// One todo item the lead agent maintains via write_todos.
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+}
+
+// On the `agent.plan` END: the todo list (with per-item status) the agent maintains.
+// `steps` (content-only) is kept for back-compat; `todos` carries the status.
+export interface PlanData {
+  steps: string[];
+  todos?: TodoItem[];
+  count?: number;
+  model?: string;
+  query?: string;
+}
+
+// On `agent.fs.write` / `agent.fs.read` ENDs: one virtual-FS operation.
+export interface VfsOpData {
+  path: string;
+  content: string;
+  bytes?: number;
+  found?: boolean;
+  files?: string[];
+}
+
+// On the `agent.delegate` END: the hand-off to a real sub-agent (the `task` tool). The
+// sub-agent ran its own bounded loop with an isolated context; only `result` returned to
+// the lead agent. `steps` is the sub-agent's tool trail; `digest` mirrors `result`.
+export interface DelegateData {
+  subagent: string;
+  subtask: string;
+  result?: string;
+  digest?: string;
+  steps?: string[];
+  rounds?: number;
+  sources?: (string | null)[];
 }
 
 export interface TraceSummary {

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 057-deepagents-runtime |
-| **Status** | **draft** → clarified → planned → in-progress → done |
+| **Status** | draft → clarified → planned → in-progress → **done** |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-06-11 |
 
@@ -58,21 +58,27 @@ agents actually scale to bigger tasks**, not just a relabel.
 
 ## Acceptance criteria
 
-1. **AC1 (planner fires on Intermediate)** — On `scenario=intermediate`, a multi-step task
-   produces an explicit plan in `AgentState` before the first reasoning round; on
-   `scenario=simple` no planner runs (byte-for-byte ReAct).
-2. **AC2 (virtual FS is real)** — The agent can **write** an artifact to the virtual FS and
-   **read** it back in a later step; the read returns what was written (structural test).
-3. **AC3 (sub-agent delegation)** — The orchestrator delegates ≥1 sub-task to a worker
-   sub-agent whose result is folded back into the orchestrator's thread (a visible
-   hand-off in the trace).
-4. **AC4 (new stages, protocol)** — New `Stage`s (e.g. `agent.plan`, `agent.fs.read`,
+1. **AC1 (planning with status)** — `write_todos` is advertised on Intermediate (not on
+   Simple); when called it emits `agent.plan` carrying `todos` (`{content, status}`) +
+   `steps`, recorded in `AgentState["plan"]`; re-calling it updates item statuses
+   (`pending`/`in_progress`/`completed`). *(tool-driven, not a forced preamble.)*
+2. **AC2 (virtual FS is real)** — `write_file` then `read_file` on the same path returns
+   what was written; `edit_file` replaces in place; `ls` lists the files; a missing read/
+   edit is a typed `error:`/`found: false`.
+3. **AC3 (real sub-agent)** — `task` spawns a **bounded sub-agent** (own system prompt +
+   tool subset + thread + ReAct loop) that uses ≥1 tool, emits `agent.delegate` with a
+   non-empty `result` and a `steps` tool-trail, and returns **only** its result to the lead
+   agent (context quarantine — the sub-agent's intermediate messages never enter the lead
+   thread).
+4. **AC4 (new stages, protocol)** — New `Stage`s (`agent.plan`, `agent.fs.read`,
    `agent.fs.write`, `agent.delegate`) are added in `schemas.py`, mirrored in `events.ts`,
    and mapped in `STAGE_TO_STATION` **and** `STAGE_TO_PHASE` (totality; `tsc` clean).
 5. **AC5 (drill-in shows plan + FS)** — The Agent drill-in renders the plan steps and the
    virtual-FS contents from real trace events (pure projection).
-6. **AC6 (Simple unchanged)** — `scenario=simple` emits no plan/FS/delegate stages; its
-   event sequence + answer path are byte-for-byte with today.
+6. **AC6 (model-driven, not scripted)** — On `scenario=intermediate` a **greeting elects
+   none** of the DeepAgents tools (the model just answers); `scenario=simple` is never even
+   offered them, so its event sequence + answer path are byte-for-byte with today. RAGLESS
+   (056) takes precedence over DeepAgents (the tools are suppressed when it's on).
 7. **AC7 (bilingual)** — Every new user-facing string exists in `en` and `pt`.
 
 ## Protocol / stage impact
@@ -84,19 +90,73 @@ agents actually scale to bigger tasks**, not just a relabel.
 - The `agent`/sub-agent stations already exist (`stations.ts`); the relabel marker
   (`AGENT_SCENARIO_LABEL`) becomes backed by a real runtime.
 
-## Open questions (clarify before planning)
+## Open questions — RESOLVED (clarify, 2026-06-11)
 
-- [ ] **Framework.** Build the planner + FS by hand on the existing LangGraph loop, vs.
-      adopt a `deepagents`-style library / pattern. Hand-built keeps the "everything is
-      real and inspectable" property and avoids a heavy dependency — recommended start.
-- [ ] **Virtual FS shape.** A simple in-memory `dict[path -> content]` in `AgentState`
-      (Skills-style, see [027-skills]) is enough to teach the concept.
-- [ ] **Sub-agent scope.** One real delegated worker first (e.g. a "researcher" that runs
-      retrieval and returns a digest), or the full researcher/coder/critic trio.
-- [ ] **Determinism / testing.** Planner output is model-variable → assert **structurally**
-      (a plan exists with ≥1 step; an FS write is later read; a delegation occurred), per §9.
-- [ ] **Rung.** Intermediate "DeepAgents" first; the Advanced "DeepAgents + Multi-agents"
-      orchestration is a separate later spec.
+- [x] **Framework.** **Hand-built on the existing LangGraph loop.** Keeps the
+      "everything is real and inspectable" property (§3) and avoids a heavy dependency;
+      planner + virtual FS + the researcher sub-agent are plain async code emitting real
+      trace stages (the same self-contained pattern as `rag/pageindex.py` from 056).
+- [x] **Virtual FS shape.** A simple in-memory `dict[path -> content]` carried in
+      `AgentState` (`vfs`), Skills-style (see [027-skills]). Per-run working memory; not
+      persisted to the DB across turns.
+- [x] **Sub-agent scope.** **One real delegated worker** — a **researcher** that runs
+      retrieval and returns a short digest. The researcher/coder/critic trio is the
+      Advanced rung's job (a later spec), explicitly out of scope here.
+- [x] **Determinism / testing.** Planner + researcher output is model-variable → assert
+      **structurally** (a plan exists with ≥1 step; an FS write is later read back with the
+      same content; a delegation occurred; Simple emits none of it), per §9.
+- [x] **Rung.** **Intermediate "DeepAgents"** only. The Advanced "DeepAgents +
+      Multi-agents" orchestration stays a separate later spec.
+
+## Design summary (locked)
+
+> **Amendment 1 (post-review).** First cut was a **forced preamble node** (plan→delegate→
+> retrieve before `think`), so a greeting triggered RAG. Reworked to **tool-driven** — the
+> preamble node was deleted.
+>
+> **Amendment 2 (post-review).** "Tools in a loop" still wasn't the DeepAgents *architecture*
+> (the user showed a real `deepagents` LangSmith trace: a middleware stack with
+> TodoList / SubAgent / Filesystem). Chosen path: **hand-build the four pillars** on our
+> instrumented graph (keeps the whole visualizer; the library would be a black box). The
+> defining additions: **real sub-agents** (`task` spawns a bounded sub-agent with its own
+> context/tools — context quarantine), a **todo list with per-item status**, and a full
+> **virtual file system** with `edit_file`.
+>
+> **Amendment 3 (post-review — "make it behave like a DeepAgent by default").** Having the
+> tools wasn't enough — the agent still ran like ReAct because planning was *optional and
+> unreinforced*. Fixed the **behavior**, the real differentiator: (a) the live plan +
+> file list are **re-injected into the model's context every `think` round**
+> (`deepagents_state_block` in `_effective_system`) — the `TodoListMiddleware` feedback loop
+> that makes a plan *stick*; (b) `DEEPAGENTS_PROMPT` now **mandates** `write_todos` first for
+> any real task (only a bare greeting is exempt); (c) the Intermediate loop gets more
+> iteration headroom (`DEEPAGENTS_MAX_ITERATIONS=8`, `recursion_limit=50`). Result: a real
+> task **plans first** (pinned by `test_real_task_on_intermediate_plans_first`). *This is the
+> ReAct → DeepAgent line: not tool count, but a harness that reinforces planning/state.*
+
+DeepAgents is **tool-driven** and **hand-built**. On `scenario == "intermediate"` (and
+**not** when RAGLESS is on — separate experiments that don't compose) the agent is offered
+six **native tools** (advertised in `agent/tools.py`, gated by `with_deepagents`), plus a
+detailed `DEEPAGENTS_PROMPT` addendum on its role layer. The graph topology is the
+**unchanged** ReAct loop (`route → think ⇄ tools → generate → respond`); the tools fire from
+`tools_node` when the model calls them. The **four pillars**:
+
+1. **Planning** — `write_todos` maintains an ordered todo list with per-item *status*
+   (`pending`/`in_progress`/`completed`) in `AgentState["plan"]` → `agent.plan` (data:
+   `todos` + `steps`). The agent re-calls it to advance statuses.
+2. **Virtual file system** — `write_file` / `read_file` / `edit_file` / `ls` over
+   `AgentState["vfs"]` (in-memory `dict`) → `agent.fs.write` / `agent.fs.read`.
+3. **Sub-agents** — `task(description, subagent_type)` spawns a **real bounded sub-agent**
+   (`run_subagent`): its own system prompt, tool subset, message thread and ReAct loop
+   (`SUBAGENT_MAX_ITERS`). Only its final result returns to the lead agent (**context
+   quarantine**) → `agent.delegate` (data: `result`, `steps`, `rounds`) wrapping the
+   sub-agent's nested tool stages (its retrieval animates the RAG station).
+4. **Detailed prompt** — `DEEPAGENTS_PROMPT` tells the lead agent how/when to use all of
+   the above, and to skip them for trivial requests.
+
+All four new stages map to the existing **`agent`** station (no new station/tier). A
+greeting elects none of them. **Deferred:** the library's *summarization* middleware (a
+context-compaction optimization, would add a `Stage`) and the Advanced researcher/coder/
+critic sub-agent trio (a later spec; `_SUBAGENT_PROMPTS` is the seam).
 
 ## Out of scope / deferred
 

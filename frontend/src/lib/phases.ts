@@ -61,6 +61,12 @@ export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   // in the canonical rail, a harmless cosmetic on upload-only traces).
   "storage.upload": "persist",
   "agent.think": "reason",
+  // 057-deepagents-runtime — the DeepAgents preamble (plan, FS ops, delegation) is
+  // part of the agent's reasoning phase (it runs before the ReAct loop proper).
+  "agent.plan": "reason",
+  "agent.fs.write": "reason",
+  "agent.fs.read": "reason",
+  "agent.delegate": "reason",
   "llm.prompt": "reason",
   "mcp.discover": "tools",
   "mcp.call": "tools",

@@ -376,6 +376,8 @@ export interface Strings {
     decisionAnswer: string;
     call: (names: string) => string;
     routing: string;
+    // 057-deepagents-runtime — shown on the agent tile during the DeepAgents preamble.
+    planned: (n: number) => string;
     embedding: string;
     toolsReady: (n: number) => string;
     promptAssembled: string;
@@ -505,6 +507,20 @@ export interface Strings {
     nextToFallOut: (limit: number, turn: number) => string;
     thisTurnNotStored: string;
     memoryLesson: string;
+    // 057-deepagents-runtime — the DeepAgents preamble panels (Intermediate rung):
+    // the explicit plan, the delegated researcher, and the virtual file system.
+    plan: string;
+    planHint: string;
+    planEmpty: string;
+    todoStatus: { pending: string; in_progress: string; completed: string };
+    delegated: string;
+    delegateHint: string;
+    subagentUsed: string;
+    vfs: string;
+    vfsHint: string;
+    vfsEmpty: string;
+    wrote: string;
+    read: string;
   };
   // 054-rag-block-expansion — the RAG pipeline drill-in (Vector DB "open full view").
   ragDetail: {
@@ -1012,7 +1028,7 @@ const en: Strings = {
     "Agent Harness":
       "Agent Harness — the runtime scaffolding around an LLM that makes it an agent: the reasoning loop, tool calling, layered prompt assembly, the context window and memory.",
     DeepAgents:
-      "DeepAgents — a LangGraph agent pattern adding planning, sub-agents, and a virtual file system for longer-horizon tasks. (Planned — not yet implemented.)",
+      "DeepAgents — a LangGraph agent pattern adding planning, sub-agents, and a virtual file system for longer-horizon tasks. Live on the Intermediate rung.",
     "Multi-agent":
       "Multi-agent — several specialized agents that coordinate (e.g. an orchestrator delegating to sub-agents) instead of one monolithic loop. (Planned — not yet implemented.)",
     SQL: "SQL — the query language of the relational database that stores the conversation.",
@@ -1146,6 +1162,7 @@ const en: Strings = {
     decisionAnswer: "decision: answer",
     call: (names) => `call → ${names}`,
     routing: "routing…",
+    planned: (n) => `planned ${n} step${n === 1 ? "" : "s"}`,
     embedding: "embedding query…",
     toolsReady: (n) => `${n} tools ready`,
     promptAssembled: "prompt assembled",
@@ -1259,6 +1276,18 @@ const en: Strings = {
     thisTurnNotStored: "(this turn — not yet stored)",
     memoryLesson:
       "Only your message + the assistant's final answer carries forward; reasoning, tool calls and observations don't.",
+    plan: "Plan",
+    planHint: "On the Intermediate rung the agent maintains a todo list (write_todos), marking items as it works.",
+    planEmpty: "No plan this run — the Simple rung runs the bounded ReAct loop directly.",
+    todoStatus: { pending: "pending", in_progress: "in progress", completed: "completed" },
+    delegated: "Delegated to sub-agent",
+    delegateHint: "A self-contained sub-task handed to a sub-agent that runs with its own isolated context and tools, returning only its result.",
+    subagentUsed: "sub-agent used",
+    vfs: "Virtual file system",
+    vfsHint: "An in-memory scratchpad the agent wrote to and read back across steps, so work survives beyond the context window.",
+    vfsEmpty: "No files written this run.",
+    wrote: "wrote",
+    read: "read",
   },
   citation: {
     sources: "sources",
@@ -1766,7 +1795,7 @@ const pt: Strings = {
     "Agent Harness":
       "Agent Harness — o arcabouço de runtime em volta de um LLM que o torna um agente: o loop de raciocínio, a chamada de ferramentas, a montagem do prompt em camadas, a janela de contexto e a memória.",
     DeepAgents:
-      "DeepAgents — um padrão de agente LangGraph que adiciona planejamento, subagentes e um sistema de arquivos virtual para tarefas de horizonte mais longo. (Planejado — ainda não implementado.)",
+      "DeepAgents — um padrão de agente LangGraph que adiciona planejamento, subagentes e um sistema de arquivos virtual para tarefas de horizonte mais longo. Ativo no degrau Intermediário.",
     "Multi-agent":
       "Multi-agente — vários agentes especializados que se coordenam (ex.: um orquestrador delegando a subagentes) em vez de um único loop monolítico. (Planejado — ainda não implementado.)",
     SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
@@ -1900,6 +1929,7 @@ const pt: Strings = {
     decisionAnswer: "decisão: responder",
     call: (names) => `chamar → ${names}`,
     routing: "roteando…",
+    planned: (n) => `planejou ${n} passo${n === 1 ? "" : "s"}`,
     embedding: "incorporando consulta…",
     toolsReady: (n) => `${n} ferramentas prontas`,
     promptAssembled: "prompt montado",
@@ -2013,6 +2043,18 @@ const pt: Strings = {
     thisTurnNotStored: "(este turno — ainda não salvo)",
     memoryLesson:
       "Só sua mensagem + a resposta final do assistente carrega; raciocínio, tool calls e observações não.",
+    plan: "Plano",
+    planHint: "No degrau Intermediário o agente mantém uma lista de todos (write_todos), marcando os itens conforme avança.",
+    planEmpty: "Sem plano nesta execução — o degrau Simples roda o loop ReAct limitado direto.",
+    todoStatus: { pending: "pendente", in_progress: "em andamento", completed: "concluído" },
+    delegated: "Delegado a subagente",
+    delegateHint: "Uma subtarefa autocontida entregue a um subagente que roda com contexto e ferramentas próprios isolados, devolvendo só o resultado.",
+    subagentUsed: "subagente usou",
+    vfs: "Sistema de arquivos virtual",
+    vfsHint: "Um rascunho em memória que o agente escreveu e releu entre passos, para o trabalho sobreviver além da janela de contexto.",
+    vfsEmpty: "Nenhum arquivo escrito nesta execução.",
+    wrote: "escreveu",
+    read: "leu",
   },
   citation: {
     sources: "fontes",

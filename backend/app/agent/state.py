@@ -75,3 +75,13 @@ class AgentState(TypedDict):
     used_tools: list[str]
     iterations: int
     answer: str
+    # DeepAgents working memory (057-deepagents-runtime), Intermediate rung only:
+    #   plan — the todo list the agent maintains via write_todos: ordered
+    #          {content, status} items (status pending/in_progress/completed), updated
+    #          across the loop. Empty on Simple.
+    #   vfs  — the virtual file system: an in-memory scratchpad (path -> content) the
+    #          agent writes/reads/edits across steps via the file tools, so work survives
+    #          beyond a single prompt's context window. Per-run working memory; not
+    #          persisted to the DB across turns. Empty on Simple.
+    plan: list[dict[str, str]]
+    vfs: dict[str, str]

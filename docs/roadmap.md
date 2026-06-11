@@ -33,25 +33,26 @@ shipped. Each item here is therefore the *seed of its own spec*.
 The Intermediate rung is the *RAG-quality + honest-cost* tier. Today its scenario is selectable,
 the topology renders, but the new nodes are visual previews.
 
-### 🏷️ DeepAgents runtime (the relabelled agent node)
-- **Where it shows up.** `frontend/src/lib/stations.ts` → `AGENT_SCENARIO_LABEL.intermediate` renames
-  the `agent` node to **`DeepAgents`** on this rung. Glossary tooltip in `frontend/src/i18n/strings.ts`
-  (key `DeepAgents`) — flagged *"Planned — not yet implemented."*
-- **What it is.** A LangGraph agent pattern that adds **explicit planning, sub-agents and a
-  virtual file system** for longer-horizon tasks (a planner that decomposes the task; workers that
-  execute focused sub-tasks; a scratchpad that survives across steps).
-- **What's missing.** Everything past the label: there is no planner node, no virtual-FS state, no
-  sub-agent spawning in `backend/app/agent/graph.py`. The agent is still the ReAct loop from spec
-  [026-agent-tool-autonomy](../specs/026-agent-tool-autonomy/).
-- **What a spec would add.**
-  - A planner node before `think` that produces an explicit plan in `AgentState`.
-  - A virtual file system (in-memory or `Skills`-style — see spec
-    [027-skills](../specs/027-skills/)) the agent can read/write across steps.
-  - New `Stage`s (e.g. `agent.plan`, `agent.fs.read`, `agent.fs.write`) wired into the protocol
-    (`backend/app/schemas.py` + `frontend/src/types/events.ts`), `STAGE_TO_STATION` and
-    `STAGE_TO_PHASE` (constitution §1, §6).
-  - Tests that assert the planner fires and the FS is consulted (structural assertions, real
-    OpenAI).
+### ✅ DeepAgents runtime — SHIPPED (057-deepagents-runtime)
+- **Status.** Done. On the **Intermediate** rung the `DeepAgents` relabel is now backed by a
+  **real, model-driven runtime** — planning, a virtual file system and sub-agent delegation are
+  **tools the agent elects inside its ReAct loop** (not a scripted preamble; a greeting elects
+  none of them). Simple never sees the tools (byte-for-byte).
+- **What shipped — the four pillars, hand-built.** Six native tools (`agent/tools.py`, gated by
+  `with_deepagents` — Intermediate and not RAGLESS) with handlers in
+  `backend/app/agent/deepagents.py`: **(1) Planning** — `write_todos` maintains a todo list with
+  per-item *status* (`agent.plan`); **(2) Virtual file system** — `write_file`/`read_file`/
+  `edit_file`/`ls` over `AgentState["vfs"]` (`agent.fs.write`/`agent.fs.read`); **(3) Sub-agents** —
+  `task` spawns a **real bounded sub-agent** (`run_subagent`: own prompt + tools + thread + ReAct
+  loop, context quarantine — only its result returns) (`agent.delegate`); **(4) Detailed prompt** —
+  `DEEPAGENTS_PROMPT` on the role layer. Four new `Stage`s mapped to the `agent` station + `reason`
+  phase (§1, §6); the Agent drill-in gains **Plan** (with status badges) and **Virtual file system**
+  panels + the sub-agent tool-trail (pure projection in `frontend/src/lib/deepagents.ts`); all prose
+  bilingual (EN + PT). *Deferred:* the library's summarization middleware + the Advanced
+  researcher/coder/critic trio. See [`specs/057-deepagents-runtime/`](../specs/057-deepagents-runtime/).
+- **What's still open (later specs).** The Advanced-rung **DeepAgents + Multi-agents**
+  orchestration (the full researcher/coder/critic trio under an orchestrator) — see the Advanced
+  section below — and persisting the virtual FS across turns.
 
 ### ✅ Reranker (cross-encoder) — SHIPPED (054-rag-block-expansion)
 - **Status.** Done. Reranking is a **real query-time sub-stage of the `rag` (Vector DB) station**
@@ -395,26 +396,27 @@ própria spec*.
 O degrau Intermediário é o nível de *qualidade de RAG + custo honesto*. Hoje o cenário é
 selecionável, a topologia é renderizada, mas os novos nós são prévias visuais.
 
-### 🏷️ Runtime DeepAgents (o nó do agente renomeado)
-- **Onde aparece.** `frontend/src/lib/stations.ts` → `AGENT_SCENARIO_LABEL.intermediate` renomeia o
-  nó `agent` para **`DeepAgents`** neste degrau. Tooltip de glossário em
-  `frontend/src/i18n/strings.ts` (chave `DeepAgents`) — marcado como *"Planejado — ainda não
-  implementado."*
-- **O que é.** Um padrão de agente LangGraph que adiciona **planejamento explícito, subagentes e
-  um sistema de arquivos virtual** para tarefas de horizonte mais longo (um planejador que decompõe
-  a tarefa; workers que executam subtarefas focadas; um scratchpad que sobrevive entre passos).
-- **O que falta.** Tudo além do rótulo: não existe nó de planejador, não existe estado de FS
-  virtual, não existe spawn de subagentes em `backend/app/agent/graph.py`. O agente ainda é o loop
-  ReAct da spec [026-agent-tool-autonomy](../specs/026-agent-tool-autonomy/).
-- **O que uma spec adicionaria.**
-  - Um nó de planejador antes do `think` que produza um plano explícito em `AgentState`.
-  - Um sistema de arquivos virtual (em memória ou estilo `Skills` — veja a spec
-    [027-skills](../specs/027-skills/)) que o agente possa ler/escrever entre passos.
-  - Novos `Stage`s (ex.: `agent.plan`, `agent.fs.read`, `agent.fs.write`) ligados ao protocolo
-    (`backend/app/schemas.py` + `frontend/src/types/events.ts`), `STAGE_TO_STATION` e
-    `STAGE_TO_PHASE` (constituição §1, §6).
-  - Testes que afirmam que o planejador dispara e o FS é consultado (asserções estruturais, OpenAI
-    real).
+### ✅ Runtime DeepAgents — ENTREGUE (057-deepagents-runtime)
+- **Status.** Concluído. No degrau **Intermediário** o rótulo `DeepAgents` agora tem um **runtime
+  real e dirigido pelo modelo** — planejamento, sistema de arquivos virtual e delegação a
+  subagente são **tools que o agente elege dentro do loop ReAct** (não um preâmbulo roteirizado;
+  uma saudação não dispara nenhuma). O Simples nunca vê as tools (byte-for-byte).
+- **O que foi entregue — os quatro pilares, feitos à mão.** Seis tools nativas (`agent/tools.py`,
+  gateadas por `with_deepagents` — Intermediário e sem RAGLESS) com handlers em
+  `backend/app/agent/deepagents.py`: **(1) Planejamento** — `write_todos` mantém uma lista de todos
+  com *status* por item (`agent.plan`); **(2) Sistema de arquivos virtual** — `write_file`/
+  `read_file`/`edit_file`/`ls` sobre `AgentState["vfs"]` (`agent.fs.write`/`agent.fs.read`);
+  **(3) Subagentes** — `task` spawna um **subagente real e limitado** (`run_subagent`: prompt +
+  tools + thread + loop ReAct próprios, contexto isolado — só o resultado volta) (`agent.delegate`);
+  **(4) Prompt detalhado** — `DEEPAGENTS_PROMPT` na camada de role. Quatro novos `Stage`s mapeados
+  para a estação `agent` + fase `reason` (§1, §6); o drill-in do Agente ganha painéis **Plano** (com
+  selos de status) e **Sistema de arquivos virtual** + a trilha de tools do subagente (projeção pura
+  em `frontend/src/lib/deepagents.ts`); toda prosa bilíngue (EN + PT). *Adiado:* o middleware de
+  summarization da lib + o trio researcher/coder/critic do Avançado. Veja
+  [`specs/057-deepagents-runtime/`](../specs/057-deepagents-runtime/).
+- **O que ainda falta (specs futuras).** A orquestração **DeepAgents + Multiagentes** do degrau
+  Avançado (o trio researcher/coder/critic sob um orquestrador) — veja a seção Avançado abaixo — e
+  persistir o FS virtual entre turnos.
 
 ### ✅ Reranker (cross-encoder) — ENTREGUE (054-rag-block-expansion)
 - **Status.** Concluído. O reranking é uma **sub-etapa real de tempo de consulta da estação `rag`

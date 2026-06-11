@@ -88,9 +88,11 @@ class Settings(BaseSettings):
     rerank_model: str = "ms-marco-MiniLM-L-12-v2"
     rerank_cache_dir: str = "app/data/flashrank"
     rerank_fetch_k: int = 10
-    # 055-rerank-score-threshold: the default minimum rerank score (0 = no filter, the
-    # 054 behavior). The UI slider overrides it per conversation.
-    rerank_threshold_default: float = 0.0
+    # 055-rerank-score-threshold: the default minimum rerank score. Ships ON at 0.05 so
+    # near-zero-score chunks (e.g. an off-topic greeting that matches nothing) are dropped
+    # from the grounding context by default — precision over recall on the Intermediate
+    # rung. 0 = no filter (the 054 behavior). The UI slider overrides it per conversation.
+    rerank_threshold_default: float = 0.05
 
     # --- Application database (relational system of record) ---
     app_db_path: str = "app/data/app.sqlite3"

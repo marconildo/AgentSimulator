@@ -20,6 +20,8 @@ import {
   type Section,
 } from "../lib/turnDiff";
 import { electedToolCalls } from "../lib/usage";
+import { deriveTodos, deriveDelegations, deriveVfs, hasDeepAgents } from "../lib/deepagents";
+import type { TodoItem } from "../types/events";
 import { useChat } from "../store/useChat";
 import { useSimulator } from "../store/useSimulator";
 import type { TraceEvent } from "../types/events";
@@ -171,6 +173,14 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   const sources = useMemo(() => sourcesFromEvents(visible), [visible]);
   const cited = useMemo(() => citations(view.answer, sources), [view.answer, sources]);
 
+  // 057-deepagents-runtime: the Intermediate-rung preamble (plan + delegated
+  // researcher + virtual file system), projected from the trace events. Empty on
+  // the Simple rung, so the DeepAgents panel only shows when the preamble ran.
+  const showDeepAgents = useMemo(() => hasDeepAgents(visible), [visible]);
+  const todos = useMemo(() => deriveTodos(visible), [visible]);
+  const vfs = useMemo(() => deriveVfs(visible), [visible]);
+  const delegations = useMemo(() => deriveDelegations(visible), [visible]);
+
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-[color-mix(in_srgb,var(--color-base)_94%,transparent)] backdrop-blur-sm">
       <div className="flex items-center gap-3 border-b border-[var(--color-line)] px-5 py-3">
@@ -238,6 +248,86 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
               })}
             </div>
           </Panel>
+
+          {/* 057-deepagents-runtime: the DeepAgents preamble (Intermediate rung) — the
+              explicit plan, the delegated researcher, and the virtual file system. Only
+              shown when the preamble actually ran (the Simple rung has none). */}
+          {showDeepAgents && (
+            <Panel title={a.plan} accent="var(--color-violet)" hint={a.planHint}>
+              {todos.length === 0 ? (
+                <p className="text-[11px] italic text-[var(--color-label)]">{a.planEmpty}</p>
+              ) : (
+                <ol className="space-y-1">
+                  {todos.map((todo, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]"
+                    >
+                      <TodoStatus status={todo.status} label={a.todoStatus[todo.status]} />
+                      <span
+                        className={
+                          todo.status === "completed"
+                            ? "text-[var(--color-label)] line-through"
+                            : "text-[var(--color-ink)]"
+                        }
+                      >
+                        {todo.content}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+              {delegations.map((d, idx) => (
+                <Labeled key={idx} label={a.delegated}>
+                  <div title={a.delegateHint} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
+                    <div className="font-mono text-[11px] text-[var(--color-ink)]">
+                      {d.subagent} · {d.subtask}
+                    </div>
+                    {d.steps.length > 0 && (
+                      <div className="mt-0.5 font-mono text-[10px] text-[var(--color-sky)]">
+                        {a.subagentUsed}: {d.steps.join(" → ")}
+                      </div>
+                    )}
+                    {d.result && (
+                      <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">{d.result}</div>
+                    )}
+                  </div>
+                </Labeled>
+              ))}
+
+              <Labeled label={a.vfs}>
+                {vfs.length === 0 ? (
+                  <p className="text-[11px] italic text-[var(--color-label)]" title={a.vfsHint}>
+                    {a.vfsEmpty}
+                  </p>
+                ) : (
+                  <div className="space-y-1" title={a.vfsHint}>
+                    {vfs.map((f) => (
+                      <div
+                        key={f.path}
+                        className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1"
+                      >
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-[var(--color-ink)]">📄 {f.path}</span>
+                          <span className="flex gap-1 text-[10px] text-[var(--color-label)]">
+                            {f.wrote && <span>{a.wrote}</span>}
+                            {f.read && <span>· {a.read}</span>}
+                            <span>· {a.approxTokens(Math.max(1, Math.round(f.bytes / 4)))}</span>
+                          </span>
+                        </div>
+                        {f.content && (
+                          <pre className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--color-muted)]">
+                            {truncate(f.content, 280)}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Labeled>
+            </Panel>
+          )}
 
           {/* Senses + hands — what it perceives this turn, and the tools it used. */}
           <Panel title={a.senses} accent="var(--color-warn)" hint={a.workingMemoryHint}>
@@ -698,6 +788,23 @@ function Step({ label, color }: { label: string; color: string }) {
 
 function Arrow() {
   return <span className="text-[var(--color-muted)]">→</span>;
+}
+
+// 057-deepagents-runtime — a todo's status chip (planning pillar). The icon + colour
+// make the pending → in_progress → completed progression scannable at a glance.
+const TODO_STATUS_STYLE: Record<TodoItem["status"], { icon: string; color: string }> = {
+  pending: { icon: "○", color: "var(--color-label)" },
+  in_progress: { icon: "◐", color: "var(--color-warn)" },
+  completed: { icon: "●", color: "var(--color-ok)" },
+};
+
+function TodoStatus({ status, label }: { status: TodoItem["status"]; label: string }) {
+  const s = TODO_STATUS_STYLE[status];
+  return (
+    <span title={label} className="font-mono text-[11px]" style={{ color: s.color }}>
+      {s.icon}
+    </span>
+  );
 }
 
 function KV({ k, v }: { k: string; v: string }) {

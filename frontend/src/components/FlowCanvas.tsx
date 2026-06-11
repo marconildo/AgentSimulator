@@ -269,6 +269,10 @@ export function readoutFor(
         const calls = (think.data.tool_calls as Array<{ name: string }> | undefined) ?? [];
         return calls.length ? ro.call(calls.map((c) => c.name).join(", ")) : ro.decisionAnswer;
       }
+      // 057-deepagents-runtime: during the Intermediate-rung preamble (after the
+      // planner fires, before the first think completes) surface the plan size.
+      const plan = lastWith(rt.events, (e) => e.stage === "agent.plan" && e.phase === "end");
+      if (plan) return ro.planned(((plan.data.steps as unknown[] | undefined) ?? []).length);
       return rt.status === "idle" ? "" : ro.routing;
     }
     case "storage": {

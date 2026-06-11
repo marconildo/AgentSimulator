@@ -29,6 +29,15 @@ class Stage(StrEnum):
     BACKEND = "backend"
     DB_READ = "db.read"
     AGENT_ROUTE = "agent.route"
+    # DeepAgents runtime (057-deepagents-runtime): on the Intermediate rung a preamble
+    # runs *before* the ReAct loop — an explicit PLAN, a delegated researcher sub-agent,
+    # and a virtual FILE SYSTEM (in-memory scratchpad) the orchestrator writes to and
+    # reads back across steps. All four map to the `agent` station; the Simple rung never
+    # emits them (byte-for-byte). Order: plan → fs.write → delegate → fs.write → fs.read.
+    AGENT_PLAN = "agent.plan"
+    AGENT_FS_WRITE = "agent.fs.write"
+    AGENT_FS_READ = "agent.fs.read"
+    AGENT_DELEGATE = "agent.delegate"
     AGENT_THINK = "agent.think"
     RAG_EMBED = "rag.embed"
     RAG_SEARCH = "rag.search"
