@@ -384,7 +384,11 @@ async def _run_retrieval_tool(
         return SIMULATED_TOOL_ERROR, state["context"], state["chunks"]
 
     context, chunks = await rag_retrieve(
-        query, state["top_k"], emitter, session_id=state["session_id"]
+        query,
+        state["top_k"],
+        emitter,
+        session_id=state["session_id"],
+        scenario=state["scenario"],
     )
     observation = context or "(no relevant passages found in the knowledge base)"
     return observation, context, chunks

@@ -34,6 +34,31 @@ function rt(events: TraceEvent[]): StationRuntime {
   return { status: "active", events };
 }
 
+function end(stage: TraceEvent["stage"], data: Record<string, unknown>): TraceEvent {
+  return { trace_id: "t", seq: 1, ts: 0, stage, phase: "end", label: "", data, metrics: {} };
+}
+
+describe("readoutFor — rag station reranked sub-stage (054-rag-block-expansion)", () => {
+  it("surfaces the rerank pool→kept on the Vector DB tile once rerank has fired (Intermediate)", () => {
+    const out = readoutFor(
+      "rag",
+      rt([end("rag.rerank", { k: 4, fetch_k: 10, candidates: [] })]),
+      ro,
+      noUsage,
+    );
+    expect(out).toBe(ro.reranked(10, 4));
+  });
+
+  it("shows the plain top-k/score readout when no rerank fired (Simple)", () => {
+    const ret: TraceEvent = {
+      ...end("rag.retrieve", { k: 4, chunks: [{}, {}] }),
+      metrics: { top_score: 0.47 },
+    };
+    const out = readoutFor("rag", rt([ret]), ro, noUsage);
+    expect(out).toBe(`top-4 · ${ro.score} 0.47`);
+  });
+});
+
 describe("readoutFor — llm station, failure treatments (051)", () => {
   it("shows the retry attempt while the timeout is being retried", () => {
     const out = readoutFor(

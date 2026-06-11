@@ -11,6 +11,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Pre-download the FlashRank reranker model (054-rag-block-expansion) into the
+# configured cache dir so the first Intermediate rerank never fetches at runtime.
+RUN python -c "from app.config import get_settings; from flashrank import Ranker; s = get_settings(); Ranker(model_name=s.rerank_model, cache_dir=s.rerank_cache_dir)"
+
 EXPOSE 8000
 
 # The app builds the vector index on first boot (only if empty) via its

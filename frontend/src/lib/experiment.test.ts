@@ -16,9 +16,11 @@ import {
   overridesFor,
   useExperiment,
 } from "./experiment";
+import { useScenario } from "./scenario";
 
 beforeEach(() => {
   useExperiment.setState({ byConv: {} });
+  useScenario.setState({ scenario: "simple" });
 });
 
 describe("useExperiment", () => {
@@ -51,6 +53,24 @@ describe("useExperiment", () => {
     reset("a");
     expect(getFor("a")).toEqual(DEFAULT_EXPERIMENT);
     expect(overridesFor("a")).toEqual({});
+  });
+
+  // 008/054 — the global maturity-ladder rung rides along in the chat overrides,
+  // so the backend actually runs the Intermediate path (reranker). Without this,
+  // the UI shows Intermediate but the request defaults to simple and never reranks.
+  describe("scenario override (054)", () => {
+    it("omits scenario on the simple rung (today's behavior, sends nothing extra)", () => {
+      useScenario.setState({ scenario: "simple" });
+      expect(overridesFor("a").scenario).toBeUndefined();
+      expect(overridesFor("a")).toEqual({});
+    });
+
+    it("sends the active rung once away from simple", () => {
+      useScenario.setState({ scenario: "intermediate" });
+      expect(overridesFor("a").scenario).toBe("intermediate");
+      useScenario.setState({ scenario: "advanced" });
+      expect(overridesFor("a").scenario).toBe("advanced");
+    });
   });
 
   // 017-failure-injection — the per-conversation failure selector.

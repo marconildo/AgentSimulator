@@ -28,7 +28,8 @@ export interface StationNodeData {
 }
 
 // Stations that have a dedicated focused drill-in view.
-const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true };
+// 054-rag-block-expansion: the RAG station opens a full RAG-pipeline drill-in.
+const HAS_DETAIL: Partial<Record<StationId, boolean>> = { agent: true, rag: true };
 
 export function StationNode(props: NodeProps) {
   const { meta, runtime, isActive, isEmphasized, readout, isSelected, expanded, height, width, comingSoon, usage } =
@@ -36,6 +37,8 @@ export function StationNode(props: NodeProps) {
   const t = useT();
   const toggleExpand = useSimulator((s) => s.toggleExpand);
   const openDetail = useSimulator((s) => s.openDetail);
+  const closeDetail = useSimulator((s) => s.closeDetail);
+  const detailOpen = useSimulator((s) => s.detail) === meta.id;
   // 042-agent-anatomy — open the "Configure agent" dialog from the Agent node.
   // The hook is mounted for every station (zustand allows this), but the
   // affordance only renders on the agent station below.
@@ -200,12 +203,19 @@ export function StationNode(props: NodeProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              openDetail(meta.id);
+              // Toggle: a second click on an already-open node closes its drill-in
+              // (a reliable close path beside the panel's own ✕).
+              if (detailOpen) closeDetail();
+              else openDetail(meta.id);
             }}
             className="mt-auto w-full rounded-lg border px-2 py-1 text-[10.5px] font-semibold transition hover:bg-[var(--color-panel-2)]"
-            style={{ borderColor: accent, color: accent }}
+            style={{
+              borderColor: accent,
+              color: detailOpen ? "var(--color-base)" : accent,
+              background: detailOpen ? accent : "transparent",
+            }}
           >
-            {t.node.openFull} ▸
+            {meta.id === "rag" ? t.node.openPipeline : t.node.openFull} {detailOpen ? "▾" : "▸"}
           </button>
         )}
       </div>
@@ -352,7 +362,6 @@ function innerRows(
       return rows;
     }
     // 008 preview nodes have no live events to summarize.
-    case "reranker":
     case "gateway":
     case "guardrails":
     case "cache":

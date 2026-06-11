@@ -137,6 +137,11 @@ export interface Strings {
     model: string;
     dimensions: string;
     retrievedChunks: (n: number) => string;
+    // 054-rag-block-expansion — the reranker drill-in: per-candidate rank movement.
+    rerankMovement: (n: number) => string;
+    rerankModel: string;
+    rerankScore: string;
+    rerankKept: string;
     // PDF ingestion (002-interactive-chat).
     ingestion: string;
     chunkStrategy: string;
@@ -357,6 +362,9 @@ export interface Strings {
     tokens: (n: number) => string;
     tokensCost: (tok: string, usd: string) => string; // 011-token-cost
     score: string;
+    // 054-rag-block-expansion — the Vector DB readout when the Intermediate rerank
+    // sub-stage has run: the rerank pool → kept top-k.
+    reranked: (from: number, to: number) => string;
     dbQuerying: string;
     dbHistory: (n: number) => string;
     dbPersisted: string;
@@ -379,6 +387,7 @@ export interface Strings {
     expand: string;
     collapse: string;
     openFull: string;
+    openPipeline: string; // 054 — the rag node's button label (opens the RAG pipeline panel)
     memory: string;
     latency: string;
     tip: string;
@@ -469,6 +478,41 @@ export interface Strings {
     nextToFallOut: (limit: number, turn: number) => string;
     thisTurnNotStored: string;
     memoryLesson: string;
+  };
+  // 054-rag-block-expansion — the RAG pipeline drill-in (Vector DB "open full view").
+  ragDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    empty: string;
+    chunking: string;
+    chunkingBlurb: string;
+    embedding: string;
+    embeddingBlurb: string;
+    retrieval: string;
+    retrievalBlurb: string;
+    reranking: string;
+    rerankingBlurb: string;
+    rerankInactive: string;
+    augmented: string;
+    augmentedBlurb: string;
+    offline: string;
+    toLlm: string;
+    close: string;
+    // Per-stage detail view (054 amendment 3) — clicking a card drills in.
+    inputLabel: string;
+    tokensLabel: string;
+    vectorLabel: (dim: number) => string;
+    tokenizerNote: string;
+    vectorSearch: string;
+    cosineFormula: string;
+    angleLabel: string;
+    rerankPoolNote: (fetchK: number, k: number) => string;
+    contextInjected: string;
+    chunkConfig: string;
+    showingOf: (shown: number, total: number) => string;
+    clickHint: string;
+    noRetrieval: string;
   };
   // 019-inline-citations — provenance chips on the settled answer. Chrome only;
   // tool args / chunk snippets / proper nouns stay verbatim (not translated).
@@ -728,6 +772,10 @@ const en: Strings = {
     model: "model",
     dimensions: "dimensions",
     retrievedChunks: (n) => `Retrieved chunks (top-${n})`,
+    rerankMovement: (n) => `Rerank movement (${n} candidates)`,
+    rerankModel: "reranker model",
+    rerankScore: "rerank score",
+    rerankKept: "kept",
     ingestion: "PDF ingestion",
     chunkStrategy: "chunking strategy",
     chunkSize: "size / overlap",
@@ -890,6 +938,7 @@ const en: Strings = {
       "Multi-agent — several specialized agents that coordinate (e.g. an orchestrator delegating to sub-agents) instead of one monolithic loop. (Planned — not yet implemented.)",
     SQL: "SQL — the query language of the relational database that stores the conversation.",
     RAG: "RAG (Retrieval-Augmented Generation) — embed the query, pull the closest chunks from the vector DB, and ground the answer in them.",
+    "VECTOR DB": "Vector database — stores chunk embeddings and runs the nearest-neighbour (cosine) search the RAG pipeline relies on.",
     cosine: "Cosine similarity — how the vector store ranks chunks by closeness of meaning.",
     MCP: "MCP (Model Context Protocol) — the open standard the agent uses to discover and call tools.",
     stream: "Streaming — tokens are sent to the browser as they're generated, over SSE.",
@@ -1023,6 +1072,7 @@ const en: Strings = {
     tokens: (n) => `${n} tokens`,
     tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
+    reranked: (from, to) => `reranked ${from}→${to}`,
     dbQuerying: "querying…",
     dbHistory: (n) => `history: ${n} rows`,
     dbPersisted: "persisted ✓",
@@ -1039,6 +1089,7 @@ const en: Strings = {
     expand: "Expand",
     collapse: "Collapse",
     openFull: "Open full view",
+    openPipeline: "Open RAG pipeline",
     memory: "memory",
     latency: "latency",
     tip: "Click a station to inspect · ⊕ to expand",
@@ -1237,6 +1288,44 @@ const en: Strings = {
       sharedNote: "Skills are shared across all conversations.",
     },
   },
+  ragDetail: {
+    title: "RAG Pipeline",
+    subtitle: "Chunking → Embedding → Retrieval → Reranking",
+    back: "← Canvas",
+    empty: "Send a message to watch the RAG pipeline run.",
+    chunking: "Chunking",
+    chunkingBlurb:
+      "Documents are split into overlapping chunks offline, at ingestion — so retrieval is fast at query time.",
+    embedding: "Embedding",
+    embeddingBlurb:
+      "The query is embedded into a vector with the same model used to index the corpus.",
+    retrieval: "Retrieval",
+    retrievalBlurb:
+      "A nearest-neighbour search returns the closest candidate chunks by cosine similarity.",
+    reranking: "Reranking",
+    rerankingBlurb:
+      "A local cross-encoder re-scores the candidate pool so the most relevant chunks lead, then trims to top-k.",
+    rerankInactive: "Reranking runs on the Intermediate rung only — switch scenarios to see it.",
+    augmented: "Augmented",
+    augmentedBlurb:
+      'The retrieved chunks are assembled into the prompt context sent to the LLM — the "A" in RAG.',
+    offline: "offline · ingestion",
+    toLlm: "→ LLM",
+    close: "Close",
+    inputLabel: "Input text",
+    tokensLabel: "Tokens",
+    vectorLabel: (dim) => `Embedding vector (first 8 of ${dim})`,
+    tokenizerNote: "tiktoken · o200k_base",
+    vectorSearch: "Vector search · cosine similarity",
+    cosineFormula: "cos(θ) = (q·d)/(|q||d|) = similarity = 1 − distance",
+    angleLabel: "angle",
+    rerankPoolNote: (fetchK, k) => `cross-encoder re-scored ${fetchK} candidates → kept top ${k}`,
+    contextInjected: "This text is injected into the prompt's context sent to the LLM.",
+    chunkConfig: "≈900 chars · 150 overlap",
+    showingOf: (shown, total) => `showing ${shown} of ${total}`,
+    clickHint: "Click a stage to inspect it",
+    noRetrieval: "This turn didn't use the knowledge base — the agent answered without retrieval.",
+  },
 };
 
 const pt: Strings = {
@@ -1374,6 +1463,10 @@ const pt: Strings = {
     model: "modelo",
     dimensions: "dimensões",
     retrievedChunks: (n) => `Trechos recuperados (top-${n})`,
+    rerankMovement: (n) => `Movimento do rerank (${n} candidatos)`,
+    rerankModel: "modelo do reranker",
+    rerankScore: "score do rerank",
+    rerankKept: "mantido",
     ingestion: "Ingestão de PDF",
     chunkStrategy: "estratégia de chunking",
     chunkSize: "tamanho / sobreposição",
@@ -1536,6 +1629,7 @@ const pt: Strings = {
       "Multi-agente — vários agentes especializados que se coordenam (ex.: um orquestrador delegando a subagentes) em vez de um único loop monolítico. (Planejado — ainda não implementado.)",
     SQL: "SQL — a linguagem de consulta do banco relacional que guarda a conversa.",
     RAG: "RAG (Retrieval-Augmented Generation) — embeda a pergunta, busca os trechos mais próximos no vector DB e fundamenta a resposta neles.",
+    "VECTOR DB": "Banco de dados vetorial — armazena os embeddings dos chunks e roda a busca por vizinhos mais próximos (cosseno) que o pipeline RAG usa.",
     cosine: "Similaridade de cosseno — como o banco vetorial ordena os trechos pela proximidade de significado.",
     MCP: "MCP (Model Context Protocol) — o padrão aberto que o agente usa para descobrir e chamar ferramentas.",
     stream: "Streaming — os tokens são enviados ao navegador conforme são gerados, via SSE.",
@@ -1669,6 +1763,7 @@ const pt: Strings = {
     tokens: (n) => `${n} tokens`,
     tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
+    reranked: (from, to) => `reordenado ${from}→${to}`,
     dbQuerying: "consultando…",
     dbHistory: (n) => `histórico: ${n} linhas`,
     dbPersisted: "persistido ✓",
@@ -1685,6 +1780,7 @@ const pt: Strings = {
     expand: "Expandir",
     collapse: "Recolher",
     openFull: "Abrir visão completa",
+    openPipeline: "Abrir pipeline RAG",
     memory: "memória",
     latency: "latência",
     tip: "Clique numa estação para inspecionar · ⊕ para expandir",
@@ -1883,6 +1979,44 @@ const pt: Strings = {
       title: "Skills",
       sharedNote: "Skills são compartilhadas entre todas as conversas.",
     },
+  },
+  ragDetail: {
+    title: "Pipeline RAG",
+    subtitle: "Chunking → Embedding → Recuperação → Reranking",
+    back: "← Canvas",
+    empty: "Envie uma mensagem para ver o pipeline RAG rodar.",
+    chunking: "Chunking",
+    chunkingBlurb:
+      "Os documentos são divididos em chunks sobrepostos offline, na ingestão — para a recuperação ser rápida na consulta.",
+    embedding: "Embedding",
+    embeddingBlurb:
+      "A consulta é incorporada em um vetor com o mesmo modelo usado para indexar o corpus.",
+    retrieval: "Recuperação",
+    retrievalBlurb:
+      "Uma busca por vizinhos mais próximos retorna os chunks candidatos mais próximos por similaridade de cosseno.",
+    reranking: "Reranking",
+    rerankingBlurb:
+      "Um cross-encoder local reordena o pool de candidatos para os trechos mais relevantes liderarem, depois corta para o top-k.",
+    rerankInactive: "O reranking roda apenas no nível Intermediário — troque de cenário para vê-lo.",
+    augmented: "Augmented",
+    augmentedBlurb:
+      'Os trechos recuperados são montados no contexto do prompt enviado à LLM — o "A" de RAG.',
+    offline: "offline · ingestão",
+    toLlm: "→ LLM",
+    close: "Fechar",
+    inputLabel: "Texto de entrada",
+    tokensLabel: "Tokens",
+    vectorLabel: (dim) => `Vetor de embedding (8 de ${dim})`,
+    tokenizerNote: "tiktoken · o200k_base",
+    vectorSearch: "Busca vetorial · similaridade de cosseno",
+    cosineFormula: "cos(θ) = (q·d)/(|q||d|) = similaridade = 1 − distância",
+    angleLabel: "ângulo",
+    rerankPoolNote: (fetchK, k) => `cross-encoder repontuou ${fetchK} candidatos → manteve top ${k}`,
+    contextInjected: "Este texto é injetado no contexto do prompt enviado à LLM.",
+    chunkConfig: "≈900 chars · 150 de sobreposição",
+    showingOf: (shown, total) => `mostrando ${shown} de ${total}`,
+    clickHint: "Clique numa etapa para inspecioná-la",
+    noRetrieval: "Este turno não usou a base de conhecimento — o agente respondeu sem recuperação.",
   },
 };
 

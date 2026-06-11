@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..config import get_settings
 from ..schemas import Stage
 from ..trace import TraceEmitter
 from .embeddings import embedding_model_name
+from .reranker import rerank
 from .store import get_vectorstore, reset_vectorstore_cache
 
 # Substrings Chroma raises when the cached collection handle is stale or its
@@ -54,11 +56,45 @@ def _search_with_recovery(query: str, k: int, where: dict[str, Any]):
         return get_vectorstore().similarity_search_with_score(query, k=k, filter=where)
 
 
+def _to_chunk(doc, distance, rank: int) -> dict[str, Any]:
+    """Normalize a (doc, distance) search hit into the chunk dict the UI consumes."""
+    dist = round(float(distance), 4)
+    # similarity = 1 − distance (cosine). `score` keeps the existing clamped-at-0
+    # value used for the bar; `similarity` is the raw inverse of `distance` so the
+    # inspector's ranked table can show both as exact complements (007).
+    similarity = round(1.0 - dist, 4)
+    return {
+        "text": doc.page_content,
+        "source": doc.metadata.get("source") or doc.metadata.get("filename", ""),
+        "title": doc.metadata.get("title", ""),
+        "score": round(max(0.0, similarity), 4),
+        "distance": dist,
+        "similarity": similarity,
+        "rank": rank,
+        # True for user-uploaded PDFs, False for the built-in corpus — lets the UI
+        # badge a chunk as coming from the user's document.
+        "uploaded": not doc.metadata.get("corpus", False),
+    }
+
+
 async def retrieve(
-    query: str, k: int, emitter: TraceEmitter, session_id: str | None = None
+    query: str,
+    k: int,
+    emitter: TraceEmitter,
+    session_id: str | None = None,
+    *,
+    scenario: str = "simple",
 ) -> tuple[str, list[dict[str, Any]]]:
     store = get_vectorstore()
     where = _scope_filter(session_id)
+
+    # 054-rag-block-expansion: only the Intermediate rung reranks. It fetches a WIDER
+    # candidate pool (so the cross-encoder sees more than it returns), re-scores it,
+    # and trims back to top-k. The Simple rung searches exactly top-k and skips rerank
+    # entirely — byte-for-byte with today. (Advanced inherits this via its own spec.)
+    rerank_on = scenario == "intermediate"
+    settings = get_settings()
+    fetch_k = max(k, settings.rerank_fetch_k) if rerank_on else k
 
     async with emitter.stage(Stage.RAG_EMBED, "Embedding the query") as rec:
         query_vec = store.embeddings.embed_query(query)
@@ -71,39 +107,41 @@ async def retrieve(
 
     async with emitter.stage(Stage.RAG_SEARCH, "Searching the vector store") as rec:
         # Re-embeds the query internally; fine for a small-k educational demo.
-        results = _search_with_recovery(query, k=k, where=where)
+        results = _search_with_recovery(query, k=fetch_k, where=where)
         rec.data = {
             "metric": "cosine",
-            "k": k,
+            "k": fetch_k,
             "candidates": len(results),
             "scope": "corpus + this conversation's uploads" if session_id else "corpus",
         }
 
+    # Chroma returns results sorted by ascending distance, so the enumeration index is
+    # a stable pre-rerank rank (1-based).
+    candidates = [_to_chunk(doc, dist, rank) for rank, (doc, dist) in enumerate(results, start=1)]
+
+    if rerank_on:
+        async with emitter.stage(Stage.RAG_RERANK, "Reranking candidates") as rec:
+            result = rerank(query, candidates, top_k=k)
+            selected = result.ranked
+            rec.data = {
+                "model": settings.rerank_model,
+                "k": k,
+                "fetch_k": fetch_k,
+                # Per-candidate rank movement (prev_rank → new_rank + score) for the
+                # inspector's before/after view.
+                "candidates": result.movement,
+            }
+            if selected:
+                rec.metrics["top_score"] = float(selected[0]["rerank_score"])
+    else:
+        selected = candidates[:k]
+
     async with emitter.stage(Stage.RAG_RETRIEVE, "Selecting top-k chunks") as rec:
-        chunks: list[dict[str, Any]] = []
-        # Chroma returns results already sorted by ascending distance (closest
-        # first), so the enumeration index is a stable rank (1-based).
-        for rank, (doc, distance) in enumerate(results, start=1):
-            dist = round(float(distance), 4)
-            # similarity = 1 − distance (cosine). `score` keeps the existing
-            # clamped-at-0 value used for the bar; `similarity` is the raw inverse
-            # of `distance` so the inspector's ranked table can show both as exact
-            # complements (007-numeric-transparency).
-            similarity = round(1.0 - dist, 4)
-            chunks.append(
-                {
-                    "text": doc.page_content,
-                    "source": doc.metadata.get("source") or doc.metadata.get("filename", ""),
-                    "title": doc.metadata.get("title", ""),
-                    "score": round(max(0.0, similarity), 4),
-                    "distance": dist,
-                    "similarity": similarity,
-                    "rank": rank,
-                    # True for user-uploaded PDFs, False for the built-in corpus —
-                    # lets the UI badge a chunk as coming from the user's document.
-                    "uploaded": not doc.metadata.get("corpus", False),
-                }
-            )
+        # Re-rank the selected chunks 1..n so `rank` reflects the final (post-rerank)
+        # order regardless of which path produced them.
+        chunks: list[dict[str, Any]] = [
+            {**c, "rank": rank} for rank, c in enumerate(selected, start=1)
+        ]
         rec.data = {"chunks": chunks, "k": k}
         if chunks:
             rec.metrics["top_score"] = chunks[0]["score"]

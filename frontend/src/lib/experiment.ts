@@ -15,6 +15,8 @@
 
 import { create } from "zustand";
 
+import { useScenario } from "./scenario";
+
 export interface ConvExperiment {
   topK: number | null; // null = backend default top-k
   // 017-failure-injection — force a failure on the next run; "none" = unchanged.
@@ -91,6 +93,12 @@ export const useExperiment = create<ExperimentState>((set, get) => ({
 export interface ChatOverrides {
   top_k?: number;
   simulate_failure?: string;
+  // 008-scenario-framework / 054-rag-block-expansion: the active maturity-ladder
+  // rung. Global (not per-conversation, so it reads from `useScenario`, not the
+  // experiment store). Sent only when away from `simple` so an untouched run still
+  // sends nothing extra — but on `intermediate` it's what makes the backend run
+  // the reranker (without it the backend defaults to simple and never reranks).
+  scenario?: string;
 }
 
 export function overridesFor(conv: string | null): ChatOverrides {
@@ -98,5 +106,7 @@ export function overridesFor(conv: string | null): ChatOverrides {
   const out: ChatOverrides = {};
   if (e.topK !== null) out.top_k = e.topK;
   if (e.simulateFailure && e.simulateFailure !== "none") out.simulate_failure = e.simulateFailure;
+  const scenario = useScenario.getState().scenario;
+  if (scenario !== "simple") out.scenario = scenario;
   return out;
 }

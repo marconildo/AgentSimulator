@@ -32,6 +32,11 @@ class Stage(StrEnum):
     AGENT_THINK = "agent.think"
     RAG_EMBED = "rag.embed"
     RAG_SEARCH = "rag.search"
+    # Reranking (054-rag-block-expansion): the Intermediate rung re-scores the wider
+    # candidate pool from rag.search with a local cross-encoder, then trims to top-k.
+    # Fires only on the Intermediate branch, between rag.search and rag.retrieve; the
+    # Simple rung never emits it (byte-for-byte). Maps to the `reranker` station.
+    RAG_RERANK = "rag.rerank"
     RAG_RETRIEVE = "rag.retrieve"
     # PDF ingestion (002-interactive-chat): chunk -> embed -> store. These animate
     # the same `rag` station as retrieval, but for *writing* user documents.

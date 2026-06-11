@@ -85,10 +85,11 @@ describe("ingestion station (033-ingestion-node)", () => {
     expect(ing.comingSoon ?? false).toBe(false);
   });
 
-  // AC8 — the query-time rag node keeps only embed/search/retrieve.
-  it("leaves the rag station with only the query-time stages", () => {
+  // AC8 — the rag node keeps the query-time stages (ingest.* live on `ingestion`).
+  // 054-rag-block-expansion added the rerank sub-stage between search and retrieve.
+  it("leaves the rag station with the query-time stages (incl. rerank)", () => {
     const rag = stationsFor("en").find((s) => s.id === "rag")!;
-    expect(rag.stages).toEqual(["rag.embed", "rag.search", "rag.retrieve"]);
+    expect(rag.stages).toEqual(["rag.embed", "rag.search", "rag.rerank", "rag.retrieve"]);
   });
 });
 

@@ -1419,14 +1419,29 @@ const SECTIONS_SRC: SectionSrc[] = [
           en: "Alternatives: hosted rerank APIs (Cohere Rerank, Voyage), open cross-encoders (bge-reranker, sentence-transformers), or an LLM-as-reranker prompt — accuracy and latency rise together.",
           pt: "Alternativas: APIs de rerank hospedadas (Cohere Rerank, Voyage), cross-encoders abertos (bge-reranker, sentence-transformers), ou um prompt de LLM-como-reranker — precisão e latência sobem juntas.",
         },
-        cloudRef: "reranker",
+        // 054-rag-block-expansion folded the reranker into the `rag` station, so its
+        // managed-service examples live here as inline notes (no station to borrow).
+        cloud: {
+          azure: {
+            en: "Azure AI Search's built-in semantic ranker reorders results with a cross-encoder — no separate service to run.",
+            pt: "O semantic ranker nativo do Azure AI Search reordena resultados com um cross-encoder — sem serviço separado para rodar.",
+          },
+          aws: {
+            en: "Amazon Bedrock exposes Cohere Rerank as a managed reranking endpoint you call after the vector search.",
+            pt: "O Amazon Bedrock expõe o Cohere Rerank como endpoint de reranking gerenciado que você chama após a busca vetorial.",
+          },
+          gcp: {
+            en: "Vertex AI's Ranking API re-scores retrieved passages against the query as a managed service.",
+            pt: "A Ranking API da Vertex AI re-pontua passagens recuperadas contra a consulta como serviço gerenciado.",
+          },
+        },
         links: [
           {
             label: "Sentence-Transformers — Cross-Encoders",
             url: "https://www.sbert.net/examples/applications/cross-encoder/README.html",
           },
         ],
-        where: "stations.ts · station 'reranker' (Intermediate preview)",
+        where: "backend/app/rag/reranker.py · rag.rerank sub-stage of the `rag` station (RagDetail)",
       },
       {
         id: "hybrid-search",

@@ -29,7 +29,7 @@ export function estimateInputCostUsd(promptTokens: number, model: string | null)
 
 // Resolve the encoder once and share the promise — the lazy `import()` keeps the
 // ranks off the initial load and concurrent callers share a single load.
-type Encoder = { encode: (text: string) => number[] };
+type Encoder = { encode: (text: string) => number[]; decode: (tokens: number[]) => string };
 let encoderPromise: Promise<Encoder> | null = null;
 
 function getEncoder(): Promise<Encoder> {
@@ -44,4 +44,21 @@ export async function estimateTokens(text: string): Promise<number> {
   if (!text.trim()) return 0;
   const encoder = await getEncoder();
   return encoder.encode(text).length;
+}
+
+/**
+ * The actual token PIECES `text` breaks into (real `o200k_base` BPE), capped at
+ * `max` for display. Each id is decoded back to its substring so the Embedding
+ * detail can show "text → tokens" honestly (not a whitespace split). Returns
+ * `{ pieces, total }` so the caller can show "showing N of total".
+ */
+export async function tokenizePieces(
+  text: string,
+  max = 48,
+): Promise<{ pieces: string[]; total: number }> {
+  if (!text.trim()) return { pieces: [], total: 0 };
+  const encoder = await getEncoder();
+  const ids = encoder.encode(text);
+  const pieces = ids.slice(0, max).map((id) => encoder.decode([id]));
+  return { pieces, total: ids.length };
 }

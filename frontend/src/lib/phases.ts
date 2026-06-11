@@ -46,6 +46,8 @@ export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   "agent.route": "route",
   "rag.embed": "retrieve",
   "rag.search": "retrieve",
+  // 054-rag-block-expansion — reranking is part of the same retrieval phase.
+  "rag.rerank": "retrieve",
   "rag.retrieve": "retrieve",
   "rag.ingest.chunk": "retrieve",
   "rag.ingest.embed": "retrieve",

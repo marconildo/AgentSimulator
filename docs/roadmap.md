@@ -53,18 +53,16 @@ the topology renders, but the new nodes are visual previews.
   - Tests that assert the planner fires and the FS is consulted (structural assertions, real
     OpenAI).
 
-### 🟡 Reranker (cross-encoder)
-- **Where it shows up.** `stations.ts` → station `reranker` (tier `services`, scenarios
-  `["intermediate", "advanced"]`, `comingSoon: true`, `stages: []`).
-- **What it is.** Re-scores the top-N candidates from the vector search with a cross-encoder so the
-  most relevant chunks lead — measurably better answer quality on the same index.
-- **Cloud examples (already wired in `clouds`).** Azure AI Search semantic ranker · Amazon Bedrock /
-  Cohere Rerank · Vertex Ranking API.
-- **What a spec would add.**
-  - A real reranker call between `rag.search` and `rag.retrieve` (a new `rag.rerank` `Stage`).
-  - Mapping the new stage in `STAGE_TO_STATION` / `STAGE_TO_PHASE` and rendering its readout +
-    inspector detail.
-  - Bilingual blurbs/glossary entries (EN + PT — constitution §4).
+### ✅ Reranker (cross-encoder) — SHIPPED (054-rag-block-expansion)
+- **Status.** Done. Reranking is a **real query-time sub-stage of the `rag` (Vector DB) station**
+  (`rag.rerank`, no separate tile), and the Intermediate rung now executes.
+- **What shipped.** A real reranker call between `rag.search` and `rag.retrieve` (new `rag.rerank`
+  `Stage`), using a **local FlashRank cross-encoder** (`backend/app/rag/reranker.py`; ONNX, no
+  torch, no key, deterministic). Retrieval fetches a wider pool (`rerank_fetch_k`), re-scores, and
+  trims to `top_k`; the Simple rung never reranks (byte-for-byte). The stage is mapped in
+  `STAGE_TO_STATION`/`STAGE_TO_PHASE`, with a readout + inspector rank-movement detail and the
+  `RagDetail` "open full view" drill-in (Chunking → Embedding → Retrieval → Reranking), all
+  bilingual (EN + PT). See [`specs/054-rag-block-expansion/`](../specs/054-rag-block-expansion/).
 
 ### 🟡 Hybrid search (BM25 + vector)
 - **Where it shows up.** Called out in the [README ladder table](../README.md#-the-maturity-ladder--simple--intermediate--advanced)
@@ -418,18 +416,16 @@ selecionável, a topologia é renderizada, mas os novos nós são prévias visua
   - Testes que afirmam que o planejador dispara e o FS é consultado (asserções estruturais, OpenAI
     real).
 
-### 🟡 Reranker (cross-encoder)
-- **Onde aparece.** `stations.ts` → estação `reranker` (tier `services`, cenários
-  `["intermediate", "advanced"]`, `comingSoon: true`, `stages: []`).
-- **O que é.** Reordena os top-N candidatos da busca vetorial com um cross-encoder para que os
-  trechos mais relevantes liderem — qualidade de resposta mensuravelmente melhor no mesmo índice.
-- **Exemplos de nuvem (já presentes no `clouds`).** Azure AI Search semantic ranker · Amazon
-  Bedrock / Cohere Rerank · Vertex Ranking API.
-- **O que uma spec adicionaria.**
-  - Uma chamada real ao reranker entre `rag.search` e `rag.retrieve` (um novo `Stage` `rag.rerank`).
-  - Mapeamento do novo estágio em `STAGE_TO_STATION` / `STAGE_TO_PHASE` e renderização do seu
-    readout + detalhe no inspetor.
-  - Blurbs/entradas de glossário bilíngues (EN + PT — constituição §4).
+### ✅ Reranker (cross-encoder) — ENTREGUE (054-rag-block-expansion)
+- **Status.** Concluído. O reranking é uma **sub-etapa real de tempo de consulta da estação `rag`
+  (Vector DB)** (`rag.rerank`, sem tile separado), e o degrau Intermediário agora executa.
+- **O que foi entregue.** Uma chamada real ao reranker entre `rag.search` e `rag.retrieve` (novo
+  `Stage` `rag.rerank`), usando um **cross-encoder FlashRank local** (`backend/app/rag/reranker.py`;
+  ONNX, sem torch, sem chave, determinístico). A recuperação busca um pool maior (`rerank_fetch_k`),
+  reordena e corta para o `top_k`; o degrau Simples nunca reordena (byte-for-byte). O estágio está
+  mapeado em `STAGE_TO_STATION`/`STAGE_TO_PHASE`, com readout + detalhe de movimento de rank no
+  inspetor e o drill-in `RagDetail` "abrir visão completa" (Chunking → Embedding → Recuperação →
+  Reranking), tudo bilíngue (EN + PT). Veja [`specs/054-rag-block-expansion/`](../specs/054-rag-block-expansion/).
 
 ### 🟡 Busca híbrida (BM25 + vetorial)
 - **Onde aparece.** Citada na [tabela da escada no README](../README.pt-BR.md#-a-escada-de-maturidade--simples--intermediário--avançado)

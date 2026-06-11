@@ -156,7 +156,9 @@ SCENARIOS: list[dict[str, Any]] = [
             "en": "Adds reranking, hybrid search and real token/cost accounting.",
             "pt": "Adiciona reranking, busca híbrida e contagem real de tokens/custo.",
         },
-        "available": False,
+        # 054-rag-block-expansion lit up the first real Intermediate node — a local
+        # cross-encoder reranker on the RAG path — so the rung now executes.
+        "available": True,
     },
     {
         "id": "advanced",

@@ -53,9 +53,10 @@ def test_config_exposes_scenarios_ladder():
             assert s["name"]["en"] and s["name"]["pt"]
             assert s["blurb"]["en"] and s["blurb"]["pt"]
             assert isinstance(s["available"], bool)
-        # Only the simple rung executes today; the upper rungs are coming soon.
+        # Simple + Intermediate execute (054-rag-block-expansion lit up the
+        # reranker, the first real Intermediate node); Advanced is still coming soon.
         assert by_id["simple"]["available"] is True
-        assert by_id["intermediate"]["available"] is False
+        assert by_id["intermediate"]["available"] is True
         assert by_id["advanced"]["available"] is False
 
 

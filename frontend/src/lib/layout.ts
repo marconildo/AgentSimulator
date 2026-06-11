@@ -37,7 +37,6 @@ const EXPANDED_H: Record<StationId, number> = {
   ingestion: 236,
   mcp: 208,
   llm: 208,
-  reranker: COLLAPSED_H,
   gateway: COLLAPSED_H,
   guardrails: COLLAPSED_H,
   cache: COLLAPSED_H,
@@ -78,7 +77,7 @@ const COLUMNS: Column[] = [
   { x: 372, gap: 168, members: ["backend", "agent"] },
   // 034: storage → ingestion → rag are stacked in write-path order so the upload
   // edges flow downward (storage→ingestion→rag all source-bottom → target-top).
-  { x: 1016, gap: 36, members: ["database", "storage", "ingestion", "rag", "mcp", "llm", "reranker"] },
+  { x: 1016, gap: 36, members: ["database", "storage", "ingestion", "rag", "mcp", "llm"] },
   { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
 
@@ -94,7 +93,6 @@ const TIER_OF: Record<StationId, TierId> = {
   ingestion: "services",
   mcp: "services",
   llm: "services",
-  reranker: "services",
   gateway: "aiops",
   guardrails: "aiops",
   cache: "aiops",

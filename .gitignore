@@ -13,6 +13,9 @@ venv/
 
 # --- Vector store / generated data ---
 backend/app/data/chroma/
+# Downloaded FlashRank reranker model (054-rag-block-expansion); fetched on first
+# use / pre-baked into the Docker image, never committed.
+backend/app/data/flashrank/
 *.sqlite3
 
 # --- Node / frontend ---

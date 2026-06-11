@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     chroma_dir: str = "app/data/chroma"
     corpus_dir: str = "app/data/corpus"
 
+    # --- Reranker (054-rag-block-expansion) ---
+    # The Intermediate rung re-scores a wider candidate pool with a local FlashRank
+    # cross-encoder (ONNX, no torch, no API key) before trimming to top-k. The model
+    # is downloaded once into `rerank_cache_dir` and cached process-wide; pre-bake it
+    # into the image so runtime/CI never fetch it. `rerank_fetch_k` is the wider pool
+    # the reranker sees (must exceed `rag_top_k` for reranking to add value).
+    rerank_model: str = "ms-marco-MiniLM-L-12-v2"
+    rerank_cache_dir: str = "app/data/flashrank"
+    rerank_fetch_k: int = 10
+
     # --- Application database (relational system of record) ---
     app_db_path: str = "app/data/app.sqlite3"
 

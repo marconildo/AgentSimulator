@@ -19,7 +19,9 @@ export const SCENARIO_ORDER: Scenario[] = ["simple", "intermediate", "advanced"]
 /** Which rungs actually execute. Mirrors backend `/api/config`. */
 const AVAILABLE: Record<Scenario, boolean> = {
   simple: true,
-  intermediate: false,
+  // 054-rag-block-expansion lit up the first real Intermediate node (a local
+  // cross-encoder reranker on the RAG path), so the rung now executes.
+  intermediate: true,
   advanced: false,
 };
 

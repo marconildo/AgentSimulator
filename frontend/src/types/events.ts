@@ -8,6 +8,10 @@ export type Stage =
   | "agent.think"
   | "rag.embed"
   | "rag.search"
+  // 054-rag-block-expansion: the Intermediate rung's local reranker, a query-time
+  // RAG sub-stage between rag.search and rag.retrieve. Maps to the `rag` (Vector
+  // DB) station and is detailed in the RAG drill-in.
+  | "rag.rerank"
   | "rag.retrieve"
   | "rag.ingest.chunk"
   | "rag.ingest.embed"

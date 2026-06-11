@@ -72,10 +72,12 @@ describe("scenario store (AC5)", () => {
 });
 
 describe("canSend — send is gated to executable rungs (AC4)", () => {
-  it("allows only the simple rung; the previews are view-only", async () => {
+  it("allows the simple + intermediate rungs; advanced is still view-only", async () => {
+    // 054-rag-block-expansion lit up the first real Intermediate node (the local
+    // reranker), so Intermediate now executes; only Advanced stays a preview.
     const { canSend } = await freshStore();
     expect(canSend("simple")).toBe(true);
-    expect(canSend("intermediate")).toBe(false);
+    expect(canSend("intermediate")).toBe(true);
     expect(canSend("advanced")).toBe(false);
   });
 });
@@ -104,14 +106,26 @@ describe("scenario-scoped visual model (AC3, AC4)", () => {
     }
   });
 
-  it("the ladder is cumulative: simple ⊂ intermediate ⊂ advanced (AC4)", () => {
+  it("the ladder is cumulative: simple ⊆ intermediate ⊂ advanced (AC4)", () => {
     const simple = new Set(visibleStationIdsFor("simple"));
     const inter = new Set(visibleStationIdsFor("intermediate"));
     const adv = new Set(visibleStationIdsFor("advanced"));
     for (const id of simple) expect(inter.has(id)).toBe(true);
     for (const id of inter) expect(adv.has(id)).toBe(true);
-    expect(inter.size).toBeGreaterThan(simple.size); // adds the reranker
-    expect(adv.size).toBeGreaterThan(inter.size); // adds the AI-Ops tier
+    // 054-rag-block-expansion: Intermediate adds NO new station tile — the reranker
+    // is a query-time sub-stage of the existing `rag` station — so its visible set
+    // equals Simple's (the upgrade is inside the RAG block, not a floating node).
+    expect(inter.size).toBe(simple.size);
+    expect(adv.size).toBeGreaterThan(inter.size); // adds the AI-Ops tier + sub-agents
+  });
+
+  it("the rag station owns the rerank sub-stage (no separate reranker tile) (054)", () => {
+    const rag = visibleStationsFor("en", "intermediate").find((s) => s.id === "rag");
+    expect(rag?.stages).toContain("rag.rerank");
+    // There is no standalone reranker station on any rung.
+    for (const sc of ["simple", "intermediate", "advanced"] as const) {
+      expect(visibleStationIdsFor(sc)).not.toContain("reranker");
+    }
   });
 
   it("upper-rung stations are flagged comingSoon and never carry a live stage (AC4)", () => {

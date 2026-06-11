@@ -378,6 +378,12 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
       const embed = pick(events, "rag.embed", "end");
       const retrieve = pick(events, "rag.retrieve", "end");
       const chunks = (retrieve?.data.chunks as Array<RagChunk>) ?? [];
+      // 054-rag-block-expansion: on the Intermediate rung the query-time reranker
+      // runs as a RAG sub-stage, so its before/after movement shows on this same
+      // Vector DB station (and, in full, in the RAG drill-in).
+      const rerank = pick(events, "rag.rerank", "end");
+      const movement = (rerank?.data.candidates as RerankMove[]) ?? [];
+      const rerankK = (rerank?.data.k as number | undefined) ?? movement.length;
       return (
         <>
           {embed && (
@@ -387,6 +393,14 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
               {Array.isArray(embed.data.preview) && (
                 <Mono>[{(embed.data.preview as number[]).map((n) => n.toFixed(3)).join(", ")}, …]</Mono>
               )}
+            </Section>
+          )}
+          {rerank && (
+            <Section title={i.rerankMovement(movement.length)}>
+              <KeyVal k={i.rerankModel} v={String(rerank.data.model ?? "—")} />
+              <div className="mt-2">
+                <RerankMovementList movement={movement} k={rerankK} i={i} />
+              </div>
             </Section>
           )}
           {chunks.length > 0 && (
@@ -567,6 +581,73 @@ interface RagChunk {
   distance?: number;
   similarity?: number;
   rank?: number;
+}
+
+// 054-rag-block-expansion — one candidate's rank movement through the reranker.
+export interface RerankMove {
+  prev_rank: number;
+  new_rank: number;
+  score: number;
+  source?: string;
+  title?: string;
+}
+
+// The reranker before/after list: each candidate as `#prev → #new` with its
+// cross-encoder score; the kept top-k are highlighted. Shared by the Inspector's
+// reranker detail and the RAG drill-in (RagDetail), so both read identically.
+export function RerankMovementList({
+  movement,
+  k,
+  i,
+}: {
+  movement: RerankMove[];
+  k: number;
+  i: I;
+}) {
+  const byNew = [...movement].sort((a, b) => a.new_rank - b.new_rank);
+  return (
+    <div className="space-y-1">
+      {byNew.map((m, idx) => {
+        const kept = m.new_rank <= k;
+        const moved = m.new_rank - m.prev_rank;
+        return (
+          <div
+            key={idx}
+            className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1 text-[11px]"
+            style={{
+              borderColor: kept ? "var(--color-ok)" : "var(--color-line)",
+              opacity: kept ? 1 : 0.6,
+            }}
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 font-mono text-[10px] text-[var(--color-muted)]">
+                #{m.prev_rank} → #{m.new_rank}
+              </span>
+              {moved !== 0 && (
+                <span
+                  className="shrink-0 font-mono text-[10px]"
+                  style={{ color: moved < 0 ? "var(--color-ok-soft)" : "var(--color-label)" }}
+                >
+                  {moved < 0 ? `▲${-moved}` : `▼${moved}`}
+                </span>
+              )}
+              {m.source && (
+                <span className="truncate font-mono text-[var(--color-text-soft)]">{m.source}</span>
+              )}
+              {kept && (
+                <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--color-ok-soft)]">
+                  {i.rerankKept}
+                </span>
+              )}
+            </div>
+            <span className="shrink-0 font-mono text-[var(--color-ok-soft)]" title={i.rerankScore}>
+              {m.score.toFixed(3)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // PDF ingestion detail (002-interactive-chat): chunking strategy, per-chunk

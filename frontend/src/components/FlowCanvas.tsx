@@ -283,6 +283,18 @@ export function readoutFor(
       return rt.status === "idle" ? "" : ro.ingestChunking(0);
     }
     case "rag": {
+      // 054-rag-block-expansion: on the Intermediate rung the query-time rerank
+      // sub-stage fires here too; once it has, surface the rerank pool→kept so the
+      // Vector DB tile shows the Intermediate upgrade without opening the drill-in.
+      const rr = lastWith(rt.events, (e) => e.stage === "rag.rerank" && e.phase === "end");
+      if (rr) {
+        const k = (rr.data.k as number | undefined) ?? 0;
+        const fetchK =
+          (rr.data.fetch_k as number | undefined) ??
+          (rr.data.candidates as unknown[] | undefined)?.length ??
+          k;
+        return ro.reranked(fetchK, k);
+      }
       const ret = lastWith(rt.events, (e) => e.stage === "rag.retrieve" && e.phase === "end");
       if (ret) {
         const k = (ret.data.k as number | undefined) ?? (ret.data.chunks as unknown[] | undefined)?.length;
@@ -328,7 +340,6 @@ export function readoutFor(
     }
     // 008-scenario-framework preview nodes: non-executing, so no live readout —
     // the "coming soon" badge on the node carries the message instead.
-    case "reranker":
     case "gateway":
     case "guardrails":
     case "cache":

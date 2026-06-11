@@ -29,7 +29,8 @@ export type StationId =
   | "llm"
   | "database"
   // 008-scenario-framework preview nodes (non-executing until their own spec):
-  | "reranker" // intermediate
+  // (054-rag-block-expansion folded the reranker into the `rag` station — it owns
+  // `rag.rerank` as a query-time sub-stage, shown in the RAG drill-in, not a tile.)
   | "gateway" // advanced — AI-Ops tier
   | "guardrails"
   | "cache"
@@ -454,11 +455,13 @@ const STATIONS_SRC: StationSrc[] = [
   {
     id: "rag",
     tier: "services",
-    title: "Vector DB",
-    subtitle: "Chroma",
+    // 054 amendment: the node represents the whole query-time RAG pipeline (embed →
+    // search → rerank → retrieve over the vector store), so it reads "RAG".
+    title: "RAG",
+    subtitle: { en: "Vector store · Chroma", pt: "Banco vetorial · Chroma" },
     icon: "📚",
     accent: "var(--color-ok)",
-    tag: "RAG",
+    tag: "VECTOR DB",
     blurb: {
       en: "Embeds the query and runs an approximate nearest-neighbor search over the knowledge base using cosine similarity, returning the most relevant top-k chunks as grounding context. It also ingests user-uploaded PDFs — chunk → embed → store — so the agent can ground answers on your own documents.",
       pt: "Gera o embedding da consulta e executa uma busca aproximada por vizinhos mais próximos na base de conhecimento usando similaridade de cosseno, retornando os top-k trechos mais relevantes como contexto de fundamentação. Também faz a ingestão de PDFs enviados pelo usuário — dividir → incorporar → armazenar — para o agente fundamentar respostas nos seus próprios documentos.",
@@ -485,8 +488,11 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "query", pt: "consulta" }, v: "embed → search → retrieve top-k" },
     ],
     // 033-ingestion-node: the rag.ingest.* stages moved to the `ingestion`
-    // station; the query-time RAG node keeps only embed/search/retrieve.
-    stages: ["rag.embed", "rag.search", "rag.retrieve"],
+    // station; the query-time RAG node keeps embed/search/(rerank)/retrieve.
+    // 054-rag-block-expansion: `rag.rerank` is a query-time sub-stage of RAG (fires
+    // only on the Intermediate rung); it animates this same Vector DB tile and its
+    // before/after detail lives in the RAG drill-in (RagDetail), not a separate node.
+    stages: ["rag.embed", "rag.search", "rag.rerank", "rag.retrieve"],
     position: { x: 980, y: 320 },
   },
   {
@@ -598,34 +604,10 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 980, y: 540 },
   },
   // --- 008-scenario-framework preview nodes (non-executing; stages: []) -------
-  // Intermediate rung: RAG-quality upgrade beside the vector store.
-  {
-    id: "reranker",
-    tier: "services",
-    title: { en: "Reranker", pt: "Reranker" },
-    subtitle: { en: "Cross-encoder", pt: "Cross-encoder" },
-    icon: "🎚️",
-    accent: "var(--color-ok)",
-    tag: "RERANK",
-    blurb: {
-      en: "Re-scores the top candidates with a cross-encoder so the most relevant chunks lead.",
-      pt: "Reordena os melhores candidatos com um cross-encoder para os trechos mais relevantes liderarem.",
-    },
-    generic: { en: "Cross-encoder reranker", pt: "Reranker cross-encoder" },
-    clouds: {
-      azure: "AI Search semantic ranker",
-      aws: "Bedrock / Cohere Rerank",
-      gcp: "Vertex Ranking API",
-    },
-    tech: [
-      { k: { en: "model", pt: "modelo" }, v: "cross-encoder" },
-      { k: { en: "input", pt: "entrada" }, v: "top-N candidates" },
-    ],
-    stages: [],
-    position: { x: 980, y: 600 },
-    scenarios: ["intermediate", "advanced"],
-    comingSoon: true,
-  },
+  // (054-rag-block-expansion: the Intermediate reranker is no longer a separate
+  // tile — `rag.rerank` is a query-time sub-stage of the `rag` station above,
+  // surfaced in the RAG drill-in. Its cloud examples now live on the Learn
+  // "reranker" topic as inline notes.)
   // Advanced rung: the AI-Ops control + observability plane.
   {
     id: "gateway",
