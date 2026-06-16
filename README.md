@@ -6,6 +6,14 @@
 
 ### Watch a chat message travel through a **real** AI agent — live, stage by stage.
 
+### 🚀 [**Try the live demo →**](https://reginaldosilva27.github.io/AgentSimulator/)
+
+No setup, no key — a mocked showcase that **replays real captured runs** for a set of sample
+questions (Simple + Intermediate scenarios). For the full live tool (your own OpenAI key, file
+uploads, everything real), run it locally — see [Quickstart](#-quickstart) below.
+
+<br/>
+
 An interactive, educational **X-ray of a modern agentic AI application**. You type a message; the
 backend runs a real **LangGraph** agent (**RAG** → **MCP tools** → **LLM**) and emits every stage as
 a stream of trace events; the frontend **animates those events** across a graph of "stations" and

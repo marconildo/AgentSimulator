@@ -6,6 +6,15 @@
 
 ### Veja uma mensagem de chat atravessar um agente de IA **real** — ao vivo, etapa por etapa.
 
+### 🚀 [**Testar a demo ao vivo →**](https://reginaldosilva27.github.io/AgentSimulator/)
+
+Sem instalar nada, sem chave — uma demonstração mockada que **reproduz execuções reais capturadas**
+para um conjunto de perguntas de exemplo (cenários Simple + Intermediate). Para a ferramenta completa
+ao vivo (sua própria chave OpenAI, upload de arquivos, tudo real), rode localmente — veja o
+[Início rápido](#-início-rápido) abaixo.
+
+<br/>
+
 Um **raio-X interativo e educativo de uma aplicação agêntica de IA moderna**. Você digita uma
 mensagem; o backend roda um agente **LangGraph** de verdade (**RAG** → **ferramentas MCP** →
 **LLM**) e emite cada etapa como um fluxo de eventos de trace; o frontend **anima esses eventos**
