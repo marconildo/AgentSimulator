@@ -5,6 +5,8 @@
 
 import { create } from "zustand";
 
+import { demoHealth, isDemo } from "./demo";
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 export type HealthStatus = "loading" | "ok" | "down";
@@ -23,6 +25,12 @@ export const useHealth = create<HealthState>((set) => ({
   llmModel: null,
   hasKey: null,
   load: async () => {
+    // 058-online-demo-mode: a backend-less build reports a healthy keyed model so
+    // the offline/no-key banner never shows; everything else is replayed fixtures.
+    if (isDemo()) {
+      set(demoHealth());
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/health`);
       if (!res.ok) throw new Error(`health ${res.status}`);

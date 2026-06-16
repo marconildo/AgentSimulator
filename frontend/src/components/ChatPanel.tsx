@@ -17,6 +17,7 @@ import {
 } from "../lib/chatApi";
 import { isFlowSettled, type PendingBubble, replayBubble } from "../lib/chatStatus";
 import { formatTokens, formatUsd } from "../lib/cost";
+import { DEMO_QUESTIONS, isDemo } from "../lib/demo";
 import { deriveView } from "../lib/derive";
 import { useHealth } from "../lib/health";
 import { activePhase, type TimelinePhase } from "../lib/phases";
@@ -846,6 +847,10 @@ function Composer({
 
   const canSend = input.trim().length > 0 && !sending && !locked;
 
+  // 058-online-demo-mode: the backend-less showcase locks free text + upload and
+  // offers only the curated sample questions (each replays a real captured run).
+  if (isDemo()) return <DemoComposer t={t} />;
+
   return (
     <div className="px-3 pb-3 pt-1">
       <input
@@ -961,6 +966,48 @@ function Composer({
           </span>
         </div>
       </form>
+    </div>
+  );
+}
+
+// 058-online-demo-mode: the demo composer. No free text, no upload — a disabled
+// input communicates "pick a sample" and the curated questions sit below as
+// one-click chips; clicking one replays its captured trace (real run, no backend).
+function DemoComposer({ t }: { t: Strings }) {
+  const send = useChat((s) => s.send);
+  const sending = useChat((s) => s.sending);
+  const lang = useLang((s) => s.lang);
+  return (
+    <div className="px-3 pb-3 pt-1">
+      <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2.5 py-2 shadow-sm">
+        <textarea
+          rows={1}
+          disabled
+          readOnly
+          value=""
+          placeholder={t.demo.composerHint}
+          aria-label={t.demo.composerHint}
+          className="block w-full resize-none bg-transparent px-1 py-1 text-[13px] leading-relaxed text-[var(--color-ink)] outline-none placeholder:text-[var(--color-label)] disabled:opacity-50"
+        />
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          <span className="px-1 text-[10.5px] uppercase tracking-wide text-[var(--color-faint)]">
+            {t.demo.sampleBarLabel}
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {DEMO_QUESTIONS.map((q) => (
+              <button
+                key={q.id}
+                type="button"
+                disabled={sending}
+                onClick={() => void send(q.label[lang])}
+                className="rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] px-2.5 py-1.5 text-left text-[12px] text-[var(--color-text-soft)] transition enabled:hover:border-[color-mix(in_srgb,var(--color-sky)_55%,transparent)] enabled:hover:text-[var(--color-sky-soft)] disabled:opacity-40"
+              >
+                {q.label[lang]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

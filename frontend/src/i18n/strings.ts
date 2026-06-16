@@ -23,6 +23,13 @@ export interface Strings {
     offline: string;
     noKey: string;
   };
+  // 058-online-demo-mode: the backend-less GitHub Pages showcase build.
+  demo: {
+    bannerLead: string;
+    bannerCta: string;
+    composerHint: string;
+    sampleBarLabel: string;
+  };
   chat: {
     title: string;
     subtitle: string;
@@ -732,6 +739,12 @@ const en: Strings = {
       "Backend offline — start it with `docker compose up backend` (it needs OPENAI_API_KEY in backend/.env).",
     noKey:
       "No OPENAI_API_KEY set — the backend is up but can't run a turn. Add it to backend/.env and restart.",
+  },
+  demo: {
+    bannerLead: "Demo mode — sample questions only, replaying real captured runs.",
+    bannerCta: "Run the full live version with your own OpenAI key",
+    composerHint: "Pick a sample question below",
+    sampleBarLabel: "Sample questions",
   },
   chat: {
     title: "Ask the agent",
@@ -1498,6 +1511,12 @@ const pt: Strings = {
       "Backend offline — suba com `docker compose up backend` (precisa de OPENAI_API_KEY em backend/.env).",
     noKey:
       "Sem OPENAI_API_KEY — o backend está no ar mas não roda um turno. Adicione em backend/.env e reinicie.",
+  },
+  demo: {
+    bannerLead: "Modo demo — apenas perguntas de exemplo, reproduzindo execuções reais capturadas.",
+    bannerCta: "Rode a versão completa com sua própria chave OpenAI",
+    composerHint: "Escolha uma pergunta de exemplo abaixo",
+    sampleBarLabel: "Perguntas de exemplo",
   },
   chat: {
     title: "Pergunte ao agente",

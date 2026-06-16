@@ -4,6 +4,7 @@
 
 import type { ChatOverrides } from "./experiment";
 import type { DoneEvent, TraceEvent, TraceSummary } from "../types/events";
+import { demoBatchChat, demoFetchTrace, demoStreamChat, isDemo } from "./demo";
 
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
@@ -65,6 +66,11 @@ export async function streamChat(
   // (or pass `[]`) to reproduce today's behavior.
   attachmentDocumentIds?: string[],
 ): Promise<void> {
+  // 058-online-demo-mode: replay a real captured trace, no backend round-trip.
+  if (isDemo()) {
+    await demoStreamChat(message, handlers, signal, sessionId ?? "demo");
+    return;
+  }
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -97,6 +103,7 @@ export async function batchChat(
   overrides?: ChatOverrides,
   attachmentDocumentIds?: string[],
 ): Promise<TraceSummary> {
+  if (isDemo()) return demoBatchChat(message, sessionId ?? "demo");
   const resp = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -116,6 +123,7 @@ export async function batchChat(
 }
 
 export async function fetchTrace(traceId: string): Promise<TraceSummary> {
+  if (isDemo()) return demoFetchTrace(traceId);
   const resp = await fetch(`${API_BASE}/api/trace/${traceId}`);
   if (!resp.ok) throw new Error("trace not found");
   return (await resp.json()) as TraceSummary;

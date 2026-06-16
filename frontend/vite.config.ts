@@ -6,6 +6,10 @@ import tailwindcss from "@tailwindcss/vite";
 // a single origin (no CORS dance). In production the API base is configured
 // via VITE_API_BASE at build time.
 export default defineConfig({
+  // 058-online-demo-mode: GitHub Pages serves a project site under `/<repo>/`,
+  // so asset URLs must carry that prefix. The Pages workflow sets
+  // BASE_PATH=/AgentSimulator/; locally (unset) it stays "/" — unchanged.
+  base: process.env.BASE_PATH ?? "/",
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,

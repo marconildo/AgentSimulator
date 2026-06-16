@@ -7,6 +7,7 @@ import { AgentDetail } from "./components/AgentDetail";
 import { ChatPanel } from "./components/ChatPanel";
 import { CloudToggle } from "./components/CloudToggle";
 import { ConfigToggle } from "./components/ConfigToggle";
+import { DemoBanner } from "./components/DemoBanner";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { PageIndexPipelinePanel } from "./components/PageIndexPipelinePanel";
 import { RagPipelinePanel } from "./components/RagPipelinePanel";
@@ -28,6 +29,7 @@ import { useT } from "./i18n";
 import { LearnPage } from "./learn/LearnPage";
 import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
+import { isDemo } from "./lib/demo";
 import { healthBanner, useHealth } from "./lib/health";
 import { markOnboarded, shouldAutoOnboard } from "./lib/onboarding";
 import type { Page } from "./lib/page";
@@ -188,6 +190,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-[var(--color-base)]">
+      {/* 058-online-demo-mode: only renders in the backend-less showcase build. */}
+      <DemoBanner />
       <header className="flex items-center gap-2.5 border-b border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-panel)_55%,transparent)] px-4 py-2.5 backdrop-blur-sm">
         {/* Brand — the group shrinks tagline-first (it truncates) so a longer PT
             string never pushes the right-hand controls off-screen; the title
@@ -195,7 +199,7 @@ export default function App() {
             The logomark sits in a soft halo so it reads as the masthead's
             "centerpiece" without competing with the wordmark's weight. */}
         <a
-          href="/"
+          href={import.meta.env.BASE_URL}
           className="group flex min-w-0 shrink items-center gap-2.5 text-[var(--color-ink)] no-underline transition"
         >
           <span
@@ -234,7 +238,9 @@ export default function App() {
             a sub-option of platform settings. */}
         <ThemeToggle />
         <LanguageToggle />
-        <AgentConfigToggle />
+        {/* 058-online-demo-mode: the agent is read-only in the demo build (no
+            backend to persist edits), so hide its configure affordance. */}
+        {!isDemo() && <AgentConfigToggle />}
         <ConfigToggle page={page} setPage={setPage} />
 
         <Divider />

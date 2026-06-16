@@ -25,12 +25,18 @@ offline/mock mode. With no key it fails fast with a clear, typed error rather th
 falling back. Tests exercise the real provider (CI provides the key as a secret) and
 assert **structurally** — stages fired, tool used, answer non-empty, relevant doc
 ranks first — to tolerate model variability. *(Amended by spec 003; was "Demo mode is
-deterministic and offline".)*
+deterministic and offline".)* *(Scoped carve-out by spec 058: a clearly-labelled
+`VITE_DEMO_MODE` build — the public GitHub Pages showcase — runs **no** provider and
+replays real captured traces with no backend; the **default** build remains
+key-required and fails fast as above.)*
 
 ### 3. Everything is real
 Reasoning, embeddings, the Chroma vector store, the SQLite application database and
 MCP tool *execution* are all real. Nothing is mocked. *(Amended by spec 003; was
-"Mock only reasoning and embeddings".)*
+"Mock only reasoning and embeddings".)* *(Scoped carve-out by spec 058: the
+`VITE_DEMO_MODE` showcase build replays **real captured runs** — recorded from this
+very pipeline, never fabricated — instead of executing them; the default build
+executes everything for real as above.)*
 
 ### 4. Bilingual by default (en/pt)
 Every user-facing string the app renders ships in **both** English and Portuguese

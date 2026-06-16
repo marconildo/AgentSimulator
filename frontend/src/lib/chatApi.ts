@@ -4,6 +4,19 @@
 
 import type { TraceEvent } from "../types/events";
 import type { Scenario } from "./scenario";
+import {
+  demoClearData,
+  demoCreateSession,
+  demoGetConfig,
+  demoGetCorpus,
+  demoListAgents,
+  demoListDocuments,
+  demoListMessages,
+  demoListSessions,
+  demoListSkills,
+  demoSetSessionAgent,
+  isDemo,
+} from "./demo";
 import { API_BASE, consumeEventStream } from "./sse";
 
 // 043-persisted-agent: the agent is a real SQLite row, cloned from the server
@@ -88,8 +101,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
-export const listSessions = () => api<SessionMeta[]>("/api/sessions");
-export const createSession = () => api<SessionMeta>("/api/sessions", { method: "POST" });
+// 058-online-demo-mode: in a backend-less build, the catalog/boot reads resolve
+// from bundled fixtures + the per-tab in-memory store. A normal build (isDemo()
+// false) takes the existing `api(...)` fetch path unchanged.
+export const listSessions = () =>
+  isDemo() ? demoListSessions() : api<SessionMeta[]>("/api/sessions");
+export const createSession = () =>
+  isDemo() ? demoCreateSession() : api<SessionMeta>("/api/sessions", { method: "POST" });
 // 043-persisted-agent: edit an agent (shared by every session pointing to it
 // in 044). The backend validates bounds and the `model` allowlist (422). The
 // PATCH is partial — only the keys in `body` are touched.
@@ -97,7 +115,8 @@ export const patchAgent = (id: string, body: AgentPatchBody) =>
   jsonApi<AgentMeta>(`/api/agents/${id}`, "PATCH", body);
 
 // 044-shared-agent-catalog: the catalog surface used by the dialog header.
-export const listAgents = () => api<AgentMeta[]>("/api/agents");
+export const listAgents = () =>
+  isDemo() ? demoListAgents() : api<AgentMeta[]>("/api/agents");
 export interface AgentCreateBody {
   name?: string;
   description?: string;
@@ -115,7 +134,9 @@ export const deleteAgent = (id: string) =>
   jsonApi<AgentDeleteResult>(`/api/agents/${id}`, "DELETE");
 /** Switch which agent a session uses (044). */
 export const setSessionAgent = (sessionId: string, agentId: string) =>
-  jsonApi<SessionMeta>(`/api/sessions/${sessionId}`, "PATCH", { agent_id: agentId });
+  isDemo()
+    ? demoSetSessionAgent(sessionId)
+    : jsonApi<SessionMeta>(`/api/sessions/${sessionId}`, "PATCH", { agent_id: agentId });
 
 // 025-clear-databases: the global reset. Counts of what was removed from both
 // stores — relational rows + user-imported vectors (the built-in corpus is kept).
@@ -128,11 +149,14 @@ export interface ClearResult {
   vectors_removed: number;
 }
 /** Wipe all relational history + imported vectors (keeps the built-in corpus). */
-export const clearData = () => api<ClearResult>("/api/data/clear", { method: "POST" });
+export const clearData = () =>
+  isDemo() ? demoClearData() : api<ClearResult>("/api/data/clear", { method: "POST" });
 export const deleteSession = (id: string) =>
   api<unknown>(`/api/sessions/${id}`, { method: "DELETE" });
-export const listMessages = (id: string) => api<ChatMessage[]>(`/api/sessions/${id}/messages`);
-export const listDocuments = (id: string) => api<DocumentMeta[]>(`/api/sessions/${id}/documents`);
+export const listMessages = (id: string) =>
+  isDemo() ? demoListMessages(id) : api<ChatMessage[]>(`/api/sessions/${id}/messages`);
+export const listDocuments = (id: string) =>
+  isDemo() ? demoListDocuments() : api<DocumentMeta[]>(`/api/sessions/${id}/documents`);
 export const deleteDocument = (id: string, documentId: string) =>
   api<unknown>(`/api/sessions/${id}/documents/${documentId}`, { method: "DELETE" });
 
@@ -196,7 +220,8 @@ async function jsonApi<T>(path: string, method: string, body?: unknown): Promise
   return (await resp.json()) as T;
 }
 
-export const listSkills = () => api<Skill[]>("/api/skills");
+export const listSkills = () =>
+  isDemo() ? demoListSkills() : api<Skill[]>("/api/skills");
 export const createSkill = (s: SkillInput) => jsonApi<Skill>("/api/skills", "POST", s);
 export const updateSkill = (id: string, s: SkillInput) =>
   jsonApi<Skill>(`/api/skills/${id}`, "PUT", s);
@@ -247,7 +272,7 @@ export interface AppConfig {
 let _configPromise: Promise<AppConfig> | null = null;
 /** Fetch (and cache) the agent's defaults: prompt, tools, top-k bounds. */
 export const getConfig = (): Promise<AppConfig> => {
-  if (!_configPromise) _configPromise = api<AppConfig>("/api/config");
+  if (!_configPromise) _configPromise = isDemo() ? demoGetConfig() : api<AppConfig>("/api/config");
   return _configPromise;
 };
 
@@ -263,7 +288,7 @@ export interface CorpusListing {
 let _corpusPromise: Promise<CorpusListing> | null = null;
 /** Fetch (and cache) the shipped corpus files. Read-only. */
 export const getCorpus = (): Promise<CorpusListing> => {
-  if (!_corpusPromise) _corpusPromise = api<CorpusListing>("/api/corpus");
+  if (!_corpusPromise) _corpusPromise = isDemo() ? demoGetCorpus() : api<CorpusListing>("/api/corpus");
   return _corpusPromise;
 };
 

@@ -12,6 +12,7 @@
 import { SettingsIcon } from "../components/icons";
 import { SkillsSettings } from "../components/SkillsSettings";
 import { useT } from "../i18n";
+import { isDemo } from "../lib/demo";
 import { SettingsCloud } from "./SettingsCloud";
 import { SettingsClear } from "./SettingsClear";
 import { SettingsDelivery } from "./SettingsDelivery";
@@ -53,10 +54,16 @@ export function SettingsPage() {
         <SettingsDelivery />
         <SectionDivider />
         <SettingsExperiment />
-        <SectionDivider />
-        <SettingsClear />
-        <SectionDivider />
-        <SkillsSettings />
+        {/* 058-online-demo-mode: the DB-mutating sections (Clear databases, Skills
+            CRUD) have no backing store in the backend-less showcase — hide them. */}
+        {!isDemo() && (
+          <>
+            <SectionDivider />
+            <SettingsClear />
+            <SectionDivider />
+            <SkillsSettings />
+          </>
+        )}
       </div>
     </div>
   );
