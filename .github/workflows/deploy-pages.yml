@@ -36,6 +36,9 @@ jobs:
       BASE_PATH: "/AgentSimulator/"
     steps:
       - uses: actions/checkout@v4
+      # Enables GitHub Pages for the repo if it isn't already (avoids the
+      # "Ensure GitHub Pages has been enabled" 404 on the deploy step).
+      - uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
