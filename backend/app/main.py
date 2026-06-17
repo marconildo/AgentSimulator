@@ -33,7 +33,7 @@ from .db.store import (
     get_store,
 )
 from .llm.context import history_pair_tokens
-from .llm.models import model_ids, models_payload
+from .llm.models import DEFAULT_PROVIDER, model_ids, models_payload, providers_payload
 from .mcp.client import get_registry
 from .rag.ingest import build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
@@ -222,6 +222,11 @@ async def config() -> dict:
         # mirror it.
         "models": models_payload(),
         "default_model": settings.llm_model,
+        # 065-provider-and-model-refresh: the LLM providers the dialog advertises.
+        # OpenAI is the one usable provider; Ollama is a disabled preview. The FE
+        # never hardcodes provider proper nouns.
+        "providers": providers_payload(),
+        "default_provider": DEFAULT_PROVIDER,
     }
 
 

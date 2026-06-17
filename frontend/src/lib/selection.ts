@@ -203,14 +203,19 @@ function withLocked(enabled: ComponentId[]): ComponentId[] {
   return [...LOCKED_COMPONENTS, ...out];
 }
 
-function load(): { enabled: ComponentId[]; runtime: Runtime } {
+export function loadSelection(): { enabled: ComponentId[]; runtime: Runtime } {
   if (typeof localStorage !== "undefined") {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as { enabled?: unknown; runtime?: unknown };
         const enabled = Array.isArray(parsed.enabled) ? parsed.enabled.filter(isComponentId) : null;
-        const runtime = isRuntime(parsed.runtime) ? parsed.runtime : DEFAULT_RUNTIME;
+        // A stale/preview runtime (e.g. `multiagent`, not yet implemented) must never
+        // resurrect into the live state — fall back to the default real runtime.
+        const runtime =
+          isRuntime(parsed.runtime) && RUNTIME_IS_REAL[parsed.runtime]
+            ? parsed.runtime
+            : DEFAULT_RUNTIME;
         if (enabled) return { enabled: withLocked(enabled), runtime };
       }
     } catch {
@@ -238,7 +243,7 @@ interface SelectionStore {
 }
 
 export const useSelection = create<SelectionStore>((set, get) => {
-  const init = load();
+  const init = loadSelection();
   return {
     enabled: new Set(init.enabled),
     runtime: init.runtime,
@@ -261,6 +266,11 @@ export const useSelection = create<SelectionStore>((set, get) => {
 
     setRuntime: (runtime) =>
       set((s) => {
+        // Only implemented runtimes are selectable — a preview runtime (e.g.
+        // `multiagent`) must never become the active runtime, or a user could send a
+        // message claiming a runtime that doesn't actually execute. The UI disables it
+        // too; this is the guard of record.
+        if (!RUNTIME_IS_REAL[runtime]) return {};
         persist(s.enabled, runtime);
         return { runtime };
       }),

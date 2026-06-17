@@ -5,6 +5,7 @@ import {
   classify,
   dependencyMet,
   isLocked,
+  loadSelection,
   requestInputs,
   resolveStations,
   useSelection,
@@ -49,18 +50,29 @@ describe("selection model (061-scenario-builder)", () => {
     expect(classify(set(["rag", "mcp"]), "multiagent")).toBe("advanced");
   });
 
-  it("AC4 — runtime is a radio; multiagent reveals the sub-agent stations", () => {
+  it("AC4 — runtime is a radio; only implemented (real) runtimes are selectable", () => {
     const s = useSelection.getState();
     s.setRuntime("deepagents");
     expect(useSelection.getState().runtime).toBe("deepagents");
+    // multiagent is a preview runtime (not implemented) — selecting it is a no-op,
+    // so the user can never send a message claiming a runtime that doesn't run.
     s.setRuntime("multiagent");
-    expect(useSelection.getState().runtime).toBe("multiagent");
+    expect(useSelection.getState().runtime).toBe("deepagents");
+    // resolveStations stays a total pure helper (still maps multiagent → sub-agents).
     const stations = resolveStations(set(["rag", "mcp"]), "multiagent");
     expect(stations.has("researcher")).toBe(true);
     expect(stations.has("coder")).toBe(true);
     expect(stations.has("critic")).toBe(true);
     // ReAct shows no sub-agents.
     expect(resolveStations(set(["rag", "mcp"]), "react").has("researcher")).toBe(false);
+  });
+
+  it("a stale persisted non-real runtime falls back to the default real runtime", () => {
+    localStorage.setItem(
+      "agentsim.selection",
+      JSON.stringify({ enabled: ["rag", "mcp"], runtime: "multiagent" }),
+    );
+    expect(loadSelection().runtime).toBe("react");
   });
 
   it("AC5 — rerank/hybrid declare a rag dependency (always met, rag is locked)", () => {

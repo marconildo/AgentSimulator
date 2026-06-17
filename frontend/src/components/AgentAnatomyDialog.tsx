@@ -10,6 +10,7 @@ import { AgentCatalogSidebar } from "../agent-anatomy/AgentCatalogSidebar";
 import { Identity } from "../agent-anatomy/Identity";
 import { SystemPromptSection } from "../agent-anatomy/SystemPromptSection";
 import { AgentPromptSection } from "../agent-anatomy/AgentPromptSection";
+import { ProviderSection } from "../agent-anatomy/ProviderSection";
 import { ModelSection } from "../agent-anatomy/ModelSection";
 import { ToolsSection } from "../agent-anatomy/ToolsSection";
 import { KnowledgeSection } from "../agent-anatomy/KnowledgeSection";
@@ -148,6 +149,8 @@ function sectionTitle(
       return t.system.title;
     case "agent":
       return t.agent.title;
+    case "provider":
+      return t.provider.title;
     case "model":
       return t.model.title;
     case "tools":
@@ -167,6 +170,8 @@ function renderSection(id: AgentAnatomySection) {
       return <SystemPromptSection />;
     case "agent":
       return <AgentPromptSection />;
+    case "provider":
+      return <ProviderSection />;
     case "model":
       return <ModelSection />;
     case "tools":

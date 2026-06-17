@@ -463,6 +463,7 @@ export interface Strings {
     subtitle: string;
     maturity: string;
     runtimeHeading: string;
+    runtimeSoon: string;
     zoneReal: string;
     zonePreview: string;
     requiresRag: string;
@@ -747,6 +748,15 @@ export interface Strings {
     agent: {
       title: string;
       help: string;
+    };
+    // 065-provider-and-model-refresh — the LLM provider picker (OpenAI active,
+    // Ollama a disabled preview).
+    provider: {
+      title: string;
+      help: string;
+      comingSoon: string;
+      activeNote: string;
+      previewNote: string;
     };
     model: {
       title: string;
@@ -1313,6 +1323,7 @@ const en: Strings = {
     subtitle: "Toggle components on/off — maturity is derived from what you pick.",
     maturity: "Maturity",
     runtimeHeading: "Agent runtime",
+    runtimeSoon: "soon",
     zoneReal: "Executes",
     zonePreview: "Preview · won't run",
     requiresRag: "requires Vector RAG",
@@ -1513,6 +1524,13 @@ const en: Strings = {
       title: "Agent prompt",
       help:
         "Who this agent is and what it should do. The role and tool-usage instructions specific to this agent.",
+    },
+    provider: {
+      title: "Provider",
+      help: "The LLM provider this agent runs on.",
+      comingSoon: "Coming soon",
+      activeNote: "Default — active provider.",
+      previewNote: "Run models locally. Preview — not yet available.",
     },
     model: {
       title: "Model",
@@ -2157,6 +2175,7 @@ const pt: Strings = {
     subtitle: "Ligue/desligue componentes — a maturidade é derivada do que você escolhe.",
     maturity: "Maturidade",
     runtimeHeading: "Runtime do agente",
+    runtimeSoon: "em breve",
     zoneReal: "Executa",
     zonePreview: "Prévia · não roda",
     requiresRag: "requer Vector RAG",
@@ -2361,6 +2380,13 @@ const pt: Strings = {
       title: "Prompt do agente",
       help:
         "Quem é este agente e o que ele deve fazer. O papel e as instruções de uso de ferramentas específicas deste agente.",
+    },
+    provider: {
+      title: "Provedor",
+      help: "O provedor de LLM que este agente utiliza.",
+      comingSoon: "Em breve",
+      activeNote: "Padrão — provedor ativo.",
+      previewNote: "Rode modelos localmente. Prévia — ainda não disponível.",
     },
     model: {
       title: "Modelo",

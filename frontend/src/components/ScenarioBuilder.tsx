@@ -116,19 +116,31 @@ export function ScenarioBuilder() {
             <div className="inline-flex w-full gap-0.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-0.5">
               {RUNTIMES.map((rt: Runtime) => {
                 const active = runtime === rt;
+                // A preview runtime (not implemented) is not selectable — selecting it
+                // would let the user send a message claiming a runtime that doesn't run.
+                const real = RUNTIME_IS_REAL[rt];
                 return (
                   <button
                     key={rt}
-                    onClick={() => setRuntime(rt)}
+                    onClick={() => real && setRuntime(rt)}
+                    disabled={!real}
                     aria-pressed={active}
+                    aria-disabled={!real}
                     title={b.runtimes[rt].blurb}
-                    className={`flex-1 rounded-md px-1.5 py-1 text-[10.5px] font-medium leading-none transition ${
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[10.5px] font-medium leading-none transition ${
                       active
                         ? "bg-[var(--color-panel)] text-[var(--color-indigo-soft)] shadow-sm"
-                        : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                    } ${RUNTIME_IS_REAL[rt] ? "" : "opacity-70"}`}
+                        : real
+                          ? "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                          : "cursor-not-allowed text-[var(--color-muted)] opacity-50"
+                    }`}
                   >
                     {b.runtimes[rt].name}
+                    {!real && (
+                      <span className="rounded border border-dashed border-[var(--color-line)] px-1 text-[8px] uppercase tracking-wide">
+                        {b.runtimeSoon}
+                      </span>
+                    )}
                   </button>
                 );
               })}

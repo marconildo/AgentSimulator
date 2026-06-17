@@ -77,8 +77,14 @@ agents actually scale to bigger tasks**, not just a relabel.
    virtual-FS contents from real trace events (pure projection).
 6. **AC6 (model-driven, not scripted)** — On `scenario=intermediate` a **greeting elects
    none** of the DeepAgents tools (the model just answers); `scenario=simple` is never even
-   offered them, so its event sequence + answer path are byte-for-byte with today. RAGLESS
-   (056) takes precedence over DeepAgents (the tools are suppressed when it's on).
+   offered them, so its event sequence + answer path are byte-for-byte with today.
+
+   > **Amended (2026-06-17):** the original "RAGLESS (056) takes precedence over
+   > DeepAgents (the tools are suppressed when it's on)" rule was **reversed** — the
+   > two seams are independent and now **compose**. The DeepAgents tools stay
+   > available regardless of RAGLESS; RAGLESS only swaps what the retrieval tool
+   > grounds on (PageIndex vs the vector pipeline). See `_with_deepagents` in
+   > `graph.py` and `test_deepagents.py::test_deepagents_gated_to_deepagents_runtime_and_composes_with_ragless`.
 7. **AC7 (bilingual)** — Every new user-facing string exists in `en` and `pt`.
 
 ## Protocol / stage impact
@@ -133,9 +139,9 @@ agents actually scale to bigger tasks**, not just a relabel.
 > task **plans first** (pinned by `test_real_task_on_intermediate_plans_first`). *This is the
 > ReAct → DeepAgent line: not tool count, but a harness that reinforces planning/state.*
 
-DeepAgents is **tool-driven** and **hand-built**. On `scenario == "intermediate"` (and
-**not** when RAGLESS is on — separate experiments that don't compose) the agent is offered
-six **native tools** (advertised in `agent/tools.py`, gated by `with_deepagents`), plus a
+DeepAgents is **tool-driven** and **hand-built**. On `scenario == "intermediate"`
+(independent of RAGLESS — the two **compose**; see the AC6 amendment above) the agent is
+offered six **native tools** (advertised in `agent/tools.py`, gated by `with_deepagents`), plus a
 detailed `DEEPAGENTS_PROMPT` addendum on its role layer. The graph topology is the
 **unchanged** ReAct loop (`route → think ⇄ tools → generate → respond`); the tools fire from
 `tools_node` when the model calls them. The **four pillars**:

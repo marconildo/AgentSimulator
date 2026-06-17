@@ -39,25 +39,26 @@ class CuratedModel:
 # descriptions are bilingual-friendly *English-only* tooltips (UI chrome
 # around them is bilingual; the model id and label are proper nouns).
 CURATED_MODELS: tuple[CuratedModel, ...] = (
+    # 065-provider-and-model-refresh: the 4.1 + 5 families (gpt-4o family dropped).
     CuratedModel(
-        id="gpt-4o-mini",
-        label="GPT-4o mini",
-        description="Fast and cheap. The default for the simulator.",
-    ),
-    CuratedModel(
-        id="gpt-4o",
-        label="GPT-4o",
-        description="Higher quality reasoning at a higher cost.",
+        id="gpt-4.1-nano",
+        label="GPT-4.1 nano",
+        description="GPT-4.1 family — fastest and cheapest, 1M-token context.",
     ),
     CuratedModel(
         id="gpt-4.1-mini",
         label="GPT-4.1 mini",
-        description="GPT-4.1 with a 1M-token context window.",
+        description="GPT-4.1 with a 1M-token context window. The default for the simulator.",
     ),
     CuratedModel(
         id="gpt-4.1",
         label="GPT-4.1",
         description="Long-context (1M) reasoning model.",
+    ),
+    CuratedModel(
+        id="gpt-5-nano",
+        label="GPT-5 nano",
+        description="GPT-5 family — smallest and fastest.",
     ),
     CuratedModel(
         id="gpt-5-mini",
@@ -69,7 +70,40 @@ CURATED_MODELS: tuple[CuratedModel, ...] = (
         label="GPT-5",
         description="GPT-5 family — top-end reasoning.",
     ),
+    CuratedModel(
+        id="gpt-5.5",
+        label="GPT-5.5",
+        description="Latest GPT-5.5 — most capable reasoning.",
+    ),
 )
+
+
+@dataclass(frozen=True)
+class Provider:
+    """One LLM provider the Agent Anatomy dialog can advertise.
+
+    ``available`` gates whether the provider can actually run. Today only OpenAI
+    is available (constitution §2); Ollama is a labelled **preview** (constitution
+    §3 — it draws a disabled option, it never runs). Adding a real second provider
+    is its own future spec; this list exists so the FE never hardcodes the names.
+    """
+
+    id: str
+    label: str
+    available: bool
+
+    def to_dict(self) -> dict[str, str | bool]:
+        return asdict(self)
+
+
+# 065-provider-and-model-refresh: OpenAI is the one usable provider; Ollama is a
+# disabled preview. Proper nouns ("OpenAI", "Ollama (local)") are not translated.
+PROVIDERS: tuple[Provider, ...] = (
+    Provider(id="openai", label="OpenAI", available=True),
+    Provider(id="ollama", label="Ollama (local)", available=False),
+)
+
+DEFAULT_PROVIDER = "openai"
 
 
 def model_ids() -> set[str]:
@@ -80,3 +114,8 @@ def model_ids() -> set[str]:
 def models_payload() -> list[dict[str, str]]:
     """JSON-shape the FE renders directly from ``/api/config.models``."""
     return [m.to_dict() for m in CURATED_MODELS]
+
+
+def providers_payload() -> list[dict[str, str | bool]]:
+    """JSON-shape the FE renders directly from ``/api/config.providers``."""
+    return [p.to_dict() for p in PROVIDERS]

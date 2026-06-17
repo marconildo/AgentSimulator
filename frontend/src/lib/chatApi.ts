@@ -245,6 +245,15 @@ export interface ModelInfo {
   description: string;
 }
 
+// 065-provider-and-model-refresh: one LLM provider advertised by /api/config.
+// `available` gates whether it can run — OpenAI is true, Ollama is a disabled
+// preview. The id/label are proper nouns → not translated.
+export interface ProviderInfo {
+  id: string;
+  label: string;
+  available: boolean;
+}
+
 export interface AppConfig {
   // 042-agent-anatomy split the prior single prompt into two server-shipped
   // defaults; the FE Agent Anatomy dialog prefills each textarea independently.
@@ -267,6 +276,10 @@ export interface AppConfig {
   // allowlist validation prevents an unlisted id from reaching the agent.
   models: ModelInfo[];
   default_model: string;
+  // 065-provider-and-model-refresh: the LLM providers the dialog advertises.
+  // OpenAI is active; Ollama is a disabled preview.
+  providers: ProviderInfo[];
+  default_provider: string;
 }
 
 let _configPromise: Promise<AppConfig> | null = null;

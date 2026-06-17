@@ -25,10 +25,15 @@ vi.mock("../lib/chatApi", () => {
     scenarios: [],
     failure_modes: ["none"],
     models: [
-      { id: "gpt-4o-mini", label: "GPT-4o mini", description: "small" },
-      { id: "gpt-4o", label: "GPT-4o", description: "large" },
+      { id: "gpt-4.1-mini", label: "GPT-4.1 mini", description: "small" },
+      { id: "gpt-4.1", label: "GPT-4.1", description: "large" },
     ],
-    default_model: "gpt-4o-mini",
+    default_model: "gpt-4.1-mini",
+    providers: [
+      { id: "openai", label: "OpenAI", available: true },
+      { id: "ollama", label: "Ollama (local)", available: false },
+    ],
+    default_provider: "openai",
   };
   const defaultAgent = {
     id: "default-agent",
@@ -36,7 +41,7 @@ vi.mock("../lib/chatApi", () => {
     description: "default",
     system_prompt: "GUARDRAILS",
     agent_prompt: "ROLE",
-    model: "gpt-4o-mini",
+    model: "gpt-4.1-mini",
     enabled_tools: [],
     is_default: true,
     created_at: 0,
@@ -94,7 +99,7 @@ describe("AgentAnatomyDialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("renders all seven sections when opened (AC11)", async () => {
+  it("renders all eight sections when opened (AC11)", async () => {
     useAgentAnatomy.setState({ open: true });
     render(<AgentAnatomyDialog />);
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -105,6 +110,7 @@ describe("AgentAnatomyDialog", () => {
       "Identity",
       "System prompt",
       "Agent prompt",
+      "Provider",
       "Model",
       "Tools",
       "Knowledge base",

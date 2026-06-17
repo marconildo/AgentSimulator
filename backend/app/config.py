@@ -65,7 +65,7 @@ class Settings(BaseSettings):
 
     # --- LLM / embeddings ---
     openai_api_key: str = ""
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-4.1-mini"
     embedding_model: str = "text-embedding-3-small"
 
     # --- Web search (052-web-search-tool) ---

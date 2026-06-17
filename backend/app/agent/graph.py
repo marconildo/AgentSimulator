@@ -96,12 +96,14 @@ def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegist
 def _with_deepagents(state: Mapping[str, Any]) -> bool:
     """Whether the DeepAgents tools (057) are offered this run.
 
-    Gated by the ``deepagents`` runtime (061-scenario-builder, was the Intermediate
-    rung), and **not** when RAGLESS (056) is active — the two do not compose (RAGLESS
-    wants the agent to elect the plain retrieval tool so it can compare reasoning-based
-    vs vector retrieval).
+    Gated purely by the ``deepagents`` runtime (061-scenario-builder, was the
+    Intermediate rung). The two seams are independent and **compose**: RAGLESS (056)
+    only swaps what the retrieval tool grounds on (PageIndex instead of the vector
+    pipeline) inside ``_run_retrieval_tool``, while the DeepAgents plan/file/delegate
+    tools remain available for the agent to elect. A DeepAgents run with RAGLESS on
+    therefore plans/delegates as usual and its retrieval steps use PageIndex.
     """
-    return state.get("runtime") == "deepagents" and not state.get("ragless")
+    return state.get("runtime") == "deepagents"
 
 
 def _skills_advertised(state: AgentState) -> bool:

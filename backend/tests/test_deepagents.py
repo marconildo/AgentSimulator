@@ -62,12 +62,15 @@ async def _tool(name, args, *, state=None, vfs=None, plan=None, provider=None, r
 # --- Gating: who sees the DeepAgents tools (deterministic, keyless) -------------
 
 
-def test_deepagents_gated_to_deepagents_runtime_without_ragless():
-    # 061-scenario-builder: gated by the `deepagents` runtime (was the Intermediate rung),
-    # and never composes with RAGLESS.
+def test_deepagents_gated_to_deepagents_runtime_and_composes_with_ragless():
+    # 061-scenario-builder: gated purely by the `deepagents` runtime (was the
+    # Intermediate rung). It now COMPOSES with RAGLESS — the two are independent
+    # (the retrieval tool transparently uses PageIndex when ragless is on, while the
+    # DeepAgents plan/file/delegate tools stay available).
     assert _with_deepagents({"runtime": "deepagents", "ragless": False}) is True
-    assert _with_deepagents({"runtime": "deepagents", "ragless": True}) is False
+    assert _with_deepagents({"runtime": "deepagents", "ragless": True}) is True
     assert _with_deepagents({"runtime": "react", "ragless": False}) is False
+    assert _with_deepagents({"runtime": "react", "ragless": True}) is False
     assert _with_deepagents({"runtime": "multiagent", "ragless": False}) is False
 
 

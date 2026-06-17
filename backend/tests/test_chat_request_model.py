@@ -46,8 +46,8 @@ def test_chat_request_accepts_optional_model():
     req = ChatRequest(message="hi")
     assert req.model is None
 
-    req = ChatRequest(message="hi", model="gpt-4o-mini")
-    assert req.model == "gpt-4o-mini"
+    req = ChatRequest(message="hi", model="gpt-4.1-mini")
+    assert req.model == "gpt-4.1-mini"
 
 
 def test_chat_request_rerank_threshold_bounds():

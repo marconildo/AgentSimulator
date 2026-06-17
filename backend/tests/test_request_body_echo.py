@@ -52,9 +52,9 @@ def test_request_body_carries_overridden_model():
     with TestClient(app) as client:
         echoed = _frontend_request(
             client,
-            {"message": "hi", "mode": "stream", "model": "gpt-4o-mini"},
+            {"message": "hi", "mode": "stream", "model": "gpt-4.1"},
         )
-    assert echoed.get("model") == "gpt-4o-mini"
+    assert echoed.get("model") == "gpt-4.1"
 
 
 def test_request_body_echoes_agent_prompt_only_when_set():

@@ -46,7 +46,7 @@ def test_overrides_change_composed_system_and_model():
         "message": "What's a fun fact about Belém?",
         "mode": "stream",
         "agent_prompt": role,
-        "model": "gpt-4o-mini",
+        "model": "gpt-4.1",
     }
     with TestClient(app) as client:
         events, done = _stream_events(client, body)
@@ -64,10 +64,10 @@ def test_overrides_change_composed_system_and_model():
     # The model echo matches the override on both the request body and the
     # llm.prompt event (which is what 011 already carries).
     frontend_end = next(ev for ev in events if ev["stage"] == "frontend" and ev["phase"] == "end")
-    assert frontend_end["data"]["request"]["model"] == "gpt-4o-mini"
+    assert frontend_end["data"]["request"]["model"] == "gpt-4.1"
     # llm.generate END carries the model too; assert symmetry.
     gen_end = next(ev for ev in events if ev["stage"] == "llm.generate" and ev["phase"] == "end")
-    assert gen_end["data"]["model"] == "gpt-4o-mini"
+    assert gen_end["data"]["model"] == "gpt-4.1"
 
     # The answer is non-empty (structural, not semantic).
     assert done.get("answer") or any(
