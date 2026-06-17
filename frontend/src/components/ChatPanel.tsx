@@ -21,7 +21,6 @@ import { DEMO_QUESTIONS, isDemo } from "../lib/demo";
 import { deriveView } from "../lib/derive";
 import { useHealth } from "../lib/health";
 import { activePhase, type TimelinePhase } from "../lib/phases";
-import { canSend as scenarioCanSend, useScenario } from "../lib/scenario";
 import { formatClock, formatRelative } from "../lib/time";
 import { estimateInputCostUsd, estimateTokens } from "../lib/tokenize";
 import { useChat } from "../store/useChat";
@@ -832,10 +831,6 @@ function Composer({
   const removeDocument = useChat((s) => s.removeDocument);
   const fileRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  // 008-scenario-framework: the upper rungs are view-only previews — sending is
-  // gated to the executable (simple) rung.
-  const scenario = useScenario((s) => s.scenario);
-  const locked = !scenarioCanSend(scenario);
 
   // Auto-grow the textarea up to a cap, the way modern composers do.
   useEffect(() => {
@@ -845,7 +840,7 @@ function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [input]);
 
-  const canSend = input.trim().length > 0 && !sending && !locked;
+  const canSend = input.trim().length > 0 && !sending;
 
   // 058-online-demo-mode: the backend-less showcase locks free text + upload and
   // offers only the curated sample questions (each replays a real captured run).
@@ -900,8 +895,8 @@ function Composer({
             }
           }}
           rows={1}
-          placeholder={locked ? t.scenario.sendDisabled : t.chat.placeholder}
-          disabled={sending || locked}
+          placeholder={t.chat.placeholder}
+          disabled={sending}
           className="block max-h-[140px] w-full resize-none bg-transparent px-1 py-1 text-[13px] leading-relaxed text-[var(--color-ink)] outline-none placeholder:text-[var(--color-label)] disabled:opacity-50"
         />
 
@@ -928,11 +923,9 @@ function Composer({
 
           <span
             className="min-w-0 flex-1 truncate text-[10.5px]"
-            style={{ color: locked ? "var(--color-warn)" : "var(--color-faint)" }}
+            style={{ color: "var(--color-faint)" }}
           >
-            {locked ? (
-              `⌛ ${t.scenario.sendDisabled}`
-            ) : uploading ? (
+            {uploading ? (
               t.chat.uploading
             ) : input.trim() ? (
               <PreSendHint text={input} t={t} />

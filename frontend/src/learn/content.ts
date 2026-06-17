@@ -1172,8 +1172,8 @@ const SECTIONS_SRC: SectionSrc[] = [
           pt: "Um iniciante não deveria encontrar um reranker, gateway e eval runner no primeiro dia. A escada ensina progressivamente: Simples é o app real de hoje; degraus acima previem o que produção adiciona, acesos spec a spec.",
         },
         how: {
-          en: "visibleStationsFor / visibleHopsFor / visibleTiersFor filter the model by the active scenario, and computeLayout(expanded, scenario) reflows the canvas; upper-rung nodes are non-executing comingSoon previews.",
-          pt: "visibleStationsFor / visibleHopsFor / visibleTiersFor filtram o modelo pelo cenário ativo, e computeLayout(expanded, scenario) reflui o canvas; os nós dos degraus superiores são prévias comingSoon que não executam.",
+          en: "You compose the architecture in the “Build” palette (lib/selection.ts); visibleStationsFor / visibleHopsFor / visibleTiersFor render exactly the selected components and computeLayout(expanded, selection) reflows the canvas. Maturity (Simple/Intermediate/Advanced) is a derived badge; preview components are non-executing comingSoon nodes.",
+          pt: "Você compõe a arquitetura na paleta “Montar” (lib/selection.ts); visibleStationsFor / visibleHopsFor / visibleTiersFor renderizam exatamente os componentes selecionados e computeLayout(expanded, selection) reflui o canvas. A maturidade (Simples/Intermediário/Avançado) é um badge derivado; componentes de prévia são nós comingSoon que não executam.",
         },
         options: {
           en: "Comparable frameworks for 'how grown-up is this': capability maturity models (CMM), the cloud Well-Architected reviews, or LLMOps maturity rubrics — all stage capabilities from basic to production-hardened.",

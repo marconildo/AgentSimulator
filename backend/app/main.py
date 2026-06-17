@@ -302,7 +302,7 @@ async def chat(req: ChatRequest):
         "top_k": top_k,
         "rerank_threshold": rerank_threshold,
         "mode": req.mode,
-        "scenario": req.scenario.value,
+        "runtime": req.runtime.value,
         # 042-agent-anatomy: always echo the **resolved** model (override or
         # configured default) so the FE can show what actually ran without
         # having to know about the server default. Resolves AC6.
@@ -318,6 +318,10 @@ async def chat(req: ChatRequest):
     # extra, so the body still reflects exactly what executed (AC1).
     if req.simulate_failure != SimulateFailure.NONE:
         request_body["simulate_failure"] = req.simulate_failure.value
+    # 061-scenario-builder: echo the reranker flag only when on, so a default run's
+    # body stays minimal (mirrors the ragless echo below).
+    if req.rerank:
+        request_body["rerank"] = True
     # 056-ragless-pageindex: echo the toggle only when on, so a default run's body
     # is byte-for-byte unchanged (AC1).
     if req.ragless:
@@ -372,7 +376,8 @@ async def chat(req: ChatRequest):
                     system_prompt=effective_system_prompt,
                     agent_prompt=effective_agent_prompt,
                     enabled_tools=effective_enabled_tools,
-                    scenario=req.scenario,
+                    rerank=req.rerank,
+                    runtime=req.runtime.value,
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,
                     model=effective_model,

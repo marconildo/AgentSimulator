@@ -16,7 +16,12 @@
 import type { Lang } from "../i18n";
 import type { Stage } from "../types/events";
 import type { CloudMap } from "./cloud";
-import type { Scenario } from "./scenario";
+// 061-scenario-builder: the visual model is driven by the à-la-carte selection
+// (`ResolvedSelection`), not a single rung. `Maturity` (aliased `Scenario` here) and
+// `Runtime` come from the selection module; the `scenarios[]`/`tracks[]` fields on
+// stations are kept as the maturity-floor + palette-category vocabulary.
+import type { Maturity as Scenario, ResolvedSelection, Runtime } from "./selection";
+import type { Track } from "./track";
 
 export type StationId =
   | "frontend"
@@ -42,7 +47,13 @@ export type StationId =
   // previews (label only) until a real multi-agent runtime ships in its own spec.
   | "researcher"
   | "coder"
-  | "critic";
+  | "critic"
+  // 060-intermediate-preview-tiles — the Intermediate rung's first preview tiles,
+  // lighting up its 059 tracks: `hybrid` (RAG Quality, a RAG-pipeline extension laid
+  // out directly below the RAG station) + `summarization` (Agent Design, under the
+  // agent). Non-executing (`stages: []`).
+  | "hybrid"
+  | "summarization";
 export type TierId = "client" | "api" | "agent" | "services" | "aiops";
 export type NetworkZone = "public" | "private";
 
@@ -85,6 +96,11 @@ export interface StationMeta {
   // live `stages` — nothing fakes a run on it.
   scenarios: Scenario[];
   comingSoon?: boolean;
+  // Track (theme) membership — 059-scenario-tracks. Only consulted for
+  // `comingSoon` previews: a track filter may hide a preview whose `tracks`
+  // exclude the active theme. Omitted ⇒ all themes (a cross-cutting base node,
+  // never hidden by any track). Flows through `StationSrc` automatically.
+  tracks?: Track[];
 }
 
 export interface TierMeta {
@@ -688,6 +704,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 1340, y: 120 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["aiops"],
   },
   {
     id: "guardrails",
@@ -712,6 +729,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 1340, y: 240 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["security"],
   },
   {
     id: "cache",
@@ -736,6 +754,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 1340, y: 360 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["aiops"],
   },
   {
     id: "eval",
@@ -760,6 +779,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 1340, y: 480 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["aiops"],
   },
   {
     id: "observability",
@@ -784,6 +804,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 1340, y: 600 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["aiops"],
   },
   // --- Advanced-rung sub-agents (multi-agent preview) ------------------------
   // The orchestrator is the relabelled `agent` node ("DeepAgents + Multi-agents");
@@ -814,6 +835,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 372, y: 700 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["agent"],
   },
   {
     id: "coder",
@@ -838,6 +860,7 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 560, y: 700 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["agent"],
   },
   {
     id: "critic",
@@ -862,6 +885,68 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 748, y: 700 },
     scenarios: ["advanced"],
     comingSoon: true,
+    tracks: ["agent"],
+  },
+  // --- 060-intermediate-preview-tiles — the Intermediate rung's first previews ----
+  // They light up the rung's 059 tracks (rag + agent) so the selector becomes
+  // meaningful there. Non-executing (`stages: []`); each becomes real in its own
+  // future spec (Hybrid search; DeepAgents summarization middleware).
+  // 060 amendment: `hybrid` is an *extension of the RAG retrieval pipeline* (like the
+  // reranker), not a standalone data service — so it is reframed as a RAG sub-component
+  // and laid out directly below the RAG node (layout.ts), while staying a `comingSoon`
+  // `rag`-track preview so the Intermediate track selector still lights up.
+  {
+    id: "hybrid",
+    tier: "services",
+    title: { en: "Hybrid Search", pt: "Busca Híbrida" },
+    subtitle: { en: "RAG retrieval · BM25 + vector", pt: "Recuperação RAG · BM25 + vetorial" },
+    icon: "🔀",
+    accent: "var(--color-ok)",
+    tag: "HYBRID",
+    blurb: {
+      en: "Extends the RAG retrieval step: runs a keyword (BM25) search alongside the vector search and fuses both result sets (RRF), catching exact-term matches that dense embeddings miss. It augments the same vector store — a sub-component of the RAG pipeline, not a separate retriever.",
+      pt: "Estende a etapa de recuperação do RAG: roda uma busca por palavra-chave (BM25) ao lado da busca vetorial e funde os dois conjuntos (RRF), pegando correspondências exatas que os embeddings densos perdem. Aproveita o mesmo banco vetorial — um subcomponente do pipeline RAG, não um retriever separado.",
+    },
+    generic: { en: "Hybrid retriever (sparse + dense)", pt: "Retriever híbrido (esparso + denso)" },
+    clouds: {
+      azure: "AI Search (hybrid)",
+      aws: "OpenSearch hybrid / Kendra",
+      gcp: "Vertex AI Search (hybrid)",
+    },
+    tech: [{ k: { en: "fusion", pt: "fusão" }, v: "BM25 + vector · RRF" }],
+    stages: [],
+    position: { x: 980, y: 360 },
+    scenarios: ["intermediate", "advanced"],
+    comingSoon: true,
+    tracks: ["rag"],
+  },
+  {
+    id: "summarization",
+    tier: "agent",
+    title: { en: "Summarization", pt: "Sumarização" },
+    subtitle: { en: "Context compaction", pt: "Compactação de contexto" },
+    icon: "🗜️",
+    accent: "var(--color-pink)",
+    tag: "MEMORY",
+    blurb: {
+      en: "Compacts the running message thread when it grows too long — summarizing old turns so the agent keeps context without blowing the token budget.",
+      pt: "Compacta o thread de mensagens quando ele cresce demais — resumindo turnos antigos para o agente manter contexto sem estourar o orçamento de tokens.",
+    },
+    generic: {
+      en: "Conversation summarization / context compaction",
+      pt: "Sumarização de conversa / compactação de contexto",
+    },
+    clouds: {
+      azure: "Azure OpenAI (summary calls)",
+      aws: "Bedrock (summary calls)",
+      gcp: "Vertex AI (summary calls)",
+    },
+    tech: [{ k: { en: "trigger", pt: "gatilho" }, v: "token threshold" }],
+    stages: [],
+    position: { x: 372, y: 560 },
+    scenarios: ["intermediate", "advanced"],
+    comingSoon: true,
+    tracks: ["agent"],
   },
 ];
 
@@ -1200,25 +1285,25 @@ export function stationForEvent(events: { stage: Stage }[], index: number): Stat
 // of the maturity ladder. These builders return only the active scenario's set,
 // which the layout and the canvas render. `simple` reproduces today's set.
 
-// Frontend-only label marker — NOT implemented, a visual reminder of the planned
-// direction for the upper rungs. Intermediate reframes the agent runtime as
-// DeepAgents; Advanced as DeepAgents + multi-agents. The node stays the same
-// live `agent` station (same id, stages and identity) — only its displayed
-// title/tag change. `simple` keeps today's "Agent" / "ReAct".
-const AGENT_SCENARIO_LABEL: Partial<Record<Scenario, { title: Tr; tag: string }>> = {
-  intermediate: { title: "DeepAgents", tag: "DeepAgents" },
-  advanced: {
+// The agent node's displayed label tracks the selected runtime (061-scenario-builder;
+// was scenario-keyed). `deepagents` reframes it as DeepAgents (a real runtime, 057);
+// `multiagent` as DeepAgents + Multi-agents (preview). The node stays the same live
+// `agent` station (same id, stages and identity) — only its title/tag change.
+// `react` keeps today's "Agent" / "ReAct".
+const AGENT_RUNTIME_LABEL: Partial<Record<Runtime, { title: Tr; tag: string }>> = {
+  deepagents: { title: "DeepAgents", tag: "DeepAgents" },
+  multiagent: {
     title: { en: "DeepAgents + Multi-agents", pt: "DeepAgents + Multiagentes" },
     tag: "Multi-agent",
   },
 };
 
-// Apply the scenario-specific display label to the agent node (see
-// AGENT_SCENARIO_LABEL). A no-op for every other station and for `simple`; never
+// Apply the runtime-specific display label to the agent node (see
+// AGENT_RUNTIME_LABEL). A no-op for every other station and for `react`; never
 // mutates the cached meta (returns a fresh object only when it overrides).
-function relabelAgentForScenario(s: StationMeta, lang: Lang, scenario: Scenario): StationMeta {
+function relabelAgentForRuntime(s: StationMeta, lang: Lang, runtime: Runtime): StationMeta {
   if (s.id !== "agent") return s;
-  const override = AGENT_SCENARIO_LABEL[scenario];
+  const override = AGENT_RUNTIME_LABEL[runtime];
   return override ? { ...s, title: r(override.title, lang), tag: override.tag } : s;
 }
 
@@ -1227,11 +1312,6 @@ function relabelAgentForScenario(s: StationMeta, lang: Lang, scenario: Scenario)
 // shows an upload (`showUpload`, derived from the event log by `hasUploadActivity`).
 // They stay **real** stations (not `comingSoon`); this is render-gating only.
 export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["storage", "ingestion"]);
-
-// 056-ragless-pageindex — the RAGLESS box only appears when the per-conversation
-// `ragless` toggle is on (a config), so it's hidden by default even on the
-// Intermediate rung. Render-gating only (it is a real, executing station).
-export const RAGLESS_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["pageindex"]);
 
 // Per-station glossary key for the dense, jargon-y compact readout each node
 // shows ("decision: answer", "top-4 · score 0.50"). `StationNode` appends the
@@ -1244,52 +1324,46 @@ export const READOUT_GLOSSARY_KEY: Partial<Record<StationId, string>> = {
   pageindex: "RAGLESS",
 };
 
-function isUploadOnlyHop(h: { source: StationId; target: StationId }): boolean {
-  return UPLOAD_ONLY_STATIONS.has(h.source) || UPLOAD_ONLY_STATIONS.has(h.target);
-}
-
-function isRaglessOnlyHop(h: { source: StationId; target: StationId }): boolean {
-  return RAGLESS_ONLY_STATIONS.has(h.source) || RAGLESS_ONLY_STATIONS.has(h.target);
+// 061-scenario-builder — visibility is driven by the à-la-carte selection: a station
+// is shown iff the `ResolvedSelection` includes it, OR it's an upload-only write-path
+// node revealed by current trace upload activity (orthogonal to the selection). A hop
+// shows iff both endpoints are visible. This subsumes the old scenario/track/ragless
+// gating (RAGLESS = the `pageindex` station being in the selected set; previews = their
+// station being selected; runtime relabels the agent node).
+function isStationVisible(
+  id: StationId,
+  sel: ResolvedSelection,
+  showUpload: boolean,
+): boolean {
+  if (UPLOAD_ONLY_STATIONS.has(id)) return showUpload;
+  return sel.stations.has(id);
 }
 
 export function visibleStationsFor(
   lang: Lang,
-  scenario: Scenario,
+  sel: ResolvedSelection,
   showUpload = false,
-  // 056-ragless-pageindex — gate the RAGLESS box on the toggle (off by default).
-  showRagless = false,
 ): StationMeta[] {
   return stationsFor(lang)
-    .filter((s) => s.scenarios.includes(scenario))
-    .filter((s) => showUpload || !UPLOAD_ONLY_STATIONS.has(s.id))
-    .filter((s) => showRagless || !RAGLESS_ONLY_STATIONS.has(s.id))
-    .map((s) => relabelAgentForScenario(s, lang, scenario));
+    .filter((s) => isStationVisible(s.id, sel, showUpload))
+    .map((s) => relabelAgentForRuntime(s, lang, sel.runtime));
 }
 
-export function visibleHopsFor(
-  lang: Lang,
-  scenario: Scenario,
-  showUpload = false,
-  showRagless = false,
-): HopMeta[] {
-  return hopsFor(lang)
-    .filter((h) => h.scenarios.includes(scenario))
-    .filter((h) => showUpload || !isUploadOnlyHop(h))
-    .filter((h) => showRagless || !isRaglessOnlyHop(h));
+/** Lang-independent visible station ids for a selection — used by the layout. */
+export function visibleStationIdsFor(sel: ResolvedSelection, showUpload = false): StationId[] {
+  return STATIONS_SRC.filter((s) => isStationVisible(s.id, sel, showUpload)).map((s) => s.id);
 }
 
-export function visibleTiersFor(lang: Lang, scenario: Scenario): TierMeta[] {
-  return tiersFor(lang).filter((t) => t.scenarios.includes(scenario));
+export function visibleHopsFor(lang: Lang, sel: ResolvedSelection, showUpload = false): HopMeta[] {
+  const visible = new Set(visibleStationIdsFor(sel, showUpload));
+  return hopsFor(lang).filter((h) => visible.has(h.source) && visible.has(h.target));
 }
 
-/** Lang-independent visible station ids for a scenario — used by the layout. */
-export function visibleStationIdsFor(
-  scenario: Scenario,
-  showUpload = false,
-  showRagless = false,
-): StationId[] {
-  return STATIONS_SRC.filter((s) => (s.scenarios ?? ALL_SCENARIOS).includes(scenario))
-    .filter((s) => showUpload || !UPLOAD_ONLY_STATIONS.has(s.id))
-    .filter((s) => showRagless || !RAGLESS_ONLY_STATIONS.has(s.id))
-    .map((s) => s.id);
+export function visibleTiersFor(lang: Lang, sel: ResolvedSelection, showUpload = false): TierMeta[] {
+  // A tier is shown only if it has at least one visible station — an empty tier box
+  // would be a stray label.
+  const liveTierIds = new Set(
+    STATIONS_SRC.filter((s) => isStationVisible(s.id, sel, showUpload)).map((s) => s.tier),
+  );
+  return tiersFor(lang).filter((t) => liveTierIds.has(t.id));
 }

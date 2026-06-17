@@ -343,6 +343,8 @@ export interface Strings {
       empty: string;
       nodes: Record<TraceNode, string>;
       child: { embed: string; search: string; select: string };
+      // 062 — the plan node's row tag word ("3 {planTodos}").
+      planTodos: string;
     };
   };
   // 030-event-console — the expandable, scrollable trace log next to the footer.
@@ -432,6 +434,49 @@ export interface Strings {
   scenario: {
     label: string;
     sendDisabled: string;
+  };
+  // 059-scenario-tracks — the themes axis crossing the maturity ladder. `name`
+  // labels the selector option; `blurb` is the hover tooltip. `all` is the
+  // "show everything" default; the five themes group the preview clusters.
+  track: {
+    label: string;
+    all: { name: string; blurb: string };
+    rag: { name: string; blurb: string };
+    agent: { name: string; blurb: string };
+    aiops: { name: string; blurb: string };
+    security: { name: string; blurb: string };
+    scale: { name: string; blurb: string };
+  };
+  // 061-scenario-builder — the à-la-carte component palette (header popover) that
+  // replaced the scenario ladder + track switcher.
+  builder: {
+    label: string;
+    title: string;
+    subtitle: string;
+    maturity: string;
+    runtimeHeading: string;
+    zoneReal: string;
+    zonePreview: string;
+    requiresRag: string;
+    skeletonNote: string;
+    done: string;
+    groups: { retrieval: string; agent: string; aiops: string };
+    components: Record<
+      | "rag"
+      | "mcp"
+      | "rerank"
+      | "hybrid"
+      | "ragless"
+      | "summarization"
+      | "gateway"
+      | "guardrails"
+      | "cache"
+      | "eval"
+      | "observability",
+      { name: string; blurb: string }
+    >;
+    runtimes: Record<"react" | "deepagents" | "multiagent", { name: string; blurb: string }>;
+    maturityNames: { simple: string; intermediate: string; advanced: string };
   };
   agentDetail: {
     title: string;
@@ -1069,6 +1114,10 @@ const en: Strings = {
     CACHE: "Semantic cache — reuses a past answer when a new question is close enough in meaning, skipping the LLM.",
     EVALS: "Eval runner — automated scoring of answers against test cases to catch quality regressions.",
     OTEL: "OpenTelemetry — the open standard for traces, metrics and logs that makes the pipeline observable.",
+    HYBRID:
+      "Hybrid search — combines keyword (BM25) and vector retrieval and fuses the results (RRF) to catch exact-term matches embeddings miss. (Planned — not yet implemented.)",
+    MEMORY:
+      "Summarization — compacts a long conversation by summarizing old turns, so the agent keeps context within the token budget. (Planned — not yet implemented.)",
     research:
       "Researcher — a sub-agent that gathers and synthesises information for the orchestrator. (Planned — not yet implemented.)",
     execute:
@@ -1114,8 +1163,14 @@ const en: Strings = {
         retrieve: "retrieve",
         memory: "memory",
         persist: "persist",
+        // 062 — DeepAgents steps (kept English in both langs, like the others).
+        plan: "plan",
+        delegate: "delegate",
+        "fs-write": "file write",
+        "fs-read": "file read",
       },
       child: { embed: "embed", search: "search", select: "select" },
+      planTodos: "todos",
     },
   },
   console: {
@@ -1213,6 +1268,62 @@ const en: Strings = {
   scenario: {
     label: "Scenario",
     sendDisabled: "This scenario is a preview — switch to Simple to send a message.",
+  },
+  track: {
+    label: "Track",
+    all: { name: "All", blurb: "Show every node this rung declares." },
+    rag: {
+      name: "RAG Quality",
+      blurb: "Retrieval data-plane: chunking, metadata, rerank, hybrid, MMR, self-query…",
+    },
+    agent: {
+      name: "Agent Design",
+      blurb: "Agent sophistication: DeepAgents → multi-agent orchestration.",
+    },
+    aiops: {
+      name: "AI-Ops",
+      blurb: "Run it in production: gateway, semantic cache, evals, observability.",
+    },
+    security: {
+      name: "Security & Trust",
+      blurb: "Guardrails, secrets, supply chain, tool sandbox, identity, jailbreak.",
+    },
+    scale: {
+      name: "Scale & Infra",
+      blurb: "Multi-replica, shared state, workload identity.",
+    },
+  },
+  builder: {
+    label: "Build",
+    title: "Build your scenario",
+    subtitle: "Toggle components on/off — maturity is derived from what you pick.",
+    maturity: "Maturity",
+    runtimeHeading: "Agent runtime",
+    zoneReal: "Executes",
+    zonePreview: "Preview · won't run",
+    requiresRag: "requires Vector RAG",
+    skeletonNote: "Frontend · Backend · Agent · LLM · Database are always on.",
+    done: "Done",
+    groups: { retrieval: "Retrieval & Data", agent: "Agent", aiops: "AI-Ops" },
+    components: {
+      rag: { name: "Vector RAG", blurb: "Embeddings + similarity search over the vector store." },
+      mcp: { name: "MCP Tools", blurb: "Tool service (calculator, time, web search…)." },
+      rerank: { name: "Reranker", blurb: "Re-scores RAG candidates with a cross-encoder." },
+      hybrid: { name: "Hybrid Search", blurb: "BM25 + vector fusion (preview)." },
+      ragless: { name: "RAGLESS", blurb: "Reasoning-based retrieval (PageIndex tree search)." },
+      summarization: { name: "Summarization", blurb: "Compacts the agent's context (preview)." },
+      gateway: { name: "LLM Gateway", blurb: "Routing, fallback, budgets (preview)." },
+      guardrails: { name: "Guardrails", blurb: "Input/output safety (preview)." },
+      cache: { name: "Semantic Cache", blurb: "Prompt/embedding cache (preview)." },
+      eval: { name: "Eval Runner", blurb: "Scores answers against a golden set (preview)." },
+      observability: { name: "Observability", blurb: "Traces, tokens, cost (preview)." },
+    },
+    runtimes: {
+      react: { name: "ReAct", blurb: "The canonical bounded ReAct loop (default)." },
+      deepagents: { name: "DeepAgents", blurb: "Planner + sub-agent + virtual file system." },
+      multiagent: { name: "Multi-agent", blurb: "Orchestrator + specialized sub-agents (preview)." },
+    },
+    maturityNames: { simple: "Simple", intermediate: "Intermediate", advanced: "Advanced" },
   },
   agentDetail: {
     title: "Agent Context Window",
@@ -1842,6 +1953,10 @@ const pt: Strings = {
     CACHE: "Cache semântico — reutiliza uma resposta anterior quando a nova pergunta é próxima o bastante em significado, pulando o LLM.",
     EVALS: "Eval runner — pontuação automática de respostas contra casos de teste para flagrar regressões de qualidade.",
     OTEL: "OpenTelemetry — o padrão aberto de traces, métricas e logs que torna o pipeline observável.",
+    HYBRID:
+      "Busca híbrida — combina recuperação por palavra-chave (BM25) e vetorial e funde os resultados (RRF) para pegar correspondências exatas que o embedding perde. (Planejado — ainda não implementado.)",
+    MEMORY:
+      "Sumarização — compacta uma conversa longa resumindo turnos antigos, para o agente manter contexto dentro do orçamento de tokens. (Planejado — ainda não implementado.)",
     research:
       "Pesquisador — um subagente que reúne e sintetiza informação para o orquestrador. (Planejado — ainda não implementado.)",
     execute:
@@ -1887,8 +2002,14 @@ const pt: Strings = {
         retrieve: "retrieve",
         memory: "memory",
         persist: "persist",
+        // 062 — DeepAgents steps (kept English in both langs, like the others).
+        plan: "plan",
+        delegate: "delegate",
+        "fs-write": "file write",
+        "fs-read": "file read",
       },
       child: { embed: "embed", search: "search", select: "select" },
+      planTodos: "tarefas",
     },
   },
   console: {
@@ -1986,6 +2107,65 @@ const pt: Strings = {
   scenario: {
     label: "Cenário",
     sendDisabled: "Este cenário é um preview — troque para Simples para enviar uma mensagem.",
+  },
+  track: {
+    label: "Track",
+    all: { name: "Tudo", blurb: "Mostra todos os nós que este degrau declara." },
+    rag: {
+      name: "Qualidade de RAG",
+      blurb: "Data-plane de recuperação: chunking, metadados, rerank, híbrida, MMR, self-query…",
+    },
+    agent: {
+      name: "Design do Agente",
+      blurb: "Sofisticação do agente: DeepAgents → orquestração multi-agente.",
+    },
+    aiops: {
+      name: "AI-Ops",
+      blurb: "Rodar em produção: gateway, cache semântico, evals, observabilidade.",
+    },
+    security: {
+      name: "Segurança & Confiança",
+      blurb: "Guardrails, segredos, cadeia de suprimentos, sandbox de tools, identidade, jailbreak.",
+    },
+    scale: {
+      name: "Escala & Infra",
+      blurb: "Multi-réplica, estado compartilhado, workload identity.",
+    },
+  },
+  builder: {
+    label: "Montar",
+    title: "Monte seu cenário",
+    subtitle: "Ligue/desligue componentes — a maturidade é derivada do que você escolhe.",
+    maturity: "Maturidade",
+    runtimeHeading: "Runtime do agente",
+    zoneReal: "Executa",
+    zonePreview: "Prévia · não roda",
+    requiresRag: "requer Vector RAG",
+    skeletonNote: "Frontend · Backend · Agente · LLM · Banco estão sempre ligados.",
+    done: "Concluir",
+    groups: { retrieval: "Recuperação & Dados", agent: "Agente", aiops: "AI-Ops" },
+    components: {
+      rag: { name: "Vector RAG", blurb: "Embeddings + busca por similaridade no banco vetorial." },
+      mcp: { name: "MCP Tools", blurb: "Serviço de ferramentas (calculadora, hora, busca web…)." },
+      rerank: { name: "Reranker", blurb: "Reordena os candidatos do RAG com um cross-encoder." },
+      hybrid: { name: "Busca Híbrida", blurb: "Fusão BM25 + vetorial (prévia)." },
+      ragless: { name: "RAGLESS", blurb: "Recuperação por raciocínio (busca em árvore PageIndex)." },
+      summarization: { name: "Sumarização", blurb: "Compacta o contexto do agente (prévia)." },
+      gateway: { name: "Gateway LLM", blurb: "Roteamento, fallback, orçamentos (prévia)." },
+      guardrails: { name: "Guardrails", blurb: "Segurança de entrada/saída (prévia)." },
+      cache: { name: "Cache Semântico", blurb: "Cache de prompt/embedding (prévia)." },
+      eval: { name: "Eval Runner", blurb: "Pontua respostas contra um golden set (prévia)." },
+      observability: { name: "Observabilidade", blurb: "Traces, tokens, custo (prévia)." },
+    },
+    runtimes: {
+      react: { name: "ReAct", blurb: "O loop ReAct canônico e limitado (padrão)." },
+      deepagents: { name: "DeepAgents", blurb: "Planner + sub-agente + sistema de arquivos virtual." },
+      multiagent: {
+        name: "Multiagente",
+        blurb: "Orquestrador + sub-agentes especializados (prévia).",
+      },
+    },
+    maturityNames: { simple: "Simples", intermediate: "Intermediário", advanced: "Avançado" },
   },
   agentDetail: {
     title: "Agent Context Window",

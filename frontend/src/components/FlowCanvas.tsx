@@ -15,9 +15,8 @@ import { cloudValue, useCloud } from "../lib/cloud";
 import { formatTokens, formatUsd } from "../lib/cost";
 import type { DerivedView, StationRuntime, UsageTotals } from "../lib/derive";
 import { hasUploadActivity } from "../lib/derive";
-import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
 import { computeLayout } from "../lib/layout";
-import { useScenario } from "../lib/scenario";
+import { useResolvedSelection } from "../lib/selection";
 import { useSettings } from "../lib/settings";
 import {
   boundaryFor,
@@ -28,7 +27,6 @@ import {
   visibleTiersFor,
   type StationId,
 } from "../lib/stations";
-import { useChat } from "../store/useChat";
 import { useSimulator } from "../store/useSimulator";
 import type { SimulatedError } from "../types/events";
 import { FlowEdge } from "./edges/FlowEdge";
@@ -54,7 +52,10 @@ interface FlowCanvasProps {
 export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const lang = useLang((s) => s.lang);
   const cloud = useCloud((s) => s.cloud);
-  const scenario = useScenario((s) => s.scenario);
+  // 061-scenario-builder — the à-la-carte selection drives the visual model (which
+  // stations are on + the agent runtime); RAGLESS is the `pageindex` station being in
+  // the selection, previews are their station being selected.
+  const sel = useResolvedSelection();
   const mode = useSettings((s) => s.mode);
   const expanded = useSimulator((s) => s.expanded);
   const events = useSimulator((s) => s.events);
@@ -62,15 +63,10 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   // 035-conditional-upload-nodes — reveal the write-path nodes only when the
   // current trace shows an upload (pure projection of the event log).
   const showUpload = useMemo(() => hasUploadActivity(events), [events]);
-  // 056-ragless-pageindex — reveal the RAGLESS box when the active conversation's
-  // toggle is on AND we're on the Intermediate rung (where it actually executes).
-  const conv = useChat((c) => c.activeSessionId);
-  const ragless = useExperiment((e) => (e.byConv[conv ?? DRAFT_KEY] ?? DEFAULT_EXPERIMENT).ragless);
-  const showRagless = ragless && scenario !== "simple";
-  // Scenario-scoped visual model: only the active rung's stations/tiers/hops.
-  const stations = visibleStationsFor(lang, scenario, showUpload, showRagless);
-  const tiers = visibleTiersFor(lang, scenario);
-  const hops = visibleHopsFor(lang, scenario, showUpload, showRagless);
+  // Selection-scoped visual model: only the chosen stations/tiers/hops.
+  const stations = visibleStationsFor(lang, sel, showUpload);
+  const tiers = visibleTiersFor(lang, sel, showUpload);
+  const hops = visibleHopsFor(lang, sel, showUpload);
   const boundary = boundaryFor(lang);
   const publicFrontier = publicBoundaryFor(lang);
   const stationById = stationByIdFor(lang);
@@ -79,8 +75,8 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
   const layout = useMemo(
-    () => computeLayout(expandedSet, scenario, showUpload, showRagless),
-    [expandedSet, scenario, showUpload, showRagless],
+    () => computeLayout(expandedSet, sel, showUpload),
+    [expandedSet, sel, showUpload],
   );
 
   const nodes: Node[] = useMemo(() => {
@@ -368,6 +364,8 @@ export function readoutFor(
     case "researcher":
     case "coder":
     case "critic":
+    case "hybrid":
+    case "summarization":
       return "";
   }
 }

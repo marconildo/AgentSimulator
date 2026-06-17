@@ -16,7 +16,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n";
 import { computeLayout } from "../lib/layout";
 import { phaseLabelsFor } from "../lib/phases";
-import { useScenario } from "../lib/scenario";
+import { useResolvedSelection } from "../lib/selection";
 import { currentStep, isTouring, tourNarrationFor } from "../lib/tour";
 import { useSimulator } from "../store/useSimulator";
 
@@ -28,7 +28,7 @@ export function TourCaption() {
   const lang = useLang((s) => s.lang);
   const tour = useSimulator((s) => s.tour);
   const expanded = useSimulator((s) => s.expanded);
-  const scenario = useScenario((s) => s.scenario);
+  const sel = useResolvedSelection();
   const { x: vx, y: vy, zoom } = useViewport();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ export function TourCaption() {
   const position = step ? `${tour.index + 1}/${tour.steps.length}` : "";
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
-  const layout = useMemo(() => computeLayout(expandedSet, scenario), [expandedSet, scenario]);
+  const layout = useMemo(() => computeLayout(expandedSet, sel), [expandedSet, sel]);
 
   // Track the canvas size (for clamping the balloon inside it).
   useLayoutEffect(() => {

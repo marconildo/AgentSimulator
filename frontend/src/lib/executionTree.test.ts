@@ -264,12 +264,136 @@ describe("timeline.execTrace strings — bilingual (AC6)", () => {
         "retrieve",
         "memory",
         "persist",
+        // 062-deepagents-execution-spans — DeepAgents steps as their own nodes.
+        "plan",
+        "delegate",
+        "fs-write",
+        "fs-read",
       ] as const) {
         expect(x.nodes[node], `${code}/nodes.${node}`).toBeTruthy();
       }
       for (const child of ["embed", "search", "select"] as const) {
         expect(x.child[child], `${code}/child.${child}`).toBeTruthy();
       }
+      // The plan-detail count word ("todos" / "tarefas").
+      expect(x.planTodos, `${code}/planTodos`).toBeTruthy();
+    }
+  });
+});
+
+// 062-deepagents-execution-spans — the DeepAgents runtime emits agent.plan /
+// agent.fs.write / agent.fs.read / agent.delegate; these must surface as their
+// own top-level spans in the tree (not folded into `think`).
+
+// A DeepAgents run on the Intermediate rung: route → think → (tools: write_todos
+// ⇒ agent.plan) → think → (tools: write_file ⇒ agent.fs.write) → (tools: task ⇒
+// agent.delegate wrapping a sub-agent's rag retrieval) → think → (tools:
+// read_file ⇒ agent.fs.read) → think → (tools: write_todos ⇒ agent.plan, a plan
+// update) → generate → respond.
+function deepAgentsRun(): TraceEvent[] {
+  seq = 0;
+  return [
+    ev("frontend", "end", 0),
+    ev("backend", "start", 1),
+    ev("agent.route", "start", 2),
+    ev("agent.route", "end", 6),
+    ev("agent.think", "start", 10),
+    ev("agent.think", "end", 100, { data: { model: "gpt-4.1-mini" } }),
+    // write a plan (3 todos)
+    ev("agent.plan", "start", 102, { data: { count: 3 } }),
+    ev("agent.plan", "end", 110, { data: { count: 3, steps: ["a", "b", "c"] } }),
+    ev("agent.think", "start", 112),
+    ev("agent.think", "end", 200),
+    // write a file
+    ev("agent.fs.write", "start", 202, { data: { path: "notes.md" } }),
+    ev("agent.fs.write", "end", 210, { data: { path: "notes.md", bytes: 42 } }),
+    // delegate to a researcher sub-agent — wraps nested rag retrieval
+    ev("agent.delegate", "start", 212, { data: { subagent: "researcher" } }),
+    ev("rag.embed", "start", 214),
+    ev("rag.embed", "end", 230),
+    ev("rag.search", "start", 231),
+    ev("rag.search", "end", 260),
+    ev("rag.retrieve", "start", 261),
+    ev("rag.retrieve", "end", 280),
+    ev("agent.delegate", "end", 300, {
+      data: { subagent: "researcher", steps: ["search_knowledge_base"], result: "…" },
+    }),
+    // read a file back
+    ev("agent.fs.read", "start", 302, { data: { path: "notes.md" } }),
+    ev("agent.fs.read", "end", 310, { data: { path: "notes.md", found: true } }),
+    ev("agent.think", "start", 312),
+    ev("agent.think", "end", 400),
+    // update the plan (2 todos now)
+    ev("agent.plan", "start", 402, { data: { count: 2 } }),
+    ev("agent.plan", "end", 410, { data: { count: 2, steps: ["a", "b"] } }),
+    ev("llm.generate", "start", 412),
+    ev("llm.generate", "end", 500),
+    ev("respond", "start", 502),
+    ev("respond", "end", 505),
+    ev("backend", "end", 510),
+  ];
+}
+
+describe("executionTree — DeepAgents steps as own spans (062)", () => {
+  it("AC1: an agent.plan occurrence is its own `plan` span, in order, with the todo count", () => {
+    const { spans } = executionTree(deepAgentsRun());
+    const plans = spans.filter((s) => s.node === "plan");
+    expect(plans.length).toBeGreaterThanOrEqual(1);
+    // It is not folded into a think span — there is a plan node right after the
+    // first think occurrence.
+    const nodes = spans.map((s) => s.node);
+    expect(nodes).toContain("plan");
+    expect(plans[0].count).toBe(3);
+    // The plan span starts after the first think and before the file write.
+    const firstThink = spans.find((s) => s.node === "think")!;
+    const fsWrite = spans.find((s) => s.node === "fs-write")!;
+    expect(plans[0].offsetMs).toBeGreaterThan(firstThink.offsetMs);
+    expect(plans[0].offsetMs).toBeLessThan(fsWrite.offsetMs);
+  });
+
+  it("AC2: fs.write / fs.read become `fs-write` / `fs-read` spans carrying the path", () => {
+    const byNode = (n: string) =>
+      executionTree(deepAgentsRun()).spans.filter((s) => s.node === n);
+    const w = byNode("fs-write");
+    const r = byNode("fs-read");
+    expect(w).toHaveLength(1);
+    expect(r).toHaveLength(1);
+    expect(w[0].detail).toBe("notes.md");
+    expect(r[0].detail).toBe("notes.md");
+  });
+
+  it("AC3: delegate is one span; nested events do not leak as top-level rows", () => {
+    const { spans } = executionTree(deepAgentsRun());
+    const delegates = spans.filter((s) => s.node === "delegate");
+    expect(delegates).toHaveLength(1);
+    expect(delegates[0].detail).toBe("researcher");
+    // children come from the sub-agent's tool trail (the `steps` array)
+    expect(delegates[0].children.map((c) => c.label)).toEqual(["search_knowledge_base"]);
+    // the sub-agent's nested rag retrieval is swallowed — no `retrieve` row appears.
+    expect(spans.some((s) => s.node === "retrieve")).toBe(false);
+  });
+
+  it("AC4: two agent.plan occurrences yield two ordered `plan` spans (write then update)", () => {
+    const plans = executionTree(deepAgentsRun()).spans.filter((s) => s.node === "plan");
+    expect(plans).toHaveLength(2);
+    expect(plans[0].offsetMs).toBeLessThan(plans[1].offsetMs);
+    expect(plans[0].count).toBe(3); // initial plan
+    expect(plans[1].count).toBe(2); // updated plan
+  });
+
+  it("AC5: a Simple-rung run (no DeepAgents stages) is unchanged", () => {
+    const { spans } = executionTree(reactRun());
+    expect(spans.map((s) => s.node)).toEqual([
+      "route",
+      "think",
+      "tools",
+      "think",
+      "tools",
+      "generate",
+      "respond",
+    ]);
+    for (const s of spans) {
+      expect(["plan", "delegate", "fs-write", "fs-read"]).not.toContain(s.node);
     }
   });
 });

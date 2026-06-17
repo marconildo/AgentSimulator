@@ -28,10 +28,42 @@ shipped. Each item here is therefore the *seed of its own spec*.
 
 ---
 
+## 🧭 Organizing model — rungs × tracks
+
+> The maturity ladder is **one axis** (*"how production-ready?"*). The content below is genuinely
+> **two-dimensional**, so we cross the rung with a **Track** (theme). A Track answers *"which
+> subsystem am I studying?"* and narrows the preview clusters within a rung — so the Advanced rung
+> stops being a wall of tiles. Tracks are a **client-side view filter only** (they never change
+> execution); the axis itself ships as [`specs/059-scenario-tracks/`](../specs/059-scenario-tracks/).
+> **"More scenarios" means add a track, not a rung** — the rungs stay fixed at three.
+
+| Track | `id` | Theme |
+|---|---|---|
+| **RAG Quality** | `rag` | retrieval / data-plane — chunking, metadata, rerank, hybrid, MMR, self-query, compression, multi-vector, query expansion, metrics |
+| **Agent Design** | `agent` | agent sophistication — ReAct → DeepAgents → multi-agent orchestration |
+| **AI-Ops** | `aiops` | run it in production — gateway, semantic cache, eval runner, observability, router, multi-provider |
+| **Security & Trust** | `security` | guardrails, secrets/DLP, supply chain, tool sandbox, identity/OIDC, jailbreak, auth/rate-limit |
+| **Scale & Infra** | `scale` | multi-replica, shared state, workload identity |
+
+**The matrix — every roadmap item by `{rung × track}`** (✅ shipped · 🟡 preview · 🏷️ label · 🔧 seam):
+
+| Rung ↓ / Track → | RAG Quality | Agent Design | AI-Ops | Security & Trust | Scale & Infra |
+|---|---|---|---|---|---|
+| **Simple** | embedding + vector RAG ✅ | ReAct agent ✅ | — | auth stub 🔧 | single-instance ✅ |
+| **Intermediate** | chunking 🟡 · metadata 🟡 · rerank ✅ · hybrid 🟡 · MMR 🟡 · self-query 🟡 · compression 🟡 · multi-vector 🟡 · query expansion 🟡 · metrics 🟡 | DeepAgents ✅ · summarization 🟡 · honest token/cost ✅ | — | — | — |
+| **Advanced** | RAGAS (full) → Eval | multi-agent: researcher/coder/critic 🏷️ | gateway 🟡 · cache 🟡 · eval/RAGAS 🟡 · observability 🟡 · model router 🔧 · multi-provider 🔧 | guardrails 🟡 · secrets/DLP 🔧 · supply chain 🔧 · sandbox 🔧 · identity 🔧 · jailbreak 🔧 · auth/rate-limit 🔧 | multi-replica 🔧 |
+
+The sections below are grouped by rung; within the Advanced rung each `###` is annotated with its
+**Track** so the matrix and the prose stay in sync.
+
+---
+
 ## 🟡 Intermediate rung — RAG quality & "DeepAgents"
 
-The Intermediate rung is the *RAG-quality + honest-cost* tier. Today its scenario is selectable,
-the topology renders, but the new nodes are visual previews.
+**Tracks here:** `rag` (RAG Quality) · `agent` (Agent Design). The Intermediate rung is the
+*RAG-quality + honest-cost* tier — the home of the whole retrieval module plus single-agent
+DeepAgents. Today its scenario is selectable, the topology renders, but the new nodes are visual
+previews.
 
 ### ✅ DeepAgents runtime — SHIPPED (057-deepagents-runtime)
 - **Status.** Done. On the **Intermediate** rung the `DeepAgents` relabel is now backed by a
@@ -64,24 +96,117 @@ the topology renders, but the new nodes are visual previews.
   `STAGE_TO_STATION`/`STAGE_TO_PHASE`, with a readout + inspector rank-movement detail and the
   `RagDetail` "open full view" drill-in (Chunking → Embedding → Retrieval → Reranking), all
   bilingual (EN + PT). See [`specs/054-rag-block-expansion/`](../specs/054-rag-block-expansion/).
+- **Course-map note (M2U3.2 — Bi-Encoders vs. Cross-Encoders).** The shipped reranker is the
+  cross-encoder half. Still open as small enrichment specs: a **bi-encoder vs. cross-encoder**
+  side-by-side in `RagDetail` (the *why is a second pass worth the latency?* explainer), a **latency
+  readout** on the rerank sub-stage, and a **Cohere ReRank** (hosted) provider behind the same
+  `reranker.py` seam as an alternative to local FlashRank.
 
 ### 🟡 Hybrid search (BM25 + vector)
-- **Where it shows up.** Called out in the [README ladder table](../README.md#-the-maturity-ladder--simple--intermediate--advanced)
-  as "hybrid search"; no dedicated tile yet (it would live inside or beside the `rag` station).
+- **Where it shows up.** Now has a **`comingSoon` preview tile** (`hybrid`) on the Intermediate
+  rung — laid out **directly below the `rag` station** as a sub-component of the RAG pipeline (an
+  extension of the retrieval step, like the reranker), tagged track `rag`
+  ([060-intermediate-preview-tiles](../specs/060-intermediate-preview-tiles/), amended 2026-06-17).
+  The tile is the first thing that lights up the Intermediate **RAG Quality** track; it does not
+  execute yet.
 - **What it is.** Combine sparse (BM25 / keyword) and dense (vector) retrieval and fuse the results
   (e.g. RRF) — catches exact-term matches the embedding misses.
-- **What a spec would add.** A second retriever, a fusion step, and a way to compare the two sets
-  in the inspector (so the *why hybrid?* is visible, not just claimed).
+- **What a spec would add.** Flip the tile to real: a second retriever, a fusion step (RRF), a
+  `rag.hybrid` sub-stage, and a way to compare the two sets in the inspector (so the *why hybrid?*
+  is visible, not just claimed).
+
+### 🟡 Summarization (context compaction) — *track: `agent`*
+- **Where it shows up.** A **`comingSoon` preview tile** (`summarization`) on the Intermediate rung,
+  under the DeepAgents node in the Agent tier, tagged track `agent`
+  ([060-intermediate-preview-tiles](../specs/060-intermediate-preview-tiles/)). It is the rung's
+  Agent-Design preview (pairs with the RAG cluster to light the Intermediate track selector).
+- **What it is.** The one DeepAgents pillar 057 deferred: compact the running message thread when it
+  grows too long — summarize old turns so the agent keeps context without blowing the token budget.
+- **What a spec would add.** A real token-threshold summarization middleware in the agent loop (the
+  library's summarization step), surfaced in the Agent drill-in's memory panel.
+
+### 🟡 Advanced retrieval techniques (MMR · self-query · compression · multi-vector · query expansion)
+
+The *RAG-quality* upgrades that sit inside (or just before/after) the `rag` station — the retrieval
+half of the Intermediate rung, straight from the course map (M2U3.1, *Advanced Retrieval
+Techniques*). **Two members already exist:** the cross-encoder **reranker** (✅ 054, shipped) and
+**hybrid search** (🟡 above). The five below complete the family; each is the seed of its own spec,
+and each would extend the `RagDetail` drill-in (Chunking → Embedding → Retrieval → Reranking → …)
+with one more honest, inspectable step. None needs a cloud map — they live algorithmically inside
+the `rag` station (library-level, e.g. LangChain), not a new tier.
+
+- **Maximal Marginal Relevance (MMR) — diversity-aware retrieval.** Re-pick the top-k to balance
+  *relevance to the query* against *novelty vs. already-picked chunks*, so the context window isn't
+  filled with near-duplicates. A spec adds an `mmr` toggle + `lambda` on the retriever, a
+  `rag.diversify` sub-stage (sibling of `rag.rerank`), and a before/after set view in the inspector.
+- **Self-querying — natural language → metadata filter.** An LLM step that parses the user query
+  into a structured metadata filter (`author = …`, `year > …`) **plus** the semantic query, so
+  retrieval is *filtered*, not just ranked. Depends on the **Metadata** item below. A spec adds a
+  `rag.self_query` sub-stage showing the extracted filter and the LLM call that produced it.
+- **Contextual compression — filter/distil before prompting.** After retrieval, compress each chunk
+  (extractive or LLM-based) down to the sentences that actually answer the query, cutting tokens and
+  noise before the generate step. A spec adds a `rag.compress` sub-stage with a tokens-saved readout
+  (ties into spec [011-token-cost](../specs/011-token-cost/) and the context budget 036).
+- **Multi-vector retrieval — document-level semantics.** Index multiple vectors per document (e.g. a
+  summary vector + child-chunk vectors, or hypothetical-question vectors) and retrieve parents from
+  child hits. A spec adds the multi-vector index option to `ingest.py` and a `rag.search` readout
+  that shows the child → parent expansion. Pairs naturally with **hierarchical chunking** below.
+- **Query expansion & reformulation.** Rewrite/expand the user query (synonyms, HyDE, multi-query
+  fan-out) before embedding, then fuse the result sets. A spec adds a `rag.expand` sub-stage listing
+  the generated query variants and the fusion (overlaps with hybrid search's RRF fusion).
+
+### 🟡 Chunking strategies (ingestion-time)
+
+- **Where it shows up.** The `RagDetail` drill-in already opens on **Chunking → Embedding →
+  Retrieval → Reranking**, but chunking today is a single fixed strategy in
+  `backend/app/rag/ingest.py`.
+- **What it is.** The course's M2U3.3 chunking ladder: **fixed size + token limits**, **overlap for
+  context preservation**, **semantic chunking** (split on meaning, not character count) and
+  **hierarchical chunking** (parent/child). Chunking quality is upstream of every retrieval metric.
+- **What a spec would add.** A `chunk_strategy` config on ingest, the strategy + chunk stats surfaced
+  in the Chunking panel of `RagDetail`, and a way to re-ingest the corpus with a chosen strategy from
+  ⚙️ Settings (reuses the existing reindex path). Hierarchical chunking pairs with multi-vector
+  retrieval above.
+
+### 🟡 Metadata as a first-class citizen
+
+- **Where it shows up.** No tile yet; lives inside the `rag` station (index side) and the future
+  **self-querying** retriever above.
+- **What it is.** M2U3.3's metadata story: attach useful metadata to each chunk (source, section,
+  author, date, type), **extract** metadata from unstructured docs at ingest, **filter** on it at
+  retrieval (the target of self-querying), and use it for **evaluation/debugging** (*why did this
+  chunk get retrieved?*).
+- **What a spec would add.** A metadata schema on the Chroma collection, an extraction step in
+  `ingest.py`, a `where=` filter path in `retriever.py`, and metadata shown on each retrieved chunk
+  in the Vector DB inspector + `RagDetail`. This is the foundation the **self-querying** item builds
+  on.
+
+### 🟡 Retrieval-quality metrics (Precision@k · MRR)
+
+- **Where it shows up.** Adjacent to the Advanced-rung **Eval Runner** (RAGAS / LLM-as-judge) below —
+  but these are the *retrieval-specific* metrics that belong on the Intermediate rung, next to the
+  reranker they measure.
+- **What it is.** M2U3.1 §4's retrieval-quality measures: **Precision@k** and **MRR** (was the
+  relevant chunk in the top-k, and how high?), the LLM-as-judge vs. manual-ground-truth trade-off,
+  and where **RAGAS** fits. These quantify whether reranking / hybrid / MMR actually helped.
+- **What a spec would add.** A small labelled query → relevant-doc set under `backend/app/data/`, a
+  metrics computation after retrieval, and a readout in `RagDetail` showing Precision@k / MRR for the
+  current run (so the *why rerank?* claim is measured, not asserted). The full **RAGAS**
+  answer-quality suite stays in the Advanced **Eval Runner**.
 
 ---
 
 ## 🟡 Advanced rung — Multi-agents & AI-Ops
 
-The Advanced rung is the *how-agents-live-in-production* tier. It adds a whole new **AI-Ops** tier
-(see `stations.ts` → `tiers` → `aiops`) with five preview nodes, plus the multi-agent worker tree
-under the orchestrator.
+**Tracks here:** `agent` (multi-agent) · `aiops` · `security` · `scale`. The Advanced rung is the
+*how-agents-live-in-production* tier. It adds a whole new **AI-Ops** tier (see `stations.ts` →
+`tiers` → `aiops`) with five preview nodes, plus the multi-agent worker tree under the orchestrator.
+With four tracks, this rung is where [`059-scenario-tracks`](../specs/059-scenario-tracks/) earns
+its keep — pick a track to browse one cluster at a time instead of the whole wall. The
+`security`-track items live in the **cross-cutting seams** section below (they have no canvas tile
+yet); the matrix above is the authoritative grouping.
 
-### 🏷️ Multi-agent orchestration (Researcher / Coder / Critic)
+### 🏷️ Multi-agent orchestration (Researcher / Coder / Critic) — *track: `agent`*
 - **Where it shows up.** `stations.ts` → stations `researcher`, `coder`, `critic` under the `agent`
   tier; `AGENT_SCENARIO_LABEL.advanced` renames the `agent` node to **`DeepAgents + Multi-agents`**
   (`pt`: `DeepAgentes + Multiagentes`). Hop fan-out (`agent → researcher | coder | critic`) already
@@ -101,7 +226,7 @@ under the orchestrator.
     Agent-detail tab that shows the delegation chain.
   - Tests proving delegation actually happens (e.g. a coding question routes to the Coder).
 
-### 🟡 LLM Gateway (router · fallback · budget)
+### 🟡 LLM Gateway (router · fallback · budget) — *track: `aiops`*
 - **Where it shows up.** `stations.ts` → station `gateway` (tier `aiops`, `comingSoon: true`).
 - **What it is.** A single egress for every model call — handles routing across providers/models,
   retries, fallback, and budget caps. The natural seam for **multi-provider** (see the
@@ -114,7 +239,7 @@ under the orchestrator.
   - New `Stage`s for `gateway.route` and `gateway.fallback`, surfaced on the inspector.
   - Budget caps enforced server-side; the cap and remaining budget visible on the gateway tile.
 
-### 🟡 Guardrails (input / output safety)
+### 🟡 Guardrails (input / output safety) — *track: `security`*
 - **Where it shows up.** `stations.ts` → station `guardrails` (tier `aiops`, `comingSoon: true`).
 - **What it is.** Checks prompts and answers for **prompt injection, PII and unsafe content**
   before they pass. Two real call sites: pre-LLM on the prompt, post-LLM on the answer.
@@ -125,7 +250,7 @@ under the orchestrator.
     UX (this overlaps with spec [017-failure-injection](../specs/017-failure-injection/) — reuse it).
   - Tests that prove a known-malicious prompt is blocked and a clean prompt passes through.
 
-### 🟡 Semantic Cache (prompt / embedding cache)
+### 🟡 Semantic Cache (prompt / embedding cache) — *track: `aiops`*
 - **Where it shows up.** `stations.ts` → station `cache` (tier `aiops`, `comingSoon: true`).
 - **What it is.** Returns a stored answer for **semantically near queries** — big latency and cost
   savings. Keyed by embedding similarity, not by exact prompt text.
@@ -137,7 +262,7 @@ under the orchestrator.
     [018-cumulative-hud](../specs/018-cumulative-hud/)).
   - Honesty: a cached answer must be **labelled as cached** in the UI (it's not a fresh LLM call).
 
-### 🟡 Eval Runner (RAGAS / LLM-as-judge)
+### 🟡 Eval Runner (RAGAS / LLM-as-judge) — *track: `aiops`*
 - **Where it shows up.** `stations.ts` → station `eval` (tier `aiops`, `comingSoon: true`).
 - **What it is.** Scores answers against a **golden set** (faithfulness, answer relevancy, retrieval
   NDCG) and gates regressions in CI — the production answer to *"did our change make things
@@ -149,7 +274,7 @@ under the orchestrator.
   - A CI gate that fails the build when faithfulness / NDCG drop below thresholds (extends
     `ci.yml`).
 
-### 🟡 Observability sink (LLM traces · OpenTelemetry GenAI)
+### 🟡 Observability sink (LLM traces · OpenTelemetry GenAI) — *track: `aiops`*
 - **Where it shows up.** `stations.ts` → station `observability` (tier `aiops`, `comingSoon: true`).
 - **What it is.** Captures **every prompt, completion, token count, latency and cost** as
   structured LLM traces — the production version of what spec
@@ -167,7 +292,7 @@ under the orchestrator.
 These don't have a tile of their own — they're seams the code already keeps open. Each is a
 genuine TODO for production-readiness.
 
-### 🔧 Multi-provider LLM support
+### 🔧 Multi-provider LLM support — *track: `aiops`*
 - **Where the seam is.** `backend/app/llm/provider.py` — the `LLMProvider` ABC is **explicitly
   kept as a thin seam**. Today `get_provider()` always returns `OpenAIProvider`, and with no
   `OPENAI_API_KEY` it raises `MissingAPIKeyError`. Same story for embeddings in
@@ -185,7 +310,7 @@ genuine TODO for production-readiness.
   multi-provider is an **amendment** (constitution §A) before code. Open a spec under
   `specs/` that proposes the amendment and the implementation together.
 
-### 🔧 Model router (per-request model selection)
+### 🔧 Model router (per-request model selection) — *track: `aiops`*
 - **Where the seam would live.** Either inside the future **LLM Gateway** tile, or as a router
   step in `get_provider()` / inside `OpenAIProvider`. Today the model is fixed to `LLM_MODEL`
   (default `gpt-4o-mini`).
@@ -196,7 +321,7 @@ genuine TODO for production-readiness.
   `gateway.route` `Stage` showing the chosen model + the reason, and per-model cost accounting
   on the HUD.
 
-### 🔧 Authentication, sessions & rate limiting
+### 🔧 Authentication, sessions & rate limiting — *track: `security`*
 - **Where it's flagged.** Honest caveats in `stations.ts` (`frontend` + `backend` stations'
   `whatBreaks`): *"this demo has no real authentication — it is a stub; production needs login,
   sessions and rate limiting before the agent ever runs."*
@@ -205,7 +330,7 @@ genuine TODO for production-readiness.
 - **What a spec would add.** A login flow, a session middleware, a rate-limit middleware, and a
   test matrix proving 401 on missing credentials and 429 on burst.
 
-### 🔧 Multi-replica / shared state
+### 🔧 Multi-replica / shared state — *track: `scale`*
 - **Where it's flagged.** `database` station `whatBreaks` ("this demo is single-instance; the
   trace store is in-memory, lost on restart, not shared across replicas"). Reinforced by
   constitution §7 (*single-instance*).
@@ -224,7 +349,7 @@ The visible tile in this area today is **Guardrails** (🟡 AIOps above), which 
 safety* (injection · PII · toxicity). Everything below is about **identity, secrets, the supply
 chain and runtime isolation** — none of it is wired up yet, and each is its own future spec.
 
-### 🔧 Secrets management & egress DLP
+### 🔧 Secrets management & egress DLP — *track: `security`*
 - **Where the seam would live.** Today secrets come from `backend/.env` (`OPENAI_API_KEY` read via
   `pydantic-settings`). There is no redaction on prompts, answers, traces or logs — `prompt_preview`
   in `backend/app/trace.py` and the `trace_events` SQLite table (spec
@@ -248,7 +373,7 @@ chain and runtime isolation** — none of it is wired up yet, and each is its ow
   hygiene* — a separate detection problem whose failure mode is a leaked credential, not an
   unsafe sentence.
 
-### 🔧 Supply chain (SBOM · dependency scan · MCP trust)
+### 🔧 Supply chain (SBOM · dependency scan · MCP trust) — *track: `security`*
 - **Where the seam would live.** Today CI (`.github/workflows/ci.yml`) runs `ruff` + `pytest` +
   `npm run build` + `npm test`. No SBOM, no dependency scan, no image verification, no MCP
   provenance check.
@@ -271,7 +396,7 @@ chain and runtime isolation** — none of it is wired up yet, and each is its ow
     to `local-fallback`.
   - Bilingual blurbs in the Tools/MCP inspector readout naming the trust posture.
 
-### 🔧 Tool runtime isolation (sandbox · egress control)
+### 🔧 Tool runtime isolation (sandbox · egress control) — *track: `security`*
 - **Where the seam would live.** Today `backend/app/mcp/server.py` runs **in the same process** as
   the agent in `local-fallback`, and over **stdio in the same container** in the normal path. The
   `calculator` and `current_time` tools are pure; `kb_lookup` and `load_skill` touch the DB. None
@@ -293,7 +418,7 @@ chain and runtime isolation** — none of it is wired up yet, and each is its ow
   - Tests proving an offending tool (e.g. one that tries to open `/etc/passwd`) is blocked and
     the agent surfaces a typed error.
 
-### 🔧 Identity (OIDC · workload identity · KMS)
+### 🔧 Identity (OIDC · workload identity · KMS) — *track: `security`*
 - **Where the seam would live.** The existing *Authentication, sessions & rate limiting* seam
   above covers **user identity** at the FastAPI ingress. This seam is the missing **workload +
   key identity** layer: how the *backend itself* proves who it is to OpenAI, to the DB, to the
@@ -316,7 +441,7 @@ chain and runtime isolation** — none of it is wired up yet, and each is its ow
   agent?"*; this seam answers *"as whom is the agent talking to OpenAI, the DB and the vault?"* —
   different threat model.
 
-### 🔧 Model abuse / jailbreak detection
+### 🔧 Model abuse / jailbreak detection — *track: `security`*
 - **Where the seam would live.** Adjacent to the **Guardrails** tile (🟡 AIOps above), but worth
   naming separately so it isn't confused with content safety. Guardrails today is scoped to
   *injection · PII · toxicity*; abuse detection is the **identity-aware behavioural** layer.
@@ -391,10 +516,44 @@ própria spec*.
 
 ---
 
+## 🧭 Modelo de organização — degraus × tracks
+
+> A escada de maturidade é **um eixo** (*"quão pronto pra produção?"*). O conteúdo abaixo é
+> genuinamente **bidimensional**, então cruzamos o degrau com um **Track** (tema). Um Track responde
+> *"qual subsistema estou estudando?"* e estreita os clusters de prévia dentro de um degrau — assim o
+> degrau Avançado deixa de ser um muro de tiles. Tracks são **apenas um filtro de visão no
+> client** (nunca mudam a execução); o eixo em si é entregue em
+> [`specs/059-scenario-tracks/`](../specs/059-scenario-tracks/). **"Mais cenários" = adicionar um
+> track, não um degrau** — os degraus ficam fixos em três.
+
+| Track | `id` | Tema |
+|---|---|---|
+| **RAG Quality** | `rag` | recuperação / data-plane — chunking, metadados, rerank, híbrida, MMR, self-query, compressão, multi-vector, expansão de query, métricas |
+| **Agent Design** | `agent` | sofisticação do agente — ReAct → DeepAgents → orquestração multi-agente |
+| **AI-Ops** | `aiops` | rodar em produção — gateway, cache semântico, eval runner, observabilidade, router, multi-provider |
+| **Security & Trust** | `security` | guardrails, segredos/DLP, cadeia de suprimentos, sandbox de tools, identidade/OIDC, jailbreak, auth/rate-limit |
+| **Scale & Infra** | `scale` | multi-réplica, estado compartilhado, workload identity |
+
+**A matriz — cada item do roadmap por `{degrau × track}`** (✅ entregue · 🟡 prévia · 🏷️ rótulo ·
+🔧 costura):
+
+| Degrau ↓ / Track → | RAG Quality | Agent Design | AI-Ops | Security & Trust | Scale & Infra |
+|---|---|---|---|---|---|
+| **Simples** | embedding + RAG vetorial ✅ | agente ReAct ✅ | — | stub de auth 🔧 | instância única ✅ |
+| **Intermediário** | chunking 🟡 · metadados 🟡 · rerank ✅ · híbrida 🟡 · MMR 🟡 · self-query 🟡 · compressão 🟡 · multi-vector 🟡 · expansão de query 🟡 · métricas 🟡 | DeepAgents ✅ · summarization 🟡 · custo/token honesto ✅ | — | — | — |
+| **Avançado** | RAGAS (completo) → Eval | multi-agente: researcher/coder/critic 🏷️ | gateway 🟡 · cache 🟡 · eval/RAGAS 🟡 · observabilidade 🟡 · model router 🔧 · multi-provider 🔧 | guardrails 🟡 · segredos/DLP 🔧 · cadeia de suprimentos 🔧 · sandbox 🔧 · identidade 🔧 · jailbreak 🔧 · auth/rate-limit 🔧 | multi-réplica 🔧 |
+
+As seções abaixo estão agrupadas por degrau; dentro do degrau Avançado cada `###` é anotado com o
+seu **Track** para a matriz e a prosa ficarem em sincronia.
+
+---
+
 ## 🟡 Degrau Intermediário — qualidade de RAG & "DeepAgents"
 
-O degrau Intermediário é o nível de *qualidade de RAG + custo honesto*. Hoje o cenário é
-selecionável, a topologia é renderizada, mas os novos nós são prévias visuais.
+**Tracks aqui:** `rag` (RAG Quality) · `agent` (Agent Design). O degrau Intermediário é o nível de
+*qualidade de RAG + custo honesto* — o lar do módulo inteiro de recuperação mais o DeepAgents de um
+agente. Hoje o cenário é selecionável, a topologia é renderizada, mas os novos nós são prévias
+visuais.
 
 ### ✅ Runtime DeepAgents — ENTREGUE (057-deepagents-runtime)
 - **Status.** Concluído. No degrau **Intermediário** o rótulo `DeepAgents` agora tem um **runtime
@@ -428,24 +587,121 @@ selecionável, a topologia é renderizada, mas os novos nós são prévias visua
   mapeado em `STAGE_TO_STATION`/`STAGE_TO_PHASE`, com readout + detalhe de movimento de rank no
   inspetor e o drill-in `RagDetail` "abrir visão completa" (Chunking → Embedding → Recuperação →
   Reranking), tudo bilíngue (EN + PT). Veja [`specs/054-rag-block-expansion/`](../specs/054-rag-block-expansion/).
+- **Nota do mapa do curso (M2U3.2 — Bi-Encoders vs. Cross-Encoders).** O reranker entregue é a
+  metade cross-encoder. Ainda em aberto como pequenas specs de enriquecimento: um **bi-encoder vs.
+  cross-encoder** lado a lado no `RagDetail` (o explicador *por que uma segunda passada vale a
+  latência?*), um **readout de latência** na sub-etapa de rerank, e um provedor **Cohere ReRank**
+  (hospedado) atrás da mesma costura `reranker.py` como alternativa ao FlashRank local.
 
 ### 🟡 Busca híbrida (BM25 + vetorial)
-- **Onde aparece.** Citada na [tabela da escada no README](../README.pt-BR.md#-a-escada-de-maturidade--simples--intermediário--avançado)
-  como "busca híbrida"; ainda sem bloco dedicado (ficaria dentro ou ao lado da estação `rag`).
+- **Onde aparece.** Agora tem um **tile de prévia `comingSoon`** (`hybrid`) no degrau Intermediário —
+  posicionado **logo abaixo da estação `rag`** como subcomponente do pipeline RAG (uma extensão da
+  etapa de recuperação, como o reranker), tagueado com o track `rag`
+  ([060-intermediate-preview-tiles](../specs/060-intermediate-preview-tiles/), emendada em 2026-06-17).
+  O tile é o primeiro a acender o track **RAG Quality** do Intermediário; ainda não executa.
 - **O que é.** Combinar recuperação esparsa (BM25 / palavra-chave) e densa (vetorial) e fundir os
   resultados (ex.: RRF) — pega correspondências exatas que o embedding perde.
-- **O que uma spec adicionaria.** Um segundo retriever, um passo de fusão, e uma forma de comparar
-  os dois conjuntos no inspetor (para o *por que híbrida?* ficar visível, não só afirmado).
+- **O que uma spec adicionaria.** Tornar o tile real: um segundo retriever, um passo de fusão (RRF),
+  uma sub-etapa `rag.hybrid` e uma forma de comparar os dois conjuntos no inspetor (para o *por que
+  híbrida?* ficar visível, não só afirmado).
+
+### 🟡 Sumarização (compactação de contexto) — *track: `agent`*
+- **Onde aparece.** Um **tile de prévia `comingSoon`** (`summarization`) no degrau Intermediário,
+  abaixo do nó DeepAgents na tier do Agente, tagueado com o track `agent`
+  ([060-intermediate-preview-tiles](../specs/060-intermediate-preview-tiles/)). É a prévia de
+  Agent-Design do degrau (faz par com o cluster RAG para acender o seletor de track do Intermediário).
+- **O que é.** O pilar do DeepAgents que a 057 adiou: compactar o thread de mensagens quando ele
+  cresce demais — resumindo turnos antigos para o agente manter contexto sem estourar o orçamento.
+- **O que uma spec adicionaria.** Um middleware real de sumarização por limiar de tokens no loop do
+  agente (o passo de summarization da lib), surfaceado no painel de memória do drill-in do Agente.
+
+### 🟡 Técnicas avançadas de recuperação (MMR · self-query · compressão · multi-vector · expansão de query)
+
+Os upgrades de *qualidade de RAG* que ficam dentro (ou logo antes/depois) da estação `rag` — a
+metade de recuperação do degrau Intermediário, direto do mapa do curso (M2U3.1, *Advanced Retrieval
+Techniques*). **Dois membros já existem:** o **reranker** cross-encoder (✅ 054, entregue) e a
+**busca híbrida** (🟡 acima). As cinco abaixo completam a família; cada uma é a semente da sua
+própria spec, e cada uma estenderia o drill-in `RagDetail` (Chunking → Embedding → Recuperação →
+Reranking → …) com mais um passo honesto e inspecionável. Nenhuma precisa de mapa de nuvem — vivem
+algoritmicamente dentro da estação `rag` (nível de biblioteca, ex.: LangChain), não em uma nova tier.
+
+- **Maximal Marginal Relevance (MMR) — recuperação ciente de diversidade.** Reescolhe o top-k
+  equilibrando *relevância à query* contra *novidade vs. trechos já escolhidos*, para a janela de
+  contexto não ficar cheia de quase-duplicatas. Uma spec adiciona um toggle `mmr` + `lambda` no
+  retriever, uma sub-etapa `rag.diversify` (irmã de `rag.rerank`) e uma visão antes/depois do
+  conjunto no inspetor.
+- **Self-querying — linguagem natural → filtro de metadados.** Um passo de LLM que interpreta a query
+  do usuário em um filtro estruturado de metadados (`author = …`, `year > …`) **mais** a query
+  semântica, para a recuperação ser *filtrada*, não só ranqueada. Depende do item **Metadados**
+  abaixo. Uma spec adiciona uma sub-etapa `rag.self_query` mostrando o filtro extraído e a chamada
+  de LLM que o produziu.
+- **Compressão contextual — filtrar/destilar antes do prompt.** Após a recuperação, comprime cada
+  trecho (extrativo ou via LLM) até as frases que de fato respondem à query, cortando tokens e ruído
+  antes da etapa de geração. Uma spec adiciona uma sub-etapa `rag.compress` com readout de
+  tokens-economizados (casa com a spec [011-token-cost](../specs/011-token-cost/) e o orçamento de
+  contexto 036).
+- **Recuperação multi-vetor — semântica em nível de documento.** Indexa múltiplos vetores por
+  documento (ex.: um vetor de resumo + vetores de trechos-filho, ou vetores de perguntas
+  hipotéticas) e recupera os pais a partir de acertos nos filhos. Uma spec adiciona a opção de índice
+  multi-vetor ao `ingest.py` e um readout `rag.search` mostrando a expansão filho → pai. Combina
+  naturalmente com **chunking hierárquico** abaixo.
+- **Expansão & reformulação de query.** Reescreve/expande a query do usuário (sinônimos, HyDE,
+  fan-out multi-query) antes do embedding, depois funde os conjuntos de resultados. Uma spec
+  adiciona uma sub-etapa `rag.expand` listando as variantes de query geradas e a fusão (sobrepõe com
+  a fusão RRF da busca híbrida).
+
+### 🟡 Estratégias de chunking (tempo de ingestão)
+
+- **Onde aparece.** O drill-in `RagDetail` já abre em **Chunking → Embedding → Recuperação →
+  Reranking**, mas o chunking hoje é uma única estratégia fixa em `backend/app/rag/ingest.py`.
+- **O que é.** A escada de chunking do M2U3.3 do curso: **tamanho fixo + limites de token**,
+  **overlap para preservação de contexto**, **chunking semântico** (dividir por significado, não por
+  contagem de caracteres) e **chunking hierárquico** (pai/filho). A qualidade do chunking está a
+  montante de toda métrica de recuperação.
+- **O que uma spec adicionaria.** Uma config `chunk_strategy` na ingestão, a estratégia + estatísticas
+  de chunk surfaceadas no painel Chunking do `RagDetail`, e uma forma de re-ingerir o corpus com uma
+  estratégia escolhida a partir do ⚙️ Settings (reusa o caminho de reindex existente). O chunking
+  hierárquico combina com a recuperação multi-vetor acima.
+
+### 🟡 Metadados como cidadão de primeira classe
+
+- **Onde aparece.** Ainda sem bloco; vive dentro da estação `rag` (lado do índice) e do futuro
+  retriever de **self-querying** acima.
+- **O que é.** A história de metadados do M2U3.3: anexar metadados úteis a cada trecho (fonte, seção,
+  autor, data, tipo), **extrair** metadados de documentos não estruturados na ingestão, **filtrar**
+  por eles na recuperação (o alvo do self-querying) e usá-los para **avaliação/depuração** (*por que
+  este trecho foi recuperado?*).
+- **O que uma spec adicionaria.** Um schema de metadados na coleção Chroma, um passo de extração no
+  `ingest.py`, um caminho de filtro `where=` no `retriever.py`, e metadados mostrados em cada trecho
+  recuperado no inspetor do Vector DB + `RagDetail`. Essa é a fundação sobre a qual o item
+  **self-querying** se apoia.
+
+### 🟡 Métricas de qualidade de recuperação (Precision@k · MRR)
+
+- **Onde aparece.** Adjacente ao **Eval Runner** (RAGAS / LLM-como-juiz) do degrau Avançado abaixo —
+  mas estas são as métricas *específicas de recuperação* que pertencem ao degrau Intermediário, ao
+  lado do reranker que elas medem.
+- **O que é.** As medidas de qualidade de recuperação do M2U3.1 §4: **Precision@k** e **MRR** (o
+  trecho relevante estava no top-k, e quão alto?), o trade-off LLM-como-juiz vs. ground-truth manual,
+  e onde o **RAGAS** se encaixa. Elas quantificam se reranking / híbrida / MMR de fato ajudaram.
+- **O que uma spec adicionaria.** Um pequeno conjunto rotulado query → doc-relevante sob
+  `backend/app/data/`, um cálculo de métricas após a recuperação, e um readout no `RagDetail`
+  mostrando Precision@k / MRR para o run atual (para a afirmação *por que rerank?* ser medida, não
+  afirmada). A suíte completa de qualidade de resposta do **RAGAS** fica no **Eval Runner** Avançado.
 
 ---
 
 ## 🟡 Degrau Avançado — Multiagentes & AI-Ops
 
-O degrau Avançado é o nível de *como agentes vivem em produção*. Ele adiciona uma nova tier
-inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nós de prévia, mais a
-árvore de workers multi-agente sob o orquestrador.
+**Tracks aqui:** `agent` (multi-agente) · `aiops` · `security` · `scale`. O degrau Avançado é o
+nível de *como agentes vivem em produção*. Ele adiciona uma nova tier inteira de **AI-Ops** (veja
+`stations.ts` → `tiers` → `aiops`) com cinco nós de prévia, mais a árvore de workers multi-agente
+sob o orquestrador. Com quatro tracks, é aqui que a [`059-scenario-tracks`](../specs/059-scenario-tracks/)
+se paga — escolha um track para navegar um cluster por vez em vez do muro inteiro. Os itens do track
+`security` vivem na seção de **costuras transversais** abaixo (ainda sem bloco no canvas); a matriz
+acima é o agrupamento autoritativo.
 
-### 🏷️ Orquestração multi-agente (Researcher / Coder / Critic)
+### 🏷️ Orquestração multi-agente (Researcher / Coder / Critic) — *track: `agent`*
 - **Onde aparece.** `stations.ts` → estações `researcher`, `coder`, `critic` sob a tier `agent`;
   `AGENT_SCENARIO_LABEL.advanced` renomeia o nó `agent` para **`DeepAgents + Multi-agents`**
   (`pt`: `DeepAgentes + Multiagentes`). O fan-out de hops (`agent → researcher | coder | critic`)
@@ -465,7 +721,7 @@ inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nó
     mostrando a cadeia de delegação.
   - Testes provando que a delegação acontece de fato (ex.: uma pergunta de código vai para o Coder).
 
-### 🟡 Gateway LLM (roteador · fallback · orçamento)
+### 🟡 Gateway LLM (roteador · fallback · orçamento) — *track: `aiops`*
 - **Onde aparece.** `stations.ts` → estação `gateway` (tier `aiops`, `comingSoon: true`).
 - **O que é.** Uma saída única para toda chamada de modelo — cuida de roteamento entre
   provedores/modelos, retries, fallback e limites de orçamento. A costura natural para
@@ -479,7 +735,7 @@ inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nó
   - Limites de orçamento aplicados no servidor; o limite e o saldo restante visíveis no bloco do
     gateway.
 
-### 🟡 Guardrails (segurança de entrada / saída)
+### 🟡 Guardrails (segurança de entrada / saída) — *track: `security`*
 - **Onde aparece.** `stations.ts` → estação `guardrails` (tier `aiops`, `comingSoon: true`).
 - **O que é.** Verifica prompts e respostas contra **prompt injection, PII e conteúdo inseguro**
   antes de passarem. Dois pontos de chamada reais: pré-LLM no prompt, pós-LLM na resposta.
@@ -492,7 +748,7 @@ inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nó
     reusar).
   - Testes que provam que um prompt sabidamente malicioso é bloqueado e um prompt limpo passa.
 
-### 🟡 Cache Semântico (cache de prompt / embedding)
+### 🟡 Cache Semântico (cache de prompt / embedding) — *track: `aiops`*
 - **Onde aparece.** `stations.ts` → estação `cache` (tier `aiops`, `comingSoon: true`).
 - **O que é.** Devolve uma resposta armazenada para **consultas semanticamente próximas** — grande
   economia de latência e custo. Chave pela similaridade de embedding, não pelo texto exato do prompt.
@@ -506,7 +762,7 @@ inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nó
   - Honestidade: uma resposta cacheada precisa ser **rotulada como cacheada** na UI (não é uma
     chamada fresca ao LLM).
 
-### 🟡 Eval Runner (RAGAS / LLM-como-juiz)
+### 🟡 Eval Runner (RAGAS / LLM-como-juiz) — *track: `aiops`*
 - **Onde aparece.** `stations.ts` → estação `eval` (tier `aiops`, `comingSoon: true`).
 - **O que é.** Pontua respostas contra um **golden set** (fidelidade, relevância da resposta, NDCG
   da recuperação) e barra regressões no CI — a resposta de produção para *"nossa mudança melhorou?"*.
@@ -517,7 +773,7 @@ inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nó
   - Uma porta de CI que falha o build quando fidelidade / NDCG caem abaixo dos thresholds (estende
     `ci.yml`).
 
-### 🟡 Sink de Observabilidade (traces de LLM · OpenTelemetry GenAI)
+### 🟡 Sink de Observabilidade (traces de LLM · OpenTelemetry GenAI) — *track: `aiops`*
 - **Onde aparece.** `stations.ts` → estação `observability` (tier `aiops`, `comingSoon: true`).
 - **O que é.** Captura **cada prompt, resposta, contagem de tokens, latência e custo** como traces
   estruturados de LLM — a versão de produção do que a spec
@@ -537,7 +793,7 @@ inteira de **AI-Ops** (veja `stations.ts` → `tiers` → `aiops`) com cinco nó
 Estas não têm bloco próprio — são costuras que o código já mantém abertas. Cada uma é um TODO
 genuíno para prontidão de produção.
 
-### 🔧 Suporte a múltiplos provedores de LLM
+### 🔧 Suporte a múltiplos provedores de LLM — *track: `aiops`*
 - **Onde está a costura.** `backend/app/llm/provider.py` — a ABC `LLMProvider` é **explicitamente
   mantida como uma costura fina**. Hoje `get_provider()` sempre devolve `OpenAIProvider`, e sem
   `OPENAI_API_KEY` levanta `MissingAPIKeyError`. Mesma história para embeddings em
@@ -555,7 +811,7 @@ genuíno para prontidão de produção.
   adicionar multi-provider é uma **emenda** (constituição §A) antes do código. Abra uma spec em
   `specs/` que proponha a emenda e a implementação juntas.
 
-### 🔧 Roteador de modelos (seleção de modelo por requisição)
+### 🔧 Roteador de modelos (seleção de modelo por requisição) — *track: `aiops`*
 - **Onde a costura ficaria.** Dentro do futuro bloco **Gateway de LLM**, ou como um passo de
   roteamento em `get_provider()` / dentro de `OpenAIProvider`. Hoje o modelo é fixo em `LLM_MODEL`
   (padrão `gpt-4o-mini`).
@@ -566,7 +822,7 @@ genuíno para prontidão de produção.
   classificador), um novo `Stage` `gateway.route` mostrando o modelo escolhido + a razão, e
   contabilidade de custo por modelo no HUD.
 
-### 🔧 Autenticação, sessões & rate limiting
+### 🔧 Autenticação, sessões & rate limiting — *track: `security`*
 - **Onde está sinalizado.** Ressalvas honestas em `stations.ts` (`whatBreaks` das estações
   `frontend` + `backend`): *"esta demo não tem autenticação real — é um stub; produção precisa de
   login, sessões e rate limiting antes de o agente rodar."*
@@ -575,7 +831,7 @@ genuíno para prontidão de produção.
 - **O que uma spec adicionaria.** Um fluxo de login, um middleware de sessão, um middleware de
   rate-limit e uma matriz de testes provando 401 sem credenciais e 429 sob burst.
 
-### 🔧 Multi-réplica / estado compartilhado
+### 🔧 Multi-réplica / estado compartilhado — *track: `scale`*
 - **Onde está sinalizado.** `whatBreaks` da estação `database` ("esta demo é de instância única; o
   armazenamento de traces fica em memória, perdido ao reiniciar, não compartilhado entre
   réplicas"). Reforçado pela constituição §7 (*instância única*).
@@ -596,7 +852,7 @@ produção. O único bloco visível nessa área hoje é o **Guardrails** (🟡 A
 segredos, cadeia de suprimentos e isolamento de runtime** — nada disso está ligado ainda, e cada
 um é uma spec futura própria.
 
-### 🔧 Gestão de segredos & DLP de egress
+### 🔧 Gestão de segredos & DLP de egress — *track: `security`*
 - **Onde a costura ficaria.** Hoje os segredos vêm do `backend/.env` (`OPENAI_API_KEY` lido via
   `pydantic-settings`). Não há redação em prompts, respostas, traces ou logs — `prompt_preview` em
   `backend/app/trace.py` e a tabela SQLite `trace_events` (spec
@@ -620,7 +876,7 @@ um é uma spec futura própria.
   é *higiene de segredos* — um problema de detecção distinto cujo modo de falha é uma credencial
   vazada, não uma frase insegura.
 
-### 🔧 Cadeia de suprimentos (SBOM · scan de dependências · confiança em MCP)
+### 🔧 Cadeia de suprimentos (SBOM · scan de dependências · confiança em MCP) — *track: `security`*
 - **Onde a costura ficaria.** Hoje o CI (`.github/workflows/ci.yml`) roda `ruff` + `pytest` +
   `npm run build` + `npm test`. Sem SBOM, sem scan de dependências, sem verificação de imagem, sem
   checagem de proveniência de MCP.
@@ -643,7 +899,7 @@ um é uma spec futura própria.
     para `local-fallback`.
   - Blurbs bilíngues no readout do inspetor de Tools/MCP nomeando a postura de confiança.
 
-### 🔧 Isolamento de runtime de tools (sandbox · controle de egress)
+### 🔧 Isolamento de runtime de tools (sandbox · controle de egress) — *track: `security`*
 - **Onde a costura ficaria.** Hoje `backend/app/mcp/server.py` roda **no mesmo processo** do agente
   no `local-fallback`, e por **stdio no mesmo container** no caminho normal. As tools `calculator`
   e `current_time` são puras; `kb_lookup` e `load_skill` tocam o DB. Nenhuma está em sandbox.
@@ -664,7 +920,7 @@ um é uma spec futura própria.
   - Testes provando que uma tool ofensiva (ex.: uma que tenta abrir `/etc/passwd`) é bloqueada e
     o agente surfacia um erro tipado.
 
-### 🔧 Identidade (OIDC · workload identity · KMS)
+### 🔧 Identidade (OIDC · workload identity · KMS) — *track: `security`*
 - **Onde a costura ficaria.** A costura *Autenticação, sessões & rate limiting* acima cobre a
   **identidade do usuário** no ingress do FastAPI. Esta costura é a camada faltante de
   **identidade de workload + de chaves**: como o *próprio backend* prova quem é para a OpenAI,
@@ -687,7 +943,7 @@ um é uma spec futura própria.
   agente?"*; esta responde *"como quem o agente fala com a OpenAI, o DB e o cofre?"* — modelo de
   ameaça diferente.
 
-### 🔧 Abuso de modelo / detecção de jailbreak
+### 🔧 Abuso de modelo / detecção de jailbreak — *track: `security`*
 - **Onde a costura ficaria.** Adjacente ao bloco **Guardrails** (🟡 AIOps acima), mas vale nomear
   separadamente para não confundir com segurança de conteúdo. Guardrails hoje tem escopo de
   *injection · PII · toxicidade*; detecção de abuso é a camada **comportamental ciente de

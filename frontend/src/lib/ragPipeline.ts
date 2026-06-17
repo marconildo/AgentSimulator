@@ -9,7 +9,6 @@
 // is no query-time chunking event. "Augmented" is the "A" in RAG: the retrieved
 // chunks assembled into the prompt context handed to the LLM (from `llm.prompt`).
 
-import type { Scenario } from "./scenario";
 import type { ContextBudget, Stage, TraceEvent } from "../types/events";
 
 export type RagStageId = "chunking" | "embedding" | "retrieval" | "rerank" | "augmented";
@@ -77,11 +76,7 @@ function retrievalQuery(visible: TraceEvent[]): string {
   return (msg?.data.message as string) ?? "";
 }
 
-export function deriveRagPipeline(
-  events: TraceEvent[],
-  cursor: number,
-  scenario: Scenario,
-): RagPipeline {
+export function deriveRagPipeline(events: TraceEvent[], cursor: number): RagPipeline {
   const visible = cursor >= 0 ? events.slice(0, cursor + 1) : [];
 
   const lastEnd = (stage: Stage): TraceEvent | undefined => {
@@ -151,9 +146,14 @@ export function deriveRagPipeline(
   // its live status. `movement` exposes the rank reordering.
   const rerank = lastEnd("rag.rerank");
   const movement = (rerank?.data.candidates as Array<{ new_rank: number }>) ?? [];
+  // 061-scenario-builder — the rerank card is a pure projection of the trace now: a run
+  // that reranks emits rag.rerank *somewhere* in its log, so we look at the FULL events
+  // (not just up to the cursor) to tell "rerank off" (inactive) from "not reached yet"
+  // (pending). When the run does rerank, `status` resolves pending/active/done at the cursor.
+  const runHasRerank = events.some((e) => e.stage === "rag.rerank");
   const rerankStage: RagStage = {
     id: "rerank",
-    status: scenario === "simple" && !rerank ? "inactive" : status(["rag.rerank"]),
+    status: runHasRerank ? status(["rag.rerank"]) : "inactive",
     data: rerank
       ? {
           model: rerank.data.model,

@@ -77,6 +77,7 @@ export function ExecutionTracesDetail({ onBack }: { onBack: () => void }) {
                 key={idx}
                 span={s}
                 label={x.nodes[s.node]}
+                detail={spanDetail(s, x.planTodos)}
                 totalMs={tree.totalMs}
                 collapsed={collapsed.has(idx)}
                 onToggle={() => toggleSpan(idx)}
@@ -100,9 +101,17 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
+// 062 — the parent-row tag for a DeepAgents span: the plan's todo count, or the
+// file path / sub-agent type. Other nodes have no tag.
+function spanDetail(span: TraceSpan, planTodos: string): string | undefined {
+  if (span.node === "plan") return span.count !== undefined ? `${span.count} ${planTodos}` : undefined;
+  return span.detail;
+}
+
 function SpanRow({
   span,
   label,
+  detail,
   totalMs,
   collapsed,
   onToggle,
@@ -110,6 +119,7 @@ function SpanRow({
 }: {
   span: TraceSpan;
   label: string;
+  detail?: string;
   totalMs: number;
   collapsed: boolean;
   onToggle: () => void;
@@ -124,6 +134,7 @@ function SpanRow({
         expanded={!collapsed}
         onToggle={onToggle}
         label={label}
+        tag={detail}
         accent
         offsetMs={span.offsetMs}
         durationMs={span.durationMs}

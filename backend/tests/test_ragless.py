@@ -4,12 +4,12 @@ Drives the agent through the graph so the toggle's real wiring is exercised. Str
 assertions tolerate model variability. Needs a key (the agent calls the model), so the
 module is ``@pytest.mark.openai``.
 
-Guarantees:
+Guarantees (061-scenario-builder decoupled the toggle from the rung — ``ragless`` now
+fires on its own flag, no ``scenario`` condition):
   - AC1: ``ragless=False`` (default) never emits ``pageindex.*`` (byte-for-byte off).
-  - AC2: ``ragless=True`` but ``scenario="simple"`` never emits ``pageindex.*`` (no-op).
-  - AC4: ``ragless=True, scenario="intermediate"`` emits BOTH ``rag.*`` (display) and
-    ``pageindex.*`` (grounding), and the retrieval observation fed to the model is the
-    PageIndex context, not the vector one.
+  - 061 AC5: ``ragless=True`` emits ``pageindex.*`` regardless of any rung.
+  - ``ragless=True`` emits BOTH ``rag.*`` (display) and ``pageindex.*`` (grounding), and
+    the retrieval observation fed to the model is the PageIndex context, not the vector one.
 """
 
 import asyncio
@@ -51,19 +51,20 @@ def _stages(events):
 
 async def test_ragless_off_emits_no_pageindex_stages():
     # AC1 — default is byte-for-byte: never a pageindex.* stage.
-    _state, events = await _run(scenario="intermediate", ragless=False)
+    _state, events = await _run(ragless=False)
     assert not any(s.startswith("pageindex.") for s in _stages(events))
 
 
-async def test_ragless_on_simple_rung_is_a_noop():
-    # AC2 — the toggle only has effect on the Intermediate rung.
-    _state, events = await _run(scenario="simple", ragless=True)
-    assert not any(s.startswith("pageindex.") for s in _stages(events))
+async def test_ragless_on_fires_regardless_of_rung():
+    # 061 AC5 — the toggle is decoupled from the maturity rung: ragless=True alone
+    # (no scenario input exists anymore) emits the PageIndex path.
+    _state, events = await _run(ragless=True)
+    assert any(s.startswith("pageindex.") for s in _stages(events))
 
 
-async def test_ragless_intermediate_runs_both_paths_and_pageindex_grounds():
-    # AC4 — both retrieval paths animate; PageIndex is the grounding fed to the model.
-    state, events = await _run(scenario="intermediate", ragless=True)
+async def test_ragless_on_runs_both_paths_and_pageindex_grounds():
+    # Both retrieval paths animate; PageIndex is the grounding fed to the model.
+    state, events = await _run(ragless=True)
     stages = _stages(events)
     # Vector RAG ran for display...
     assert "rag.search" in stages, "vector path should run for side-by-side display"

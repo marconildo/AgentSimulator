@@ -12,7 +12,6 @@ import { useT } from "../i18n";
 import { useAgentAnatomy } from "../lib/agentAnatomy";
 import { getConfig, type AppConfig } from "../lib/chatApi";
 import { DEFAULT_EXPERIMENT, DRAFT_KEY, useExperiment } from "../lib/experiment";
-import { useScenario } from "../lib/scenario";
 import { useChat } from "../store/useChat";
 
 export function SettingsExperiment() {
@@ -24,9 +23,6 @@ export function SettingsExperiment() {
   const exp = useExperiment((e) => e.byConv[conv ?? DRAFT_KEY] ?? DEFAULT_EXPERIMENT);
   const exp_ = useExperiment.getState();
   const openAnatomy = useAgentAnatomy((s) => s.openDialog);
-  // 056-ragless-pageindex — the RAGLESS toggle is Intermediate-rung only.
-  const scenario = useScenario((s) => s.scenario);
-  const raglessAvailable = scenario !== "simple";
 
   const [config, setConfig] = useState<AppConfig | null>(null);
   useEffect(() => {
@@ -110,29 +106,8 @@ export function SettingsExperiment() {
         className="w-full accent-[var(--color-accent)]"
       />
 
-      {/* 056-ragless-pageindex — RAGLESS (PageIndex) toggle (Intermediate rung). */}
-      <div className="mt-3 mb-1 text-[11px] font-semibold text-[var(--color-ink)]">
-        {ex.ragless.label}
-      </div>
-      <p className="mb-1.5 text-[10.5px] leading-snug text-[var(--color-muted)]">{ex.ragless.hint}</p>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          onClick={() => exp_.setRagless(conv, !exp.ragless)}
-          aria-pressed={exp.ragless}
-          disabled={!raglessAvailable}
-          className="rounded-lg border px-2.5 py-1.5 font-mono text-[11px] transition disabled:opacity-50"
-          style={{
-            borderColor: exp.ragless ? "var(--color-accent)" : "var(--color-line)",
-            background: exp.ragless ? "var(--color-panel-2)" : "transparent",
-            color: exp.ragless ? "var(--color-indigo-soft)" : "var(--color-ink)",
-          }}
-        >
-          {exp.ragless ? ex.ragless.on : ex.ragless.off}
-        </button>
-        {!raglessAvailable && (
-          <span className="text-[10px] text-[var(--color-muted)]">{ex.ragless.simpleOnly}</span>
-        )}
-      </div>
+      {/* 061-scenario-builder — RAGLESS moved to the header "Build" palette (it's an
+          architecture component now, not a per-run knob). */}
 
       {/* Simulate failure (017). */}
       <div className="mt-3 mb-1 text-[11px] font-semibold text-[var(--color-ink)]">

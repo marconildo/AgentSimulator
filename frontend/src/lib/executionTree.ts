@@ -21,7 +21,25 @@ export type TraceNode =
   | "respond"
   | "retrieve"
   | "memory"
-  | "persist";
+  | "persist"
+  // 062-deepagents-execution-spans — the DeepAgents runtime's steps get their own
+  // top-level rows instead of being folded into `think` via the `reason` phase.
+  | "plan"
+  | "delegate"
+  | "fs-write"
+  | "fs-read";
+
+// DeepAgents stages bypass the phase grouping (which lumps them all into `reason`
+// → `think`) and map straight to their own node, so the steps that define a
+// DeepAgent — plan, file ops, delegation — are visible as distinct spans. This is
+// finer-grained than `PHASE_TO_NODE` on purpose; the timeline phase rail (phases.ts)
+// keeps grouping these under `reason`, which is correct for that projection.
+const STAGE_TO_DEEPAGENTS_NODE: Partial<Record<Stage, TraceNode>> = {
+  "agent.plan": "plan",
+  "agent.fs.write": "fs-write",
+  "agent.fs.read": "fs-read",
+  "agent.delegate": "delegate",
+};
 
 // Each occurrence groups by timeline phase; the `request` phase is the
 // frontend/backend envelope and is excluded from the tree (it ≈ the whole run).
@@ -62,6 +80,11 @@ export interface TraceSpan {
   tokens?: number;
   costUsd?: number;
   children: SpanChild[];
+  // 062 — a short row tag: a file path (fs-write/fs-read) or sub-agent type
+  // (delegate). A proper noun — rendered verbatim, never translated.
+  detail?: string;
+  // 062 — the plan's todo count (the `plan` node only); rendered with an i18n word.
+  count?: number;
 }
 
 export interface ExecutionTree {
@@ -138,6 +161,41 @@ function childrenFor(occ: Occurrence, runStart: number): SpanChild[] {
   return children;
 }
 
+/** The first string value found under `data[key]` across the occurrence's events. */
+function firstStr(occ: Occurrence, key: string): string | undefined {
+  for (const e of occ.events) {
+    const v = e.data?.[key];
+    if (typeof v === "string" && v) return v;
+  }
+  return undefined;
+}
+
+/** The first finite number under `data[key]` across the occurrence's events. */
+function firstNum(occ: Occurrence, key: string): number | undefined {
+  for (const e of occ.events) {
+    const v = num(e.data?.[key]);
+    if (v !== undefined) return v;
+  }
+  return undefined;
+}
+
+/**
+ * Children of a `delegate` span: the sub-agent's tool trail. The agent.delegate
+ * END carries `data.steps` (the tools the sub-agent used) — we show those, so the
+ * delegation reads as one collapsible span (context quarantine) rather than letting
+ * the sub-agent's nested rag/tool events leak out as phantom top-level rows.
+ */
+function delegateChildren(occ: Occurrence, runStart: number): SpanChild[] {
+  const end = occ.events.find((e) => e.stage === "agent.delegate" && e.phase === "end");
+  const raw = end?.data?.steps;
+  const steps = Array.isArray(raw) ? raw : [];
+  const offsetMs = occ.firstTs - runStart;
+  return steps
+    .map((s) => (typeof s === "string" ? s : String(s)))
+    .filter((s) => s)
+    .map((label) => ({ label, offsetMs, durationMs: 0 }));
+}
+
 /**
  * Fold an event log into a 2-level execution-trace tree. Pure: never reads or
  * mutates anything but its argument.
@@ -153,26 +211,61 @@ export function executionTree(events: TraceEvent[]): ExecutionTree {
 
   const spans: TraceSpan[] = [];
   let cur: Occurrence | null = null;
+  // 062 — while inside an agent.delegate START…END window, every event is swallowed
+  // into the delegation (context quarantine) instead of forming sibling spans.
+  let delegate: Occurrence | null = null;
+
+  const finish = (occ: Occurrence): TraceSpan => {
+    const isDelegate = occ.node === "delegate";
+    const span: TraceSpan = {
+      node: occ.node,
+      offsetMs: occ.firstTs - runStart,
+      durationMs: occ.lastTs - occ.firstTs,
+      tokens: sumMetric(occ.events, "total_tokens") || undefined,
+      costUsd: sumMetric(occ.events, "cost_usd") || undefined,
+      children: isDelegate ? delegateChildren(occ, runStart) : childrenFor(occ, runStart),
+    };
+    if (isDelegate) span.detail = firstStr(occ, "subagent");
+    else if (occ.node === "fs-write" || occ.node === "fs-read") span.detail = firstStr(occ, "path");
+    else if (occ.node === "plan") span.count = firstNum(occ, "count");
+    return span;
+  };
 
   const flush = () => {
     if (!cur) return;
-    spans.push({
-      node: cur.node,
-      offsetMs: cur.firstTs - runStart,
-      durationMs: cur.lastTs - cur.firstTs,
-      tokens: sumMetric(cur.events, "total_tokens") || undefined,
-      costUsd: sumMetric(cur.events, "cost_usd") || undefined,
-      children: childrenFor(cur, runStart),
-    });
+    spans.push(finish(cur));
     cur = null;
   };
 
   for (const e of events) {
-    const phase = STAGE_TO_PHASE[e.stage];
-    if (!phase) continue; // defensive: an unmapped stage is skipped, not crashed
-    const node = PHASE_TO_NODE[phase];
-    if (!node) continue; // the request envelope is not a node
     const ts = toMs(e.ts);
+
+    // Inside a delegation: accumulate until the matching agent.delegate END.
+    if (delegate) {
+      delegate.events.push(e);
+      delegate.lastTs = ts;
+      if (e.stage === "agent.delegate" && e.phase === "end") {
+        spans.push(finish(delegate));
+        delegate = null;
+      }
+      continue;
+    }
+    // Opening a delegation closes any in-flight occurrence first.
+    if (e.stage === "agent.delegate" && e.phase === "start") {
+      flush();
+      delegate = { node: "delegate", events: [e], firstTs: ts, lastTs: ts };
+      continue;
+    }
+
+    // DeepAgents stages map straight to their own node; everything else groups by
+    // timeline phase.
+    const node =
+      STAGE_TO_DEEPAGENTS_NODE[e.stage] ??
+      ((): TraceNode | null => {
+        const phase = STAGE_TO_PHASE[e.stage];
+        return phase ? PHASE_TO_NODE[phase] : null;
+      })();
+    if (!node) continue; // unmapped stage or the request envelope — not a node
     if (cur && cur.node === node) {
       cur.events.push(e);
       cur.lastTs = ts; // extend the current occurrence
@@ -182,6 +275,7 @@ export function executionTree(events: TraceEvent[]): ExecutionTree {
     }
   }
   flush();
+  if (delegate) spans.push(finish(delegate)); // a truncated run left it open
 
   const totalTokens = spans.reduce((a, s) => a + (s.tokens ?? 0), 0);
   const totalCostUsd = spans.reduce((a, s) => a + (s.costUsd ?? 0), 0);

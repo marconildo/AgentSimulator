@@ -62,11 +62,13 @@ async def _tool(name, args, *, state=None, vfs=None, plan=None, provider=None, r
 # --- Gating: who sees the DeepAgents tools (deterministic, keyless) -------------
 
 
-def test_deepagents_gated_to_intermediate_without_ragless():
-    assert _with_deepagents({"scenario": "intermediate", "ragless": False}) is True
-    assert _with_deepagents({"scenario": "intermediate", "ragless": True}) is False
-    assert _with_deepagents({"scenario": "simple", "ragless": False}) is False
-    assert _with_deepagents({"scenario": "advanced", "ragless": False}) is False
+def test_deepagents_gated_to_deepagents_runtime_without_ragless():
+    # 061-scenario-builder: gated by the `deepagents` runtime (was the Intermediate rung),
+    # and never composes with RAGLESS.
+    assert _with_deepagents({"runtime": "deepagents", "ragless": False}) is True
+    assert _with_deepagents({"runtime": "deepagents", "ragless": True}) is False
+    assert _with_deepagents({"runtime": "react", "ragless": False}) is False
+    assert _with_deepagents({"runtime": "multiagent", "ragless": False}) is False
 
 
 async def test_tools_advertised_on_intermediate_not_simple():
@@ -161,7 +163,7 @@ async def test_task_spawns_researcher_subagent_and_returns_result():
         "message": _Q,
         "top_k": 3,
         "session_id": None,
-        "scenario": "intermediate",
+        "rerank": False,
         "rerank_threshold": 0.0,
     }
     result, events = await _tool(
@@ -184,7 +186,7 @@ async def test_task_spawns_researcher_subagent_and_returns_result():
 # --- AC6: model-driven — a greeting elects nothing; Simple never offers them ----
 
 
-async def _full_run(message, scenario):
+async def _full_run(message, runtime):
     emitter = TraceEmitter("test", message)
 
     async def drain():
@@ -197,7 +199,7 @@ async def _full_run(message, scenario):
         return events
 
     drainer = asyncio.create_task(drain())
-    answer = await run_agent(message, 3, emitter, scenario=scenario)
+    answer = await run_agent(message, 3, emitter, runtime=runtime)
     await emitter.close()
     return answer, await drainer
 
@@ -206,24 +208,24 @@ _DEEP_STAGES = ["agent.plan", "agent.fs.write", "agent.fs.read", "agent.delegate
 
 
 @pytest.mark.openai
-async def test_real_task_on_intermediate_plans_first():
-    # The DeepAgent harness mandates planning: a real task on the Intermediate rung must
-    # elect write_todos (→ agent.plan) before answering. This is the behavioral guarantee
-    # that makes it a DeepAgent and not a plain ReAct loop with unused tools.
+async def test_real_task_on_deepagents_runtime_plans_first():
+    # The DeepAgent harness mandates planning: a real task under the `deepagents` runtime
+    # must elect write_todos (→ agent.plan) before answering. This is the behavioral
+    # guarantee that makes it a DeepAgent and not a plain ReAct loop with unused tools.
     _answer, events = await _full_run(
         "Research how RAG retrieval works and how chunk size and top-k affect it, then "
         "give me a structured summary.",
-        "intermediate",
+        "deepagents",
     )
     assert _ends(events, "agent.plan"), "a real task should elect write_todos (agent.plan)"
 
 
 @pytest.mark.openai
-async def test_simple_rung_never_emits_deepagents_stages():
-    answer, events = await _full_run(_Q, "simple")
+async def test_react_runtime_never_emits_deepagents_stages():
+    answer, events = await _full_run(_Q, "react")
     stages = {str(e.stage) for e in events}
     for forbidden in _DEEP_STAGES:
-        assert forbidden not in stages, f"the Simple rung must not emit {forbidden}"
+        assert forbidden not in stages, f"the ReAct runtime must not emit {forbidden}"
     assert answer.strip()
 
 

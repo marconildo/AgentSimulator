@@ -25,7 +25,7 @@ import {
   type PageIndexStageStatus,
   type SelectedSection,
 } from "../lib/pageindexPipeline";
-import { useScenario } from "../lib/scenario";
+import { useResolvedSelection } from "../lib/selection";
 import { useSimulator } from "../store/useSimulator";
 
 const OK = "var(--color-ok)";
@@ -45,7 +45,7 @@ export function PageIndexPipelinePanel() {
   const status = useSimulator((s) => s.status);
   const expanded = useSimulator((s) => s.expanded);
   const closeDetail = useSimulator((s) => s.closeDetail);
-  const scenario = useScenario((s) => s.scenario);
+  const sel = useResolvedSelection();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -66,11 +66,9 @@ export function PageIndexPipelinePanel() {
   const [picked, setPicked] = useState<PageIndexStageId | null>(null);
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
-  // showRagless = true: the node exists (the panel is only mounted when it does).
-  const layout = useMemo(
-    () => computeLayout(expandedSet, scenario, false, true),
-    [expandedSet, scenario],
-  );
+  // The panel is only mounted when the RAGLESS (`pageindex`) node is in the selection,
+  // so the resolved selection already includes it in the layout.
+  const layout = useMemo(() => computeLayout(expandedSet, sel), [expandedSet, sel]);
   const pipeline = useMemo(() => derivePageIndexPipeline(events, cursor), [events, cursor]);
 
   useLayoutEffect(() => {

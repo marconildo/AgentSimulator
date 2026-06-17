@@ -15,7 +15,7 @@
 
 import { create } from "zustand";
 
-import { useScenario } from "./scenario";
+import { currentRequestInputs } from "./selection";
 
 export interface ConvExperiment {
   topK: number | null; // null = backend default top-k
@@ -120,15 +120,12 @@ export interface ChatOverrides {
   // 055-rerank-score-threshold — sent only when raised above 0 (an untouched run
   // sends nothing extra; 0 = no filter = today's behavior).
   rerank_threshold?: number;
-  // 008-scenario-framework / 054-rag-block-expansion: the active maturity-ladder
-  // rung. Global (not per-conversation, so it reads from `useScenario`, not the
-  // experiment store). Sent only when away from `simple` so an untouched run still
-  // sends nothing extra — but on `intermediate` it's what makes the backend run
-  // the reranker (without it the backend defaults to simple and never reranks).
-  scenario?: string;
-  // 056-ragless-pageindex — run the reasoning-based PageIndex path alongside Vector
-  // RAG. Sent only when the toggle is on AND away from `simple` (RAGLESS is an
-  // Intermediate-rung feature), so an untouched / Simple run sends nothing extra.
+  // 061-scenario-builder — per-feature inputs derived from the global component
+  // selection (replaced the 008 `scenario` rung). `rerank` turns on the reranker;
+  // `runtime` picks the agent loop; `ragless` runs PageIndex. Each is sent only when
+  // away from its default so an untouched (Simple-equivalent) run sends nothing extra.
+  rerank?: boolean;
+  runtime?: string;
   ragless?: boolean;
 }
 
@@ -138,8 +135,9 @@ export function overridesFor(conv: string | null): ChatOverrides {
   if (e.topK !== null) out.top_k = e.topK;
   if (e.simulateFailure && e.simulateFailure !== "none") out.simulate_failure = e.simulateFailure;
   if (e.rerankThreshold && e.rerankThreshold > 0) out.rerank_threshold = e.rerankThreshold;
-  const scenario = useScenario.getState().scenario;
-  if (scenario !== "simple") out.scenario = scenario;
-  if (e.ragless && scenario !== "simple") out.ragless = true;
+  const { rerank, runtime, ragless } = currentRequestInputs();
+  if (rerank) out.rerank = true;
+  if (runtime !== "react") out.runtime = runtime;
+  if (ragless) out.ragless = true;
   return out;
 }

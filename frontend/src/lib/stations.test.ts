@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_SELECTION } from "./selection";
 import {
   HOP_PAIRS,
   hopsFor,
@@ -70,12 +71,10 @@ describe("ingestion station (033-ingestion-node)", () => {
     }
   });
 
-  // AC1 — present in every scenario when an upload is in scope (035: the node is
+  // AC1 — revealed by upload activity regardless of selection (035: the node is
   // real everywhere but rendered only during an upload).
-  it("is visible in simple, intermediate and advanced during an upload", () => {
-    for (const sc of ["simple", "intermediate", "advanced"] as const) {
-      expect(visibleStationIdsFor(sc, true)).toContain("ingestion");
-    }
+  it("is visible during an upload", () => {
+    expect(visibleStationIdsFor(DEFAULT_SELECTION, true)).toContain("ingestion");
   });
 
   // AC2 — owns the three ingest stages and is a real (non-preview) station.
@@ -106,12 +105,10 @@ describe("storage station + write-path (034-storage-ingestion-flow)", () => {
     }
   });
 
-  // AC1 — present in every scenario when an upload is in scope (035: real
+  // AC1 — revealed by upload activity regardless of selection (035: real
   // everywhere but rendered only during an upload).
-  it("is visible in simple, intermediate and advanced during an upload", () => {
-    for (const sc of ["simple", "intermediate", "advanced"] as const) {
-      expect(visibleStationIdsFor(sc, true)).toContain("storage");
-    }
+  it("is visible during an upload", () => {
+    expect(visibleStationIdsFor(DEFAULT_SELECTION, true)).toContain("storage");
   });
 
   // AC2 — owns the storage.upload stage and is a real (non-preview) station.

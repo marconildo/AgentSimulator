@@ -96,11 +96,12 @@ def _deps(config: RunnableConfig) -> tuple[TraceEmitter, LLMProvider, ToolRegist
 def _with_deepagents(state: Mapping[str, Any]) -> bool:
     """Whether the DeepAgents tools (057) are offered this run.
 
-    Intermediate rung only, and **not** when RAGLESS (056) is active — the two are
-    separate Intermediate experiments that do not compose (RAGLESS wants the agent to
-    elect the plain retrieval tool so it can compare reasoning-based vs vector retrieval).
+    Gated by the ``deepagents`` runtime (061-scenario-builder, was the Intermediate
+    rung), and **not** when RAGLESS (056) is active — the two do not compose (RAGLESS
+    wants the agent to elect the plain retrieval tool so it can compare reasoning-based
+    vs vector retrieval).
     """
-    return state.get("scenario") == "intermediate" and not state.get("ragless")
+    return state.get("runtime") == "deepagents" and not state.get("ragless")
 
 
 def _skills_advertised(state: AgentState) -> bool:
@@ -149,11 +150,11 @@ def _system_parts(state: AgentState) -> tuple[str, str, str]:
     agent_override = state.get("agent_prompt")
     guardrails = sys_override if (sys_override and sys_override.strip()) else GUARDRAILS_PROMPT
     role = agent_override if (agent_override and agent_override.strip()) else AGENT_PROMPT
-    # 057-deepagents-runtime: on the Intermediate rung append the DeepAgents guidance to
-    # the role layer so the model knows it has the planning / file-system / delegation
-    # tools (and to skip them for trivial requests). Empty off Intermediate (Simple
+    # 057-deepagents-runtime: under the DeepAgents runtime append the guidance to the
+    # role layer so the model knows it has the planning / file-system / delegation tools
+    # (and to skip them for trivial requests). Empty under other runtimes (Simple/ReAct
     # byte-for-byte). Part of the role ⇒ 036's budget attributes it to the system slice.
-    block = deepagents_block(state.get("scenario", "simple")) if _with_deepagents(state) else ""
+    block = deepagents_block(state.get("runtime", "react")) if _with_deepagents(state) else ""
     if block:
         role = f"{role}\n\n{block}"
     catalog = state.get("skills_catalog") or []
@@ -431,16 +432,16 @@ async def _run_retrieval_tool(
         state["top_k"],
         emitter,
         session_id=state["session_id"],
-        scenario=state["scenario"],
+        rerank=state["rerank"],
         rerank_threshold=state["rerank_threshold"],
     )
 
-    # 056-ragless-pageindex: on the Intermediate rung with the `ragless` toggle on, run
-    # the reasoning-based PageIndex path *as well* so the learner can compare them. The
-    # vector pipeline above still ran (and animated) for display, but PageIndex REPLACES
-    # it as the grounding the model answers from (D3) — so the observation, context and
-    # chunk mirrors below come from PageIndex. Off / Simple leaves this untouched.
-    if state.get("ragless") and state["scenario"] == "intermediate":
+    # 056-ragless-pageindex: with the `ragless` toggle on, run the reasoning-based
+    # PageIndex path *as well* so the learner can compare them. The vector pipeline above
+    # still ran (and animated) for display, but PageIndex REPLACES it as the grounding the
+    # model answers from (D3) — so the observation, context and chunk mirrors below come
+    # from PageIndex. Off leaves this untouched (byte-for-byte).
+    if state.get("ragless"):
         context, chunks = await pageindex_retrieve(query, emitter, session_id=state["session_id"])
 
     observation = context or "(no relevant passages found in the knowledge base)"
@@ -607,7 +608,8 @@ async def run_agent_state(
     system_prompt: str | None = None,
     agent_prompt: str | None = None,
     enabled_tools: list[str] | None = None,
-    scenario: str = "simple",
+    rerank: bool = False,
+    runtime: str = "react",
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
     model: str | None = None,
@@ -637,7 +639,8 @@ async def run_agent_state(
         "model": model,
         "agent_name": agent_name,
         "agent_description": agent_description,
-        "scenario": scenario,
+        "rerank": rerank,
+        "runtime": runtime,
         "ragless": ragless,
         "simulate_failure": simulate_failure,
         "history": history or [],
@@ -670,7 +673,8 @@ async def run_agent(
     system_prompt: str | None = None,
     agent_prompt: str | None = None,
     enabled_tools: list[str] | None = None,
-    scenario: str = "simple",
+    rerank: bool = False,
+    runtime: str = "react",
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
     model: str | None = None,
@@ -711,7 +715,8 @@ async def run_agent(
         system_prompt=system_prompt,
         agent_prompt=agent_prompt,
         enabled_tools=enabled_tools,
-        scenario=scenario,
+        rerank=rerank,
+        runtime=runtime,
         simulate_failure=simulate_failure,
         skills_catalog=skills_catalog,
         model=model,

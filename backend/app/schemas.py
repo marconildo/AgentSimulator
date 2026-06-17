@@ -78,20 +78,21 @@ class Phase(StrEnum):
     END = "end"
 
 
-class Scenario(StrEnum):
-    """The maturity ladder (008-scenario-framework).
+class Runtime(StrEnum):
+    """The agent runtime (061-scenario-builder).
 
-    A **request-only** input (like the 006 experiment overrides) — *not* a
-    ``TraceEvent`` field — that selects how much of a production pipeline the
-    visualizer shows. ``simple`` is today's app and the only rung that executes;
-    the upper rungs are non-executing preview topologies until their own specs
-    light up their real nodes. The backend carries the value but does not branch
-    on it yet.
+    A **request-only** input — *not* a ``TraceEvent`` field — selecting which
+    agent loop runs. ``react`` is the canonical bounded ReAct loop (today's
+    default, byte-for-byte); ``deepagents`` runs the DeepAgents preamble
+    (planner + virtual FS + delegated sub-agent, 057); ``multiagent`` is a
+    preview runtime (label-only until its own spec). Replaces the coarse 008
+    ``Scenario`` enum as the gate for the DeepAgents preamble — maturity is now
+    a *derived* client-side label, not a request input.
     """
 
-    SIMPLE = "simple"
-    INTERMEDIATE = "intermediate"
-    ADVANCED = "advanced"
+    REACT = "react"
+    DEEPAGENTS = "deepagents"
+    MULTIAGENT = "multiagent"
 
 
 class SimulateFailure(StrEnum):
@@ -183,18 +184,22 @@ class ChatRequest(BaseModel):
     # ``None`` = use ``settings.llm_model`` (the configured default).
     model: str | None = Field(default=None, max_length=120)
 
-    # --- Scenario (008-scenario-framework) -----------------------------------
-    # Which rung of the maturity ladder this run targets. Request-only, carried
-    # through to state but not yet branched on (only ``simple`` executes today).
-    scenario: Scenario = Scenario.SIMPLE
+    # --- Scenario builder per-feature inputs (061-scenario-builder) ----------
+    # The maturity ladder (008) is retired as a request input: the client builder
+    # composes an architecture and derives the rung label itself, sending only the
+    # behaviours that actually execute. ``rerank`` turns on the cross-encoder
+    # reranker (was gated by ``scenario == "intermediate"``, 054); ``runtime``
+    # selects the agent loop (was the DeepAgents gate). Defaults reproduce today's
+    # Simple run byte-for-byte (no rerank, ReAct loop).
+    rerank: bool = False
+    runtime: Runtime = Runtime.REACT
 
     # --- RAGLESS / PageIndex (056-ragless-pageindex) -------------------------
     # Opt-in reasoning-based retrieval that runs *alongside* Vector RAG so the
-    # learner can compare them. When True (and ``scenario=intermediate``), the
-    # turn runs both the vector pipeline (for display) and PageIndex (which builds
-    # a document tree, navigates it with the LLM, and grounds the answer). Request-
-    # only; ``False`` (default) and the Simple rung reproduce today's behavior
-    # byte-for-byte (no ``pageindex.*`` stages).
+    # learner can compare them. When True the turn runs both the vector pipeline
+    # (for display) and PageIndex (which builds a document tree, navigates it with
+    # the LLM, and grounds the answer). Request-only; ``False`` (default)
+    # reproduces today's behavior byte-for-byte (no ``pageindex.*`` stages).
     ragless: bool = False
 
     # --- Failure injection (017-failure-injection) ---------------------------

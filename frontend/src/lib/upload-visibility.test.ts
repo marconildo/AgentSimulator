@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Phase, Stage, TraceEvent } from "../types/events";
 import { hasUploadActivity } from "./derive";
+import { DEFAULT_SELECTION } from "./selection";
 import { visibleHopsFor, visibleStationIdsFor } from "./stations";
 
 const UPLOAD_STATIONS = ["storage", "ingestion"] as const;
@@ -36,7 +37,7 @@ describe("hasUploadActivity (AC4)", () => {
 
 describe("station visibility gated by showUpload (AC1, AC2)", () => {
   it("hides storage + ingestion by default", () => {
-    const ids = new Set(visibleStationIdsFor("simple"));
+    const ids = new Set(visibleStationIdsFor(DEFAULT_SELECTION));
     for (const id of UPLOAD_STATIONS) expect(ids.has(id)).toBe(false);
     // the query-path nodes are unaffected
     for (const id of ["frontend", "backend", "agent", "database", "rag", "mcp", "llm"]) {
@@ -45,14 +46,14 @@ describe("station visibility gated by showUpload (AC1, AC2)", () => {
   });
 
   it("reveals storage + ingestion when showUpload is set", () => {
-    const ids = new Set(visibleStationIdsFor("simple", true));
+    const ids = new Set(visibleStationIdsFor(DEFAULT_SELECTION, true));
     for (const id of UPLOAD_STATIONS) expect(ids.has(id)).toBe(true);
   });
 });
 
 describe("hop visibility gated by showUpload (AC3)", () => {
   it("hides the three write-path hops by default", () => {
-    const hops = visibleHopsFor("en", "simple");
+    const hops = visibleHopsFor("en", DEFAULT_SELECTION);
     for (const [s, t] of UPLOAD_HOPS) {
       expect(hops.some((h) => h.source === s && h.target === t)).toBe(false);
     }
@@ -61,7 +62,7 @@ describe("hop visibility gated by showUpload (AC3)", () => {
   });
 
   it("shows the three write-path hops when showUpload is set", () => {
-    const hops = visibleHopsFor("en", "simple", true);
+    const hops = visibleHopsFor("en", DEFAULT_SELECTION, true);
     for (const [s, t] of UPLOAD_HOPS) {
       expect(hops.some((h) => h.source === s && h.target === t)).toBe(true);
     }

@@ -126,14 +126,15 @@ def deepagents_state_block(plan: list[dict[str, str]], vfs: dict[str, str]) -> s
     return "\n".join(lines)
 
 
-def deepagents_block(scenario: str) -> str:
-    """The DeepAgents role addendum for the given rung — non-empty only on Intermediate.
+def deepagents_block(runtime: str) -> str:
+    """The DeepAgents role addendum — non-empty only under the ``deepagents`` runtime.
 
     057-deepagents-runtime: kept as its own helper so ``graph._system_parts`` can append
     it to the role layer (and 036's budget attribute it to the ``system`` slice) without
-    forking the assembly. Empty everywhere else, so non-Intermediate runs are unchanged.
+    forking the assembly. 061-scenario-builder swapped the gate from the Intermediate
+    rung to the explicit ``runtime`` input. Empty under other runtimes (ReAct unchanged).
     """
-    return DEEPAGENTS_PROMPT if scenario == "intermediate" else ""
+    return DEEPAGENTS_PROMPT if runtime == "deepagents" else ""
 
 
 def identity_block(name: str | None, description: str | None) -> str:

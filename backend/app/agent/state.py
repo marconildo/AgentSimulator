@@ -40,13 +40,17 @@ class AgentState(TypedDict):
     # entirely, reproducing the prior 042-anatomy 3-layer assembly.
     agent_name: str | None
     agent_description: str | None
-    # Maturity-ladder rung (008-scenario-framework), request-only. Carried for
-    # later specs to branch on; node logic does not read it yet.
-    scenario: str
-    # RAGLESS / PageIndex (056-ragless-pageindex), request-only. When True and
-    # ``scenario == "intermediate"``, the retrieval tool runs the vector path (for
-    # display) AND the reasoning-based PageIndex path (which grounds the answer).
-    # False (default) and the Simple rung reproduce today's behavior byte-for-byte.
+    # Per-feature builder inputs (061-scenario-builder), request-only — replace the
+    # coarse 008 ``scenario`` gate. ``rerank`` turns on the cross-encoder reranker
+    # (054); ``runtime`` selects the agent loop (``react`` | ``deepagents`` |
+    # ``multiagent``) and gates the DeepAgents preamble (057). Defaults (False /
+    # ``react``) reproduce today's Simple run byte-for-byte.
+    rerank: bool
+    runtime: str
+    # RAGLESS / PageIndex (056-ragless-pageindex), request-only. When True the
+    # retrieval tool runs the vector path (for display) AND the reasoning-based
+    # PageIndex path (which grounds the answer). False (default) reproduces today's
+    # behavior byte-for-byte.
     ragless: bool
     # Forced failure for this run (017-failure-injection), request-only:
     #   "none" (default, unchanged) | "tool_error" | "llm_timeout".

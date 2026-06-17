@@ -9,7 +9,7 @@
 // stations.ts. Keeping the two apart is what makes expand/collapse a pure
 // re-layout.
 
-import type { Scenario } from "./scenario";
+import type { ResolvedSelection } from "./selection";
 import { visibleStationIdsFor } from "./stations";
 import type { StationId, TierId } from "./stations";
 
@@ -46,6 +46,9 @@ const EXPANDED_H: Record<StationId, number> = {
   researcher: COLLAPSED_H,
   coder: COLLAPSED_H,
   critic: COLLAPSED_H,
+  // 060-intermediate-preview-tiles — collapsed-only previews.
+  hybrid: COLLAPSED_H,
+  summarization: COLLAPSED_H,
 };
 
 // Advanced-rung sub-agents render as a small row of narrower nodes under the
@@ -55,6 +58,9 @@ const SUBAGENTS: StationId[] = ["researcher", "coder", "critic"];
 const SUBAGENT_W = 176; // narrower than NODE_WIDTH to signal "sub" and fit the row
 const SUBAGENT_GAP_X = 16; // horizontal gap between sub-agents
 const SUBAGENT_GAP_Y = 60; // vertical drop below the orchestrator (room for the tree edges)
+// 060-intermediate-preview-tiles — gap above the Summarization preview, which sits
+// below the agent (and below the sub-agent row when that row is present).
+const SUMMARIZATION_GAP_Y = 28;
 
 /** Render width of a node — sub-agents are narrower than the standard station. */
 export function widthOf(id: StationId): number {
@@ -81,7 +87,10 @@ const COLUMNS: Column[] = [
   {
     x: 1016,
     gap: 36,
-    members: ["database", "storage", "ingestion", "rag", "pageindex", "mcp", "llm"],
+    // 060: `hybrid` (Hybrid Search preview) is a sub-component of the RAG pipeline
+    // (like the reranker), so it stacks *directly below RAG* — above MCP/LLM — to read
+    // as an extension of RAG, not a peer data service floating under the LLM.
+    members: ["database", "storage", "ingestion", "rag", "hybrid", "pageindex", "mcp", "llm"],
   },
   { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
@@ -107,6 +116,9 @@ const TIER_OF: Record<StationId, TierId> = {
   researcher: "agent",
   coder: "agent",
   critic: "agent",
+  // 060-intermediate-preview-tiles
+  hybrid: "services",
+  summarization: "agent",
 };
 
 const PAD = 16; // padding between a tier box and its stations
@@ -139,17 +151,16 @@ export function heightOf(id: StationId, expanded: ReadonlySet<StationId>): numbe
 
 export function computeLayout(
   expanded: ReadonlySet<StationId>,
-  scenario: Scenario,
+  // 061-scenario-builder — the resolved à-la-carte selection (which stations are on +
+  // the agent runtime). Subsumes the prior scenario/ragless/track inputs.
+  sel: ResolvedSelection,
   // 035-conditional-upload-nodes — when false (default), the upload write-path
   // nodes (storage, ingestion) are excluded so the data column reflows shorter.
   showUpload = false,
-  // 056-ragless-pageindex — when false (default), the RAGLESS box is excluded so the
-  // data column reflows shorter; the toggle reveals it (Intermediate rung).
-  showRagless = false,
 ): LayoutResult {
   const positions = {} as Record<StationId, { x: number; y: number }>;
   const heights = {} as Record<StationId, number>;
-  const visible = new Set(visibleStationIdsFor(scenario, showUpload, showRagless));
+  const visible = new Set(visibleStationIdsFor(sel, showUpload));
 
   for (const col of COLUMNS) {
     let y = TOP;
@@ -174,6 +185,17 @@ export function computeLayout(
       heights[id] = COLLAPSED_H;
       x += SUBAGENT_W + SUBAGENT_GAP_X;
     }
+  }
+
+  // 060-intermediate-preview-tiles — the Agent-Design preview (Summarization) is a
+  // single full-width node below the agent. It drops below the sub-agent row when
+  // that row is present (advanced), so it never overlaps the multi-agent team.
+  if (visible.has("summarization") && positions.agent) {
+    const agentBottom = positions.agent.y + heights.agent;
+    const subagentsShown = SUBAGENTS.some((id) => visible.has(id));
+    const top = subagentsShown ? agentBottom + SUBAGENT_GAP_Y + COLLAPSED_H : agentBottom;
+    positions.summarization = { x: positions.agent.x, y: top + SUMMARIZATION_GAP_Y };
+    heights.summarization = COLLAPSED_H;
   }
 
   const widths = {} as Record<StationId, number>;

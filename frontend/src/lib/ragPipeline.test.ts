@@ -47,17 +47,17 @@ const byId = (p: ReturnType<typeof deriveRagPipeline>) =>
 
 describe("deriveRagPipeline (054)", () => {
   it("returns the five stages in canonical order", () => {
-    const p = deriveRagPipeline(log(), 8, "intermediate");
+    const p = deriveRagPipeline(log(), 8);
     expect(p.stages.map((s) => s.id)).toEqual(RAG_STAGE_ORDER);
   });
 
   it("chunking is always the offline precursor on a plain query (no upload)", () => {
-    const p = deriveRagPipeline(log(), 8, "intermediate");
+    const p = deriveRagPipeline(log(), 8);
     expect(byId(p).chunking.status).toBe("offline");
   });
 
   it("marks each stage done once its END has passed (full intermediate run)", () => {
-    const p = deriveRagPipeline(log(), 8, "intermediate");
+    const p = deriveRagPipeline(log(), 8);
     const s = byId(p);
     expect(s.embedding.status).toBe("done");
     expect(s.retrieval.status).toBe("done");
@@ -71,7 +71,7 @@ describe("deriveRagPipeline (054)", () => {
   it("lights the stage at the cursor as active and leaves later ones pending", () => {
     const events = log();
     // Cursor on the rag.search START (index 2) → retrieval active, rerank/augmented pending.
-    const p = deriveRagPipeline(events, 2, "intermediate");
+    const p = deriveRagPipeline(events, 2);
     const s = byId(p);
     expect(s.embedding.status).toBe("done");
     expect(s.retrieval.status).toBe("active");
@@ -85,14 +85,14 @@ describe("deriveRagPipeline (054)", () => {
         ? { ...e, data: { ...e.data, threshold: 0.3 } }
         : e,
     );
-    const p = deriveRagPipeline(events, events.length - 1, "intermediate");
+    const p = deriveRagPipeline(events, events.length - 1);
     expect(byId(p).rerank.data.threshold).toBe(0.3);
   });
 
-  it("shows rerank as inactive on the Simple rung (it's an Intermediate upgrade)", () => {
-    // A Simple run never emits rag.rerank.
+  it("shows rerank as inactive when the run carried no rerank pass", () => {
+    // A run without rerank never emits rag.rerank (061 — pure projection of the trace).
     const simple = log().filter((e) => e.stage !== "rag.rerank");
-    const p = deriveRagPipeline(simple, simple.length - 1, "simple");
+    const p = deriveRagPipeline(simple, simple.length - 1);
     expect(byId(p).rerank.status).toBe("inactive");
     // The rest of the pipeline still completes.
     expect(byId(p).retrieval.status).toBe("done");
@@ -100,8 +100,8 @@ describe("deriveRagPipeline (054)", () => {
   });
 
   it("is not started before any retrieval event has fired", () => {
-    expect(deriveRagPipeline([], -1, "intermediate").started).toBe(false);
-    expect(deriveRagPipeline(log(), 8, "intermediate").started).toBe(true);
+    expect(deriveRagPipeline([], -1).started).toBe(false);
+    expect(deriveRagPipeline(log(), 8).started).toBe(true);
   });
 
   it("carries the real per-stage detail data (query, chunks, context)", () => {
@@ -109,7 +109,7 @@ describe("deriveRagPipeline (054)", () => {
       { ...ev("frontend", "end", { message: "why does chunk size matter?" }) },
       ...log(),
     ];
-    const p = deriveRagPipeline(events, events.length - 1, "intermediate");
+    const p = deriveRagPipeline(events, events.length - 1);
     const s = byId(p);
     expect(s.embedding.data.query).toBe("why does chunk size matter?");
     // Retrieval shows the full candidate POOL (from rag.search), not the trimmed set.
@@ -128,7 +128,7 @@ describe("deriveRagPipeline (054)", () => {
       }),
       ...log(),
     ];
-    const p = deriveRagPipeline(events, events.length - 1, "intermediate");
+    const p = deriveRagPipeline(events, events.length - 1);
     expect(byId(p).embedding.data.query).toBe("rephrased query");
   });
 });

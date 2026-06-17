@@ -151,12 +151,27 @@ function buildTurn(sessionId: string, message: string): TraceSummary {
   return trace;
 }
 
-// The active maturity rung is global (localStorage), read lazily to avoid a
-// hard import cycle with the scenario store at module load.
+// The captured demo fixtures are keyed by maturity rung. 061-scenario-builder made
+// maturity a DERIVED label, so we read the global component selection (localStorage)
+// and classify it — keeping the demo's (qid × rung × lang) lookup working. Read lazily
+// from localStorage to avoid a hard import cycle at module load.
 function readScenario(): string {
   if (typeof localStorage === "undefined") return "simple";
-  const saved = localStorage.getItem("agentsim.scenario");
-  return saved === "intermediate" || saved === "advanced" ? saved : "simple";
+  try {
+    const raw = localStorage.getItem("agentsim.selection");
+    if (raw) {
+      const enabled: string[] = JSON.parse(raw).enabled ?? [];
+      const runtime: string = JSON.parse(raw).runtime ?? "react";
+      const advanced = ["gateway", "guardrails", "cache", "eval", "observability"];
+      if (runtime === "multiagent" || enabled.some((c) => advanced.includes(c))) return "advanced";
+      const intermediate = ["rerank", "hybrid", "ragless", "summarization"];
+      if (runtime === "deepagents" || enabled.some((c) => intermediate.includes(c)))
+        return "intermediate";
+    }
+  } catch {
+    // fall through to the default rung
+  }
+  return "simple";
 }
 
 // --- demo network surface (mirrors chatApi / sse / health) ------------------

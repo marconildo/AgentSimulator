@@ -3,7 +3,7 @@
 // over SSE, reusing the same low-level reader as chat.
 
 import type { TraceEvent } from "../types/events";
-import type { Scenario } from "./scenario";
+import type { Maturity as Scenario } from "./selection";
 import {
   demoClearData,
   demoCreateSession,

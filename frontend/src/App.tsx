@@ -21,7 +21,7 @@ import {
 } from "./components/icons";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
-import { ScenarioToggle } from "./components/ScenarioToggle";
+import { ScenarioBuilder } from "./components/ScenarioBuilder";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Timeline } from "./components/Timeline";
 import { TourCaption } from "./components/TourCaption";
@@ -221,9 +221,9 @@ export default function App() {
 
         <Divider />
 
-        {/* View controls — change what the diagram shows. Cloud is wide, so on
-            narrow screens it's hidden here and relocated into the ⚙ menu. */}
-        <ScenarioToggle />
+        {/* 061-scenario-builder — the à-la-carte component palette (popover) replaces
+            the maturity-ladder segmented control + the track switcher. */}
+        <ScenarioBuilder />
         <div className="hidden shrink-0 xl:flex">
           <CloudToggle />
         </div>

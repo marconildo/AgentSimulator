@@ -7,7 +7,7 @@ import { formatTokens, formatTps, formatUsd } from "../lib/cost";
 import type { DerivedView, UsageTotals } from "../lib/derive";
 import { hasUploadActivity } from "../lib/derive";
 import { useHealth } from "../lib/health";
-import { useScenario } from "../lib/scenario";
+import { useResolvedSelection } from "../lib/selection";
 import { useSettings } from "../lib/settings";
 import {
   hopsFor,
@@ -40,7 +40,7 @@ interface InspectorPanelProps {
 
 export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps) {
   const lang = useLang((s) => s.lang);
-  const scenario = useScenario((s) => s.scenario);
+  const sel = useResolvedSelection();
   const events = useSimulator((s) => s.events);
   const openTraces = useSimulator((s) => s.openTraces);
   const tracesOpen = useSimulator((s) => s.tracesOpen);
@@ -69,7 +69,7 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
       <Overview
         onSelect={onSelect}
         onOpenTraces={openTraces}
-        stations={visibleStationsFor(lang, scenario, showUpload)}
+        stations={visibleStationsFor(lang, sel, showUpload)}
         i={i}
       />
     );

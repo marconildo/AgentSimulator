@@ -111,7 +111,7 @@ async def _subagent_exec(
             state.get("top_k", 3),
             emitter,
             session_id=state.get("session_id"),
-            scenario=state.get("scenario", "intermediate"),
+            rerank=state.get("rerank", False),
             rerank_threshold=state.get("rerank_threshold", 0.0),
         )
         return context or "(no relevant passages found)"

@@ -16,11 +16,15 @@ import {
   overridesFor,
   useExperiment,
 } from "./experiment";
-import { useScenario } from "./scenario";
+import { type ComponentId, type Runtime, useSelection } from "./selection";
+
+function setSelection(enabled: ComponentId[], runtime: Runtime = "react") {
+  useSelection.setState({ enabled: new Set(enabled), runtime });
+}
 
 beforeEach(() => {
   useExperiment.setState({ byConv: {} });
-  useScenario.setState({ scenario: "simple" });
+  setSelection(["rag", "mcp"], "react");
 });
 
 describe("useExperiment", () => {
@@ -55,21 +59,25 @@ describe("useExperiment", () => {
     expect(overridesFor("a")).toEqual({});
   });
 
-  // 008/054 — the global maturity-ladder rung rides along in the chat overrides,
-  // so the backend actually runs the Intermediate path (reranker). Without this,
-  // the UI shows Intermediate but the request defaults to simple and never reranks.
-  describe("scenario override (054)", () => {
-    it("omits scenario on the simple rung (today's behavior, sends nothing extra)", () => {
-      useScenario.setState({ scenario: "simple" });
-      expect(overridesFor("a").scenario).toBeUndefined();
+  // 061-scenario-builder — the global component selection rides along in the chat
+  // overrides as per-feature inputs (rerank/runtime/ragless), so the backend runs the
+  // composed pipeline. The default (Simple-equivalent) selection sends nothing extra.
+  describe("builder per-feature overrides (061)", () => {
+    it("omits rerank/runtime on the default selection (sends nothing extra)", () => {
+      setSelection(["rag", "mcp"], "react");
       expect(overridesFor("a")).toEqual({});
     });
 
-    it("sends the active rung once away from simple", () => {
-      useScenario.setState({ scenario: "intermediate" });
-      expect(overridesFor("a").scenario).toBe("intermediate");
-      useScenario.setState({ scenario: "advanced" });
-      expect(overridesFor("a").scenario).toBe("advanced");
+    it("sends rerank=true when the reranker component is selected", () => {
+      setSelection(["rag", "mcp", "rerank"], "react");
+      expect(overridesFor("a").rerank).toBe(true);
+    });
+
+    it("sends the runtime once away from react", () => {
+      setSelection(["rag", "mcp"], "deepagents");
+      expect(overridesFor("a").runtime).toBe("deepagents");
+      setSelection(["rag", "mcp"], "multiagent");
+      expect(overridesFor("a").runtime).toBe("multiagent");
     });
   });
 
@@ -88,25 +96,16 @@ describe("useExperiment", () => {
     });
   });
 
-  // 056-ragless-pageindex — per-conversation RAGLESS toggle; sent only when on AND
-  // away from the simple rung (it's an Intermediate-rung feature).
-  describe("ragless (056)", () => {
+  // 056-ragless-pageindex → 061-scenario-builder — RAGLESS is now a global component,
+  // not a per-conversation toggle. Sent only when the component is selected.
+  describe("ragless (056/061)", () => {
     it("defaults off and omits the field from overrides (byte-for-byte)", () => {
-      expect(useExperiment.getState().getFor("a").ragless).toBe(false);
       expect(overridesFor("a").ragless).toBeUndefined();
     });
 
-    it("stays omitted on the simple rung even when the toggle is on", () => {
-      useScenario.setState({ scenario: "simple" });
-      useExperiment.getState().setRagless("a", true);
-      expect(overridesFor("a").ragless).toBeUndefined();
-    });
-
-    it("sends ragless once on AND away from simple, isolated per conversation", () => {
-      useScenario.setState({ scenario: "intermediate" });
-      useExperiment.getState().setRagless("a", true);
+    it("sends ragless once the RAGLESS component is selected", () => {
+      setSelection(["rag", "mcp", "ragless"], "react");
       expect(overridesFor("a").ragless).toBe(true);
-      expect(overridesFor("b").ragless).toBeUndefined();
     });
   });
 

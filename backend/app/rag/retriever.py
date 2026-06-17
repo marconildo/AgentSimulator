@@ -12,7 +12,7 @@ from ..config import get_settings
 from ..schemas import Stage
 from ..trace import TraceEmitter
 from .embeddings import embedding_model_name
-from .reranker import rerank
+from .reranker import rerank as rerank_chunks
 from .store import get_vectorstore, reset_vectorstore_cache
 
 # Substrings Chroma raises when the cached collection handle is stale or its
@@ -83,17 +83,18 @@ async def retrieve(
     emitter: TraceEmitter,
     session_id: str | None = None,
     *,
-    scenario: str = "simple",
+    rerank: bool = False,
     rerank_threshold: float = 0.0,
 ) -> tuple[str, list[dict[str, Any]]]:
     store = get_vectorstore()
     where = _scope_filter(session_id)
 
-    # 054-rag-block-expansion: only the Intermediate rung reranks. It fetches a WIDER
-    # candidate pool (so the cross-encoder sees more than it returns), re-scores it,
-    # and trims back to top-k. The Simple rung searches exactly top-k and skips rerank
-    # entirely — byte-for-byte with today. (Advanced inherits this via its own spec.)
-    rerank_on = scenario == "intermediate"
+    # 054-rag-block-expansion: reranking is opt-in per request (061-scenario-builder
+    # replaced the ``scenario == "intermediate"`` gate with the explicit ``rerank``
+    # flag). When on, it fetches a WIDER candidate pool (so the cross-encoder sees more
+    # than it returns), re-scores it, and trims back to top-k. Off, it searches exactly
+    # top-k and skips rerank entirely — byte-for-byte with the Simple run.
+    rerank_on = rerank
     settings = get_settings()
     fetch_k = max(k, settings.rerank_fetch_k) if rerank_on else k
 
@@ -130,7 +131,7 @@ async def retrieve(
 
     if rerank_on:
         async with emitter.stage(Stage.RAG_RERANK, "Reranking candidates") as rec:
-            result = rerank(query, candidates, top_k=k)
+            result = rerank_chunks(query, candidates, top_k=k)
             # 055-rerank-score-threshold: after trimming to top-k, drop chunks whose
             # cross-encoder score is below the threshold — precision over recall, so a
             # clearly-irrelevant chunk never reaches the prompt. `0` filters nothing.

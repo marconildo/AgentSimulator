@@ -22,7 +22,7 @@ import {
   type RagStageId,
   type RagStageStatus,
 } from "../lib/ragPipeline";
-import { useScenario } from "../lib/scenario";
+import { useResolvedSelection } from "../lib/selection";
 import { useSimulator } from "../store/useSimulator";
 import { RagStageDetail } from "./RagStageDetail";
 
@@ -43,7 +43,7 @@ export function RagPipelinePanel() {
   const status = useSimulator((s) => s.status);
   const expanded = useSimulator((s) => s.expanded);
   const closeDetail = useSimulator((s) => s.closeDetail);
-  const scenario = useScenario((s) => s.scenario);
+  const sel = useResolvedSelection();
 
   // Esc closes the panel — a reliable close path beside the ✕ and the node toggle.
   useEffect(() => {
@@ -69,11 +69,8 @@ export function RagPipelinePanel() {
   const [picked, setPicked] = useState<RagStageId | null>(null);
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
-  const layout = useMemo(() => computeLayout(expandedSet, scenario), [expandedSet, scenario]);
-  const pipeline = useMemo(
-    () => deriveRagPipeline(events, cursor, scenario),
-    [events, cursor, scenario],
-  );
+  const layout = useMemo(() => computeLayout(expandedSet, sel), [expandedSet, sel]);
+  const pipeline = useMemo(() => deriveRagPipeline(events, cursor), [events, cursor]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
