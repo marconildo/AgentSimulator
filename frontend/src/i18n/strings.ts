@@ -463,6 +463,7 @@ export interface Strings {
     subtitle: string;
     maturity: string;
     runtimeHeading: string;
+    retrievalHeading: string;
     runtimeSoon: string;
     zoneReal: string;
     zonePreview: string;
@@ -470,12 +471,11 @@ export interface Strings {
     skeletonNote: string;
     done: string;
     groups: { retrieval: string; agent: string; aiops: string };
+    retrievalStrategies: Record<"vector" | "ragless", { name: string; blurb: string }>;
     components: Record<
-      | "rag"
       | "mcp"
       | "rerank"
       | "hybrid"
-      | "ragless"
       | "summarization"
       | "gateway"
       | "guardrails"
@@ -1323,6 +1323,7 @@ const en: Strings = {
     subtitle: "Toggle components on/off — maturity is derived from what you pick.",
     maturity: "Maturity",
     runtimeHeading: "Agent runtime",
+    retrievalHeading: "Retrieval strategy",
     runtimeSoon: "soon",
     zoneReal: "Executes",
     zonePreview: "Preview · won't run",
@@ -1330,12 +1331,21 @@ const en: Strings = {
     skeletonNote: "Frontend · Backend · Agent · LLM · Database are always on.",
     done: "Done",
     groups: { retrieval: "Retrieval & Data", agent: "Agent", aiops: "AI-Ops" },
+    retrievalStrategies: {
+      vector: {
+        name: "Vector RAG",
+        blurb: "Embed the query and search the vector index for the most similar chunks.",
+      },
+      ragless: {
+        name: "RAGLESS",
+        blurb:
+          "Reasoning-based retrieval (PageIndex tree search) — no embeddings, no vector DB.",
+      },
+    },
     components: {
-      rag: { name: "Vector RAG", blurb: "Embeddings + similarity search over the vector store." },
       mcp: { name: "MCP Tools", blurb: "Tool service (calculator, time, web search…)." },
       rerank: { name: "Reranker", blurb: "Re-scores RAG candidates with a cross-encoder." },
       hybrid: { name: "Hybrid Search", blurb: "BM25 + vector fusion (preview)." },
-      ragless: { name: "RAGLESS", blurb: "Reasoning-based retrieval (PageIndex tree search)." },
       summarization: { name: "Summarization", blurb: "Compacts the agent's context (preview)." },
       gateway: { name: "LLM Gateway", blurb: "Routing, fallback, budgets (preview)." },
       guardrails: { name: "Guardrails", blurb: "Input/output safety (preview)." },
@@ -2175,6 +2185,7 @@ const pt: Strings = {
     subtitle: "Ligue/desligue componentes — a maturidade é derivada do que você escolhe.",
     maturity: "Maturidade",
     runtimeHeading: "Runtime do agente",
+    retrievalHeading: "Estratégia de recuperação",
     runtimeSoon: "em breve",
     zoneReal: "Executa",
     zonePreview: "Prévia · não roda",
@@ -2182,12 +2193,21 @@ const pt: Strings = {
     skeletonNote: "Frontend · Backend · Agente · LLM · Banco estão sempre ligados.",
     done: "Concluir",
     groups: { retrieval: "Recuperação & Dados", agent: "Agente", aiops: "AI-Ops" },
+    retrievalStrategies: {
+      vector: {
+        name: "Vector RAG",
+        blurb: "Gera embedding da consulta e busca no índice vetorial os chunks mais similares.",
+      },
+      ragless: {
+        name: "RAGLESS",
+        blurb:
+          "Recuperação baseada em raciocínio (busca na árvore PageIndex) — sem embeddings, sem banco vetorial.",
+      },
+    },
     components: {
-      rag: { name: "Vector RAG", blurb: "Embeddings + busca por similaridade no banco vetorial." },
       mcp: { name: "MCP Tools", blurb: "Serviço de ferramentas (calculadora, hora, busca web…)." },
       rerank: { name: "Reranker", blurb: "Reordena os candidatos do RAG com um cross-encoder." },
       hybrid: { name: "Busca Híbrida", blurb: "Fusão BM25 + vetorial (prévia)." },
-      ragless: { name: "RAGLESS", blurb: "Recuperação por raciocínio (busca em árvore PageIndex)." },
       summarization: { name: "Sumarização", blurb: "Compacta o contexto do agente (prévia)." },
       gateway: { name: "Gateway LLM", blurb: "Roteamento, fallback, orçamentos (prévia)." },
       guardrails: { name: "Guardrails", blurb: "Segurança de entrada/saída (prévia)." },

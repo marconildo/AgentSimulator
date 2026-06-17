@@ -49,10 +49,17 @@ from .trace import TraceEmitter, trace_store
 
 
 def _retrieved_chunks(emitter: TraceEmitter) -> list[dict[str, Any]]:
-    """The chunks the agent retrieved this run, taken from the rag.retrieve END
-    event so they can be persisted with the message (D5/AC8)."""
+    """The chunks the agent retrieved this run, persisted with the message (D5/AC8).
+
+    Prefers the vector ``rag.retrieve`` END event. 066-retrieval-strategy-radio: under
+    the RAGLESS strategy the vector path is skipped (no ``rag.retrieve``), so fall back
+    to the PageIndex-selected sections (``pageindex.select`` END) — those are what
+    actually grounded the answer, so "Sources used" stays honest."""
     for ev in reversed(emitter.events):
         if ev.stage == Stage.RAG_RETRIEVE and ev.phase == Phase.END:
+            return list(ev.data.get("chunks", []))
+    for ev in reversed(emitter.events):
+        if ev.stage == Stage.PAGEINDEX_SELECT and ev.phase == Phase.END:
             return list(ev.data.get("chunks", []))
     return []
 

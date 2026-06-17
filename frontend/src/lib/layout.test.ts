@@ -13,13 +13,14 @@ const SELECTIONS: { name: string; sel: ResolvedSelection }[] = [
   { name: "default (simple)", sel: DEFAULT_SELECTION },
   {
     name: "rich (intermediate)",
-    sel: selectionOf(["rag", "mcp", "rerank", "hybrid", "ragless", "summarization"], "deepagents"),
+    sel: selectionOf(["mcp", "rerank", "hybrid", "summarization"], "deepagents", "vector"),
   },
   {
     name: "full (advanced)",
     sel: selectionOf(
-      ["rag", "mcp", "gateway", "guardrails", "cache", "eval", "observability"],
+      ["mcp", "gateway", "guardrails", "cache", "eval", "observability"],
       "multiagent",
+      "vector",
     ),
   },
 ];
@@ -67,7 +68,7 @@ describe("storage write-path placement (034 AC7 · shown with showUpload)", () =
 
 describe("intermediate preview tiles placement (060 AC7)", () => {
   it("lays out hybrid directly below the RAG node as a retrieval extension", () => {
-    const sel = selectionOf(["rag", "mcp", "hybrid"]);
+    const sel = selectionOf(["mcp", "hybrid"]);
     const { positions, heights, tierBoxes } = computeLayout(new Set(), sel);
     expect(positions.hybrid).toBeDefined();
     // 060 amendment — Hybrid Search is folded under RAG (a sub-component of the RAG
@@ -83,7 +84,7 @@ describe("intermediate preview tiles placement (060 AC7)", () => {
   });
 
   it("places summarization under the agent, inside the agent tier", () => {
-    const sel = selectionOf(["rag", "mcp", "summarization"]);
+    const sel = selectionOf(["mcp", "summarization"]);
     const { positions, heights, tierBoxes } = computeLayout(new Set(), sel);
     expect(positions.summarization).toBeDefined();
     expect(positions.summarization.x).toBe(positions.agent.x);
@@ -93,7 +94,7 @@ describe("intermediate preview tiles placement (060 AC7)", () => {
   });
 
   it("summarization never overlaps the sub-agent row under the multiagent runtime", () => {
-    const sel = selectionOf(["rag", "mcp", "summarization"], "multiagent");
+    const sel = selectionOf(["mcp", "summarization"], "multiagent");
     const { positions, heights } = computeLayout(new Set(), sel);
     const subagentBottom = Math.max(
       positions.researcher.y + heights.researcher,

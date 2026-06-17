@@ -16,15 +16,24 @@ import {
   overridesFor,
   useExperiment,
 } from "./experiment";
-import { type ComponentId, type Runtime, useSelection } from "./selection";
+import {
+  type ComponentId,
+  type RetrievalStrategy,
+  type Runtime,
+  useSelection,
+} from "./selection";
 
-function setSelection(enabled: ComponentId[], runtime: Runtime = "react") {
-  useSelection.setState({ enabled: new Set(enabled), runtime });
+function setSelection(
+  enabled: ComponentId[],
+  runtime: Runtime = "react",
+  retrieval: RetrievalStrategy = "vector",
+) {
+  useSelection.setState({ enabled: new Set(enabled), runtime, retrieval });
 }
 
 beforeEach(() => {
   useExperiment.setState({ byConv: {} });
-  setSelection(["rag", "mcp"], "react");
+  setSelection(["mcp"], "react", "vector");
 });
 
 describe("useExperiment", () => {
@@ -64,19 +73,19 @@ describe("useExperiment", () => {
   // composed pipeline. The default (Simple-equivalent) selection sends nothing extra.
   describe("builder per-feature overrides (061)", () => {
     it("omits rerank/runtime on the default selection (sends nothing extra)", () => {
-      setSelection(["rag", "mcp"], "react");
+      setSelection(["mcp"], "react");
       expect(overridesFor("a")).toEqual({});
     });
 
     it("sends rerank=true when the reranker component is selected", () => {
-      setSelection(["rag", "mcp", "rerank"], "react");
+      setSelection(["mcp", "rerank"], "react");
       expect(overridesFor("a").rerank).toBe(true);
     });
 
     it("sends the runtime once away from react", () => {
-      setSelection(["rag", "mcp"], "deepagents");
+      setSelection(["mcp"], "deepagents");
       expect(overridesFor("a").runtime).toBe("deepagents");
-      setSelection(["rag", "mcp"], "multiagent");
+      setSelection(["mcp"], "multiagent");
       expect(overridesFor("a").runtime).toBe("multiagent");
     });
   });
@@ -96,15 +105,16 @@ describe("useExperiment", () => {
     });
   });
 
-  // 056-ragless-pageindex → 061-scenario-builder — RAGLESS is now a global component,
-  // not a per-conversation toggle. Sent only when the component is selected.
-  describe("ragless (056/061)", () => {
+  // 056-ragless-pageindex → 061 → 066-retrieval-strategy-radio — RAGLESS is now the
+  // global retrieval-strategy radio, not a per-conversation toggle. Sent only when the
+  // active strategy is `ragless`.
+  describe("ragless (056/061/066)", () => {
     it("defaults off and omits the field from overrides (byte-for-byte)", () => {
       expect(overridesFor("a").ragless).toBeUndefined();
     });
 
-    it("sends ragless once the RAGLESS component is selected", () => {
-      setSelection(["rag", "mcp", "ragless"], "react");
+    it("sends ragless once the RAGLESS strategy is selected", () => {
+      setSelection(["mcp"], "react", "ragless");
       expect(overridesFor("a").ragless).toBe(true);
     });
   });

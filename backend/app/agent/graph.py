@@ -414,6 +414,17 @@ async def _run_retrieval_tool(
     ToolMessage fed back to the model; context + chunks update the display mirrors.
     """
     query = args.get("query") or state["message"]
+
+    # 056-ragless-pageindex → 066-retrieval-strategy-radio: retrieval is a radio. With the
+    # `ragless` strategy active, the reasoning-based PageIndex path REPLACES the vector
+    # pipeline entirely — no rag.* stage fires, and the selected sections are the grounding
+    # the model answers from. (Pre-066 ran both side-by-side; the radio makes it either/or,
+    # so "Sources used" honestly reflects only what grounded the answer.)
+    if state.get("ragless"):
+        context, chunks = await pageindex_retrieve(query, emitter, session_id=state["session_id"])
+        observation = context or "(no relevant passages found in the knowledge base)"
+        return observation, context, chunks
+
     if fail_tool:
         # 017: surface the injected failure on a rag.retrieve END (so it is visible
         # on the RAG station) without running the real search.
@@ -437,14 +448,6 @@ async def _run_retrieval_tool(
         rerank=state["rerank"],
         rerank_threshold=state["rerank_threshold"],
     )
-
-    # 056-ragless-pageindex: with the `ragless` toggle on, run the reasoning-based
-    # PageIndex path *as well* so the learner can compare them. The vector pipeline above
-    # still ran (and animated) for display, but PageIndex REPLACES it as the grounding the
-    # model answers from (D3) — so the observation, context and chunk mirrors below come
-    # from PageIndex. Off leaves this untouched (byte-for-byte).
-    if state.get("ragless"):
-        context, chunks = await pageindex_retrieve(query, emitter, session_id=state["session_id"])
 
     observation = context or "(no relevant passages found in the knowledge base)"
     return observation, context, chunks

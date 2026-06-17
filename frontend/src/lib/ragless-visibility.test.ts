@@ -1,7 +1,7 @@
 // 056-ragless-pageindex — the RAGLESS (PageIndex) box and its hop are hidden by
-// default and revealed only when the RAGLESS component is selected. 061-scenario-builder
-// turned the toggle into an à-la-carte component: pageindex is visible iff `ragless` is
-// in the selection (it maps to the `pageindex` station).
+// default and revealed only when the RAGLESS strategy is selected. 066-retrieval-strategy-radio
+// made retrieval a radio (vector ⊻ ragless): pageindex is visible iff the strategy is
+// `ragless` (it maps to the `pageindex` station), and the vector `rag` station is then hidden.
 
 import { describe, expect, it } from "vitest";
 
@@ -13,7 +13,7 @@ import {
   visibleStationIdsFor,
 } from "./stations";
 
-const RAGLESS_SEL = selectionOf(["rag", "mcp", "ragless"]);
+const RAGLESS_SEL = selectionOf(["mcp"], "react", "ragless");
 
 describe("pageindex station mapping (AC5, AC6)", () => {
   it("owns exactly the three pageindex.* stages in STAGE_TO_STATION", () => {
@@ -39,9 +39,11 @@ describe("station visibility gated by the RAGLESS component (AC2, AC6)", () => {
     expect(ids.has("rag")).toBe(true);
   });
 
-  it("reveals pageindex when the RAGLESS component is selected", () => {
+  it("reveals pageindex when the RAGLESS strategy is selected, and hides the vector rag station", () => {
     const ids = new Set(visibleStationIdsFor(RAGLESS_SEL));
     expect(ids.has("pageindex")).toBe(true);
+    // 066 — retrieval is a radio: picking RAGLESS hides Vector RAG.
+    expect(ids.has("rag")).toBe(false);
   });
 });
 

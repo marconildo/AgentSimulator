@@ -160,12 +160,19 @@ function readScenario(): string {
   try {
     const raw = localStorage.getItem("agentsim.selection");
     if (raw) {
-      const enabled: string[] = JSON.parse(raw).enabled ?? [];
-      const runtime: string = JSON.parse(raw).runtime ?? "react";
+      const parsed = JSON.parse(raw);
+      const enabled: string[] = parsed.enabled ?? [];
+      const runtime: string = parsed.runtime ?? "react";
+      // 066-retrieval-strategy-radio — RAGLESS moved from `enabled` to the strategy radio.
+      const retrieval: string = parsed.retrieval ?? (enabled.includes("ragless") ? "ragless" : "vector");
       const advanced = ["gateway", "guardrails", "cache", "eval", "observability"];
       if (runtime === "multiagent" || enabled.some((c) => advanced.includes(c))) return "advanced";
-      const intermediate = ["rerank", "hybrid", "ragless", "summarization"];
-      if (runtime === "deepagents" || enabled.some((c) => intermediate.includes(c)))
+      const intermediate = ["rerank", "hybrid", "summarization"];
+      if (
+        runtime === "deepagents" ||
+        retrieval === "ragless" ||
+        enabled.some((c) => intermediate.includes(c))
+      )
         return "intermediate";
     }
   } catch {

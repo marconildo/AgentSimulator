@@ -6,7 +6,9 @@ import {
   COMPONENT_IS_REAL,
   type ComponentId,
   isLocked,
-  REQUIRES,
+  REQUIRES_VECTOR,
+  RETRIEVAL_STRATEGIES,
+  type RetrievalStrategy,
   RUNTIMES,
   RUNTIME_IS_REAL,
   type Runtime,
@@ -20,8 +22,10 @@ import {
 // zones are made legible per item (a "preview · won't run" pill on non-executing nodes),
 // honouring §3 (a preview never fakes a run; the skeleton always executes).
 
+// 066-retrieval-strategy-radio — the retrieval group leads with a strategy radio
+// (Vector RAG ⊻ RAGLESS); rerank/hybrid are vector-only sub-features below it.
 const GROUPS: { id: "retrieval" | "agent" | "aiops"; components: ComponentId[] }[] = [
-  { id: "retrieval", components: ["rag", "rerank", "hybrid", "ragless"] },
+  { id: "retrieval", components: ["rerank", "hybrid"] },
   { id: "agent", components: ["mcp", "summarization"] },
   { id: "aiops", components: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
@@ -39,8 +43,10 @@ export function ScenarioBuilder() {
   const b = t.builder;
   const enabled = useSelection((s) => s.enabled);
   const runtime = useSelection((s) => s.runtime);
+  const retrieval = useSelection((s) => s.retrieval);
   const toggle = useSelection((s) => s.toggle);
   const setRuntime = useSelection((s) => s.setRuntime);
+  const setRetrieval = useSelection((s) => s.setRetrieval);
   const canToggle = useSelection((s) => s.canToggle);
   const maturity = useMaturity();
 
@@ -153,12 +159,42 @@ export function ScenarioBuilder() {
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
                 {b.groups[group.id]}
               </div>
+
+              {/* 066 — the retrieval group leads with the strategy radio (exactly one). */}
+              {group.id === "retrieval" && (
+                <div className="mb-1.5">
+                  <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    {b.retrievalHeading}
+                  </div>
+                  <div className="inline-flex w-full gap-0.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-0.5">
+                    {RETRIEVAL_STRATEGIES.map((rs: RetrievalStrategy) => {
+                      const active = retrieval === rs;
+                      return (
+                        <button
+                          key={rs}
+                          onClick={() => setRetrieval(rs)}
+                          aria-pressed={active}
+                          title={b.retrievalStrategies[rs].blurb}
+                          className={`flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[10.5px] font-medium leading-none transition ${
+                            active
+                              ? "bg-[var(--color-panel)] text-[var(--color-indigo-soft)] shadow-sm"
+                              : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                          }`}
+                        >
+                          {b.retrievalStrategies[rs].name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col gap-0.5">
                 {group.components.map((id) => {
                   const locked = isLocked(id);
                   const on = locked || enabled.has(id);
-                  const dep = REQUIRES[id];
-                  // Dependency-blocked (e.g. reranker without RAG) ⇒ dimmed + unclickable.
+                  const dep = REQUIRES_VECTOR.has(id);
+                  // Dependency-blocked (e.g. reranker without Vector RAG) ⇒ dimmed + unclickable.
                   // Locked (fundamental) ⇒ checked + unclickable but NOT dimmed.
                   const depBlocked = !on && !canToggle(id);
                   return (
