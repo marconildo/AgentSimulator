@@ -12,6 +12,7 @@
 import type {
   AgentMeta,
   AppConfig,
+  ChatChunk,
   ChatMessage,
   ClearResult,
   CorpusListing,
@@ -117,6 +118,23 @@ function freshId(prefix: string): string {
 
 const now = () => Date.now() / 1000;
 
+/** The chunks the agent retrieved this turn, reconstructed from the captured
+ *  trace so a demo message carries its "Sources used" just like a live one
+ *  (mirrors the backend's `_retrieved_chunks`): prefer the vector `rag.retrieve`
+ *  END event, then fall back to the RAGLESS `pageindex.select` END event. */
+function retrievedChunks(events: TraceEvent[]): ChatChunk[] {
+  const pick = (stage: string) => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      if (ev.stage === stage && ev.phase === "end") {
+        return (ev.data.chunks as ChatChunk[] | undefined) ?? [];
+      }
+    }
+    return null;
+  };
+  return pick("rag.retrieve") ?? pick("pageindex.select") ?? [];
+}
+
 /** Build (and record) a demo turn: clone the captured trace under a fresh id so
  *  repeated sends never collide, append the message to the in-memory thread, and
  *  index the cloned trace so `fetchTrace(message.id)` can revisit it. */
@@ -133,7 +151,7 @@ function buildTurn(sessionId: string, message: string): TraceSummary {
     id,
     message,
     answer: base.answer,
-    chunks: [],
+    chunks: retrievedChunks(events),
     skills: [],
     documents: [],
     created_at: now(),
@@ -165,14 +183,14 @@ function readScenario(): string {
       const runtime: string = parsed.runtime ?? "react";
       // 066-retrieval-strategy-radio — RAGLESS moved from `enabled` to the strategy radio.
       const retrieval: string = parsed.retrieval ?? (enabled.includes("ragless") ? "ragless" : "vector");
+      // RAGLESS is its own captured pipeline (pageindex.*, no vector path) and is
+      // mutually exclusive with the vector-only rerank, so it keys its own fixture
+      // — check it before the rerank-driven "intermediate" bucket.
+      if (retrieval === "ragless") return "ragless";
       const advanced = ["gateway", "guardrails", "cache", "eval", "observability"];
       if (runtime === "multiagent" || enabled.some((c) => advanced.includes(c))) return "advanced";
       const intermediate = ["rerank", "hybrid", "summarization"];
-      if (
-        runtime === "deepagents" ||
-        retrieval === "ragless" ||
-        enabled.some((c) => intermediate.includes(c))
-      )
+      if (runtime === "deepagents" || enabled.some((c) => intermediate.includes(c)))
         return "intermediate";
     }
   } catch {

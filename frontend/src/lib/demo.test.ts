@@ -79,6 +79,17 @@ describe("selectDemoTrace (AC4)", () => {
     expect(intermediate.has("rag.rerank")).toBe(true);
   });
 
+  it("RAGLESS replays the reasoning-based PageIndex path, not the vector pipeline", () => {
+    const stages = (t: { events: TraceEvent[] }) => new Set(t.events.map((e) => e.stage));
+    const ragless = stages(selectDemoTrace("rag", "ragless", "en"));
+    // The RAGLESS capture runs PageIndex (tree → navigate → select) …
+    expect(ragless.has("pageindex.select")).toBe(true);
+    expect(ragless.has("pageindex.navigate")).toBe(true);
+    // … and skips the vector path entirely (066 mutually-exclusive radio).
+    expect(ragless.has("rag.retrieve")).toBe(false);
+    expect(ragless.has("rag.rerank")).toBe(false);
+  });
+
   it("maps every curated question label back to its id", () => {
     for (const q of DEMO_QUESTIONS) {
       expect(qidForMessage(q.label.en)).toBe(q.id);
@@ -125,5 +136,18 @@ describe("demo send turn (AC5)", () => {
     expect(summary.answer.length).toBeGreaterThan(0);
     const messages = await demoListMessages(session.id);
     expect(messages.some((m) => m.id === summary.trace_id)).toBe(true);
+  });
+
+  it("persists the retrieved RAG chunks with the message so 'Sources used' renders", async () => {
+    // Regression: demo turns used to hardcode chunks: [], so the "Sources used"
+    // section under a RAG answer never appeared (it gates on chunks.length > 0).
+    // The chunks must be reconstructed from the captured rag.retrieve event.
+    const session = await demoCreateSession();
+    await demoBatchChat(DEMO_QUESTIONS[0].label.en, session.id); // the RAG question
+    const messages = await demoListMessages(session.id);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].chunks.length).toBeGreaterThan(0);
+    expect(messages[0].chunks[0].source.length).toBeGreaterThan(0);
+    expect(messages[0].chunks[0].text.length).toBeGreaterThan(0);
   });
 });
