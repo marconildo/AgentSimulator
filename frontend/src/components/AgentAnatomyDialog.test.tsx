@@ -71,10 +71,12 @@ vi.mock("../lib/chatApi", () => {
 
 import { AgentAnatomyDialog } from "./AgentAnatomyDialog";
 import { useAgentAnatomy } from "../lib/agentAnatomy";
+import { useAgentCatalog } from "../lib/agentCatalog";
 import { useExperiment } from "../lib/experiment";
 
 beforeEach(() => {
   useAgentAnatomy.setState({ open: false, initialSection: null });
+  useAgentCatalog.setState({ agents: null, focusedId: null });
   useExperiment.setState({ byConv: {} });
   // jsdom doesn't implement scrollIntoView.
   Element.prototype.scrollIntoView = vi.fn();
@@ -117,6 +119,17 @@ describe("AgentAnatomyDialog", () => {
     render(<AgentAnatomyDialog />);
     fireEvent.click(await screen.findByTestId("agent-anatomy-close"));
     expect(useAgentAnatomy.getState().open).toBe(false);
+  });
+
+  it("clears the catalog edit-focus when it closes (064 AC7)", async () => {
+    useAgentCatalog.setState({ focusedId: "some-focused-agent" });
+    useAgentAnatomy.setState({ open: true });
+    const { rerender } = render(<AgentAnatomyDialog />);
+    await screen.findByRole("dialog");
+    // Close → the dialog unmounts its body and the focus is reset.
+    useAgentAnatomy.setState({ open: false });
+    rerender(<AgentAnatomyDialog />);
+    expect(useAgentCatalog.getState().focusedId).toBeNull();
   });
 
   it("closes on Esc (AC12)", async () => {

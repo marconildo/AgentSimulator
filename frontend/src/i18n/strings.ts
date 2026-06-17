@@ -30,6 +30,14 @@ export interface Strings {
     composerHint: string;
     sampleBarLabel: string;
   };
+  // 063-mobile-demo-layout: bottom tab-bar labels for the demo build's phone layout.
+  mobile: {
+    tab: {
+      canvas: string;
+      chat: string;
+      inspector: string;
+    };
+  };
   chat: {
     title: string;
     subtitle: string;
@@ -720,6 +728,9 @@ export interface Strings {
       confirm: string;
       confirmYes: string;
       confirmCancel: string;
+      // 064-agent-catalog-focus — shown when the conversation is locked: the
+      // catalog stays editable, only the conversation's running agent is fixed.
+      lockedEditHint: string;
     };
     identity: {
       title: string;
@@ -790,6 +801,9 @@ const en: Strings = {
     bannerCta: "Run the full live version with your own OpenAI key",
     composerHint: "Pick a sample question below",
     sampleBarLabel: "Sample questions",
+  },
+  mobile: {
+    tab: { canvas: "Diagram", chat: "Chat", inspector: "Inspector" },
   },
   chat: {
     title: "Ask the agent",
@@ -1479,6 +1493,8 @@ const en: Strings = {
       confirm: "Delete this agent? Conversations using it will fall back to the default.",
       confirmYes: "Yes, delete",
       confirmCancel: "Cancel",
+      lockedEditHint:
+        "This conversation's agent is locked, but you can still edit, create or delete agents here — changes apply to the shared catalog.",
     },
     identity: {
       title: "Identity",
@@ -1628,6 +1644,9 @@ const pt: Strings = {
     bannerCta: "Rode a versão completa com sua própria chave OpenAI",
     composerHint: "Escolha uma pergunta de exemplo abaixo",
     sampleBarLabel: "Perguntas de exemplo",
+  },
+  mobile: {
+    tab: { canvas: "Diagrama", chat: "Chat", inspector: "Inspetor" },
   },
   chat: {
     title: "Pergunte ao agente",
@@ -2322,6 +2341,8 @@ const pt: Strings = {
         "Apagar este agente? Conversas que o usam voltarão para o agente padrão.",
       confirmYes: "Sim, apagar",
       confirmCancel: "Cancelar",
+      lockedEditHint:
+        "O agente desta conversa está travado, mas você ainda pode editar, criar ou apagar agentes aqui — as mudanças valem para o catálogo compartilhado.",
     },
     identity: {
       title: "Identidade",

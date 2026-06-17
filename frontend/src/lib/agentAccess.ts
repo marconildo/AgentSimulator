@@ -1,23 +1,28 @@
 // 043-persisted-agent / 044-shared-agent-catalog — `useActiveAgent`: the
-// shared hook the Agent Anatomy dialog sections use to read/write the active
-// conversation's agent row.
+// shared hook the Agent Anatomy dialog sections use to read/write the agent
+// the dialog is currently editing.
 //
-// One source of truth: the agent comes from `useChat.sessions[active].agent`.
-// 044-bugfix: when there's no active session (draft), the hook **falls back**
-// to the catalog's default agent — edits PATCH the shared default and
-// propagate to every conversation. This matches the catalog model: every
-// conversation lives off shared rows.
+// 064-agent-catalog-focus: the edited agent is resolved **focus-first** from the
+// shared `useAgentCatalog` store, decoupled from the session binding:
 //
-// Edits PATCH `/api/agents/{id}` with a 500 ms debounce and immediately
-// reflect the result on the in-memory store (via `replaceSession`) so the
-// next render is consistent. The dialog closing or the input blurring
-// **flushes** any pending PATCH — the same fix that resolved 042's
-// "name lost on close" bug.
+//   focused agent (catalog.focusedId)  ??  session agent  ??  catalog default
+//
+// So the editor follows whatever row the user selected/created in the sidebar —
+// even when the conversation's binding is locked (045). When nothing is focused
+// the hook falls back to the session's bound agent (or the catalog default on a
+// draft), preserving the prior 044 behavior byte-for-byte.
+//
+// Edits PATCH `/api/agents/{id}` with a 500 ms debounce and immediately reflect
+// the result on both the catalog store (`upsert`) and any session bound to that
+// agent (`replaceSession`) so the next render is consistent everywhere. The
+// dialog closing or the input blurring **flushes** any pending PATCH — the same
+// fix that resolved 042's "name lost on close" bug.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { useChat } from "../store/useChat";
-import { listAgents, patchAgent, type AgentMeta, type AgentPatchBody } from "./chatApi";
+import { useAgentCatalog } from "./agentCatalog";
+import { patchAgent, type AgentMeta, type AgentPatchBody } from "./chatApi";
 
 interface ActiveAgentHandle {
   /** The active agent (session's agent, or catalog default when no session). */
@@ -42,31 +47,27 @@ export function useActiveAgent(): ActiveAgentHandle {
   });
   const replaceSession = useChat((c) => c.replaceSession);
 
-  // Fallback path: when the user is on a draft (no session row yet) we still
-  // want the dialog to *work* — the catalog model treats edits as global, so
-  // editing the seed default from a draft is the same as editing it from a
-  // persisted conversation. We fetch the default once and reuse it as the
-  // active agent until a session-bound agent shows up.
-  const [defaultAgent, setDefaultAgent] = useState<AgentMeta | null>(null);
-  useEffect(() => {
-    if (sessionAgent || defaultAgent) return;
-    let cancelled = false;
-    listAgents()
-      .then((rows) => {
-        if (cancelled) return;
-        const def = rows.find((a) => a.is_default) ?? rows[0] ?? null;
-        setDefaultAgent(def);
-      })
-      .catch(() => {
-        // Quiet — the dialog stays in its initial empty state; the next
-        // session-aware render will recover.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionAgent, defaultAgent]);
+  // 064: the catalog store is the single source of truth for the list + focus.
+  const agents = useAgentCatalog((s) => s.agents);
+  const focusedId = useAgentCatalog((s) => s.focusedId);
+  const refresh = useAgentCatalog((s) => s.refresh);
+  const upsert = useAgentCatalog((s) => s.upsert);
 
-  const agent = sessionAgent ?? defaultAgent;
+  // Ensure the catalog is loaded so we can resolve a focused / default agent
+  // even on a draft (no session row yet) — the catalog model treats edits as
+  // global, so editing the seed default from a draft is the same as editing it
+  // from a persisted conversation.
+  useEffect(() => {
+    if (agents === null) void refresh();
+  }, [agents, refresh]);
+
+  // Resolution order: the explicitly focused agent (a row the user selected or
+  // just created) wins; otherwise the conversation's bound agent; otherwise the
+  // catalog default. This is what decouples editing from the 045 session lock.
+  const focusedAgent: AgentMeta | null =
+    (focusedId ? agents?.find((a) => a.id === focusedId) : null) ?? null;
+  const defaultAgent = agents?.find((a) => a.is_default) ?? agents?.[0] ?? null;
+  const agent = focusedAgent ?? sessionAgent ?? defaultAgent;
 
   // Pending merge buffer + current agent id (refs so callbacks are stable).
   const pendingRef = useRef<AgentPatchBody | null>(null);
@@ -85,6 +86,9 @@ export function useActiveAgent(): ActiveAgentHandle {
     if (!patch || !aid) return;
     patchAgent(aid, patch)
       .then((row) => {
+        // 064: reflect the edit into the shared catalog so the editor (which
+        // reads focus-first from the store) keeps showing the latest values.
+        upsert(row);
         // 044-shared-agent-catalog: the agent is shared across conversations.
         // Reflect the updated row on EVERY session whose `agent.id` matches —
         // not just the active one — so other open conversations (and the chat
@@ -94,16 +98,13 @@ export function useActiveAgent(): ActiveAgentHandle {
             replaceSession({ ...s, agent: row });
           }
         }
-        // Also refresh the local fallback so the draft path picks up the
-        // freshly-edited row on the next render.
-        setDefaultAgent((cur) => (cur && cur.id === row.id ? row : cur));
       })
       .catch(() => {
         // Quiet failure — the dialog has its own surfaces for validation
         // errors (the field stays at the typed value); a 422 keeps the row
         // unchanged on the server, and the next refresh re-syncs.
       });
-  }, [replaceSession]);
+  }, [replaceSession, upsert]);
 
   const updateAgent = useCallback(
     (patch: AgentPatchBody) => {

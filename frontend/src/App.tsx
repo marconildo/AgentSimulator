@@ -21,6 +21,7 @@ import {
 } from "./components/icons";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
+import { MobileShell } from "./components/MobileShell";
 import { ScenarioBuilder } from "./components/ScenarioBuilder";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Timeline } from "./components/Timeline";
@@ -31,6 +32,7 @@ import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
 import { isDemo } from "./lib/demo";
 import { healthBanner, useHealth } from "./lib/health";
+import { useIsMobile } from "./lib/useIsMobile";
 import { markOnboarded, shouldAutoOnboard } from "./lib/onboarding";
 import type { Page } from "./lib/page";
 import { activePhase } from "./lib/phases";
@@ -163,6 +165,12 @@ export default function App() {
   const bubble = useMemo(() => pendingBubble(view, activePhase(events, cursor)), [view, events, cursor]);
   const t = useT();
 
+  // 063-mobile-demo-layout — the phone-only single-pane layout is gated on the
+  // DEMO build AND a phone-width viewport, together. The live build (isDemo()
+  // false) and the demo at desktop width keep the three-column layout, unchanged.
+  const isMobile = useIsMobile();
+  const mobileDemo = isDemo() && isMobile;
+
   // 041-settings-page: the page state grew from 2 to 3. The ⚙️ Config control
   // now navigates to a dedicated page (`<SettingsPage />`) instead of opening a
   // popover; only one of {sim, learn, settings} is mounted at a time.
@@ -188,11 +196,31 @@ export default function App() {
   }, [startTour]);
   const banner = healthBanner(healthStatus, hasKey);
 
+  // The canvas + its overlays, shared by the desktop (<main>) and the mobile
+  // (Diagram pane) layouts so they never diverge. The ReactFlowProvider gives the
+  // tour balloon + RAG/PageIndex panels the live viewport transform (014/054/056);
+  // AgentDetail (the Agent drill-in) is a sibling overlay composed from trace events.
+  const canvasContent = (
+    <>
+      <ReactFlowProvider>
+        <FlowCanvas view={view} selected={selected} onSelect={select} />
+        <TourCaption />
+        {detail === "rag" && <RagPipelinePanel />}
+        {detail === "pageindex" && <PageIndexPipelinePanel />}
+      </ReactFlowProvider>
+      {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
+    </>
+  );
+
   return (
     <div className="flex h-screen flex-col bg-[var(--color-base)]">
       {/* 058-online-demo-mode: only renders in the backend-less showcase build. */}
       <DemoBanner />
-      <header className="flex items-center gap-2.5 border-b border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-panel)_55%,transparent)] px-4 py-2.5 backdrop-blur-sm">
+      <header
+        className={`flex items-center gap-2.5 border-b border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-panel)_55%,transparent)] px-4 py-2.5 backdrop-blur-sm ${
+          mobileDemo ? "flex-wrap" : ""
+        }`}
+      >
         {/* Brand — the group shrinks tagline-first (it truncates) so a longer PT
             string never pushes the right-hand controls off-screen; the title
             itself never truncates (whitespace-nowrap defines the min width).
@@ -314,6 +342,16 @@ export default function App() {
         <SettingsPage />
       ) : page === "learn" ? (
         <LearnPage />
+      ) : mobileDemo ? (
+        // 063-mobile-demo-layout — same panes, single-pane tabbed shell. The
+        // ReactFlow-anchored canvas content is shared with the desktop branch
+        // below (see `canvasContent`) so the two layouts never diverge.
+        <MobileShell
+          chat={<ChatPanel bubble={bubble} />}
+          canvas={canvasContent}
+          inspector={<InspectorPanel selected={selected} view={view} onSelect={select} />}
+          timeline={<Timeline />}
+        />
       ) : (
         <>
           <div className="flex min-h-0 flex-1">
@@ -329,20 +367,7 @@ export default function App() {
               <ChatPanel bubble={bubble} />
             </SidePanel>
 
-            <main className="relative min-w-0 flex-1">
-              {/* Shared React Flow context so the tour balloon can read the live
-                  viewport transform (pan/zoom) to anchor next to a node (014). */}
-              <ReactFlowProvider>
-                <FlowCanvas view={view} selected={selected} onSelect={select} />
-                <TourCaption />
-                {/* 054 — the RAG pipeline panel anchors to the Vector DB node, so it
-                    lives inside the provider to read the live viewport transform. */}
-                {detail === "rag" && <RagPipelinePanel />}
-                {/* 056 — the RAGLESS pipeline panel anchors to the PageIndex node. */}
-                {detail === "pageindex" && <PageIndexPipelinePanel />}
-              </ReactFlowProvider>
-              {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
-            </main>
+            <main className="relative min-w-0 flex-1">{canvasContent}</main>
 
             <SidePanel
               side="right"

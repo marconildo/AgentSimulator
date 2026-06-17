@@ -16,6 +16,7 @@ import { KnowledgeSection } from "../agent-anatomy/KnowledgeSection";
 import { SkillsSection } from "../agent-anatomy/SkillsSection";
 import { useT } from "../i18n";
 import { useAgentAnatomy } from "../lib/agentAnatomy";
+import { useAgentCatalog } from "../lib/agentCatalog";
 import {
   SECTION_ICONS,
   SECTION_ORDER,
@@ -27,7 +28,16 @@ export function AgentAnatomyDialog() {
   const open = useAgentAnatomy((s) => s.open);
   const initialSection = useAgentAnatomy((s) => s.initialSection);
   const close = useAgentAnatomy((s) => s.closeDialog);
+  const setFocusedAgent = useAgentCatalog((s) => s.setFocused);
   const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // 064-agent-catalog-focus: the dialog's edit-focus is per-open. Clear it when
+  // the dialog unmounts so re-opening starts on the conversation's bound agent
+  // (or the catalog default on a draft) rather than the last-edited agent.
+  useEffect(() => {
+    if (!open) return;
+    return () => setFocusedAgent(null);
+  }, [open, setFocusedAgent]);
 
   // Esc closes — bound at document level so the focus inside textarea doesn't
   // swallow the keypress.

@@ -1,8 +1,11 @@
-// 045-composer-agent-selector — the 044 dialog catalog sidebar follows the
-// same lock the composer chip does: an agent row can't be re-selected while
-// the active conversation has any persisted message. The catalog management
-// affordances (+ Novo / 🗑) stay enabled — they operate on the catalog, not
-// on the session-agent link. Covers AC10 + AC11.
+// 045-composer-agent-selector → 064-agent-catalog-focus.
+//
+// 045 originally disabled every catalog row once the conversation had a
+// persisted message. 064 corrects that: the catalog is *shared*, so editing,
+// creating and deleting agents must stay possible regardless of the lock —
+// only **re-binding the conversation's running agent** stays locked. So a
+// locked row is now selectable for *editing* (it moves the dialog focus) but
+// does NOT call `setSessionAgent`. The +New / 🗑 affordances stay enabled.
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +20,7 @@ vi.mock("../lib/chatApi", () => ({
 import * as chatApi from "../lib/chatApi";
 import type { AgentMeta } from "../lib/chatApi";
 import { AgentCatalogSidebar } from "./AgentCatalogSidebar";
+import { useAgentCatalog } from "../lib/agentCatalog";
 import { useChat } from "../store/useChat";
 
 const agent = (id: string, name: string, isDefault = false): AgentMeta => ({
@@ -55,6 +59,7 @@ const seedSession = (messageCount: number, active: AgentMeta = ALICE) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAgentCatalog.setState({ agents: null, focusedId: null });
   vi.mocked(chatApi.listAgents).mockResolvedValue([ALICE, BOB]);
   vi.mocked(chatApi.setSessionAgent).mockImplementation(async (sid, aid) => ({
     id: sid,
@@ -70,35 +75,40 @@ afterEach(() => {
   cleanup();
 });
 
-describe("AgentCatalogSidebar — lock follows message_count (045)", () => {
-  it("disables rows + sets the lock tooltip when message_count > 0 (AC10)", async () => {
+describe("AgentCatalogSidebar — lock gates only the session re-bind (064)", () => {
+  it("locked: clicking a row focuses it for editing but does NOT re-bind (AC1)", async () => {
     seedSession(1, ALICE);
     render(<AgentCatalogSidebar />);
-    // Wait for the catalog to load + render.
     const bobRow = await screen.findByTestId(`agent-catalog-row-${BOB.id}`);
-    expect(bobRow.hasAttribute("disabled")).toBe(true);
-    expect(bobRow.getAttribute("title") ?? "").toMatch(/locked after the conversation/i);
-    // Clicking is a no-op.
+    // Rows are no longer disabled by the lock — you can edit any catalog agent.
+    expect(bobRow.hasAttribute("disabled")).toBe(false);
+
     fireEvent.click(bobRow);
+    // The dialog focus moves to Bob (the editor will now edit Bob)…
+    await vi.waitFor(() => {
+      expect(useAgentCatalog.getState().focusedId).toBe(BOB.id);
+    });
+    // …but the conversation's running agent is untouched.
     expect(chatApi.setSessionAgent).not.toHaveBeenCalled();
 
-    // The catalog management buttons stay enabled — they operate on the
-    // catalog, not on the session-agent link.
-    const novo = screen.getByTestId("agent-catalog-new");
-    expect(novo.hasAttribute("disabled")).toBe(false);
+    // The catalog management buttons stay enabled.
+    expect(screen.getByTestId("agent-catalog-new").hasAttribute("disabled")).toBe(false);
+    // And we explain why selecting doesn't swap the conversation's agent.
+    expect(screen.getByTestId("agent-catalog-locked-hint")).toBeTruthy();
   });
 
-  it("leaves rows clickable when message_count === 0 (AC11)", async () => {
+  it("unlocked: clicking a row focuses AND re-binds the session (AC2)", async () => {
     seedSession(0, ALICE);
     render(<AgentCatalogSidebar />);
     const bobRow = await screen.findByTestId(`agent-catalog-row-${BOB.id}`);
     expect(bobRow.hasAttribute("disabled")).toBe(false);
-    // Title is the agent name (not the lock string).
     expect(bobRow.getAttribute("title") ?? "").toBe(BOB.name);
     fireEvent.click(bobRow);
-    // Hook into the side-effect path: setSessionAgent should fire.
     await vi.waitFor(() => {
       expect(chatApi.setSessionAgent).toHaveBeenCalled();
     });
+    expect(useAgentCatalog.getState().focusedId).toBe(BOB.id);
+    // No lock hint when the conversation hasn't started.
+    expect(screen.queryByTestId("agent-catalog-locked-hint")).toBeNull();
   });
 });

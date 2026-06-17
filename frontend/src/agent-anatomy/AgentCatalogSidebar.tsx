@@ -4,20 +4,20 @@
 // names + a small initial-circle "avatar", a "+ New" affordance at the top,
 // and an inline delete confirm at the bottom.
 //
-// Behavior matches what the header strip did:
-// - Clicking a row switches the active session's `agent_id` (or the draft
-//   selection's `agent_id` once a session exists).
-// - "+ Novo" clones the active agent and switches to it.
-// - The delete (🗑) appears on the active agent row only, and only when it's
-//   not the default. Inline confirm; on yes, sessions repoint to the default.
+// 064-agent-catalog-focus: clicking a row, creating, or deleting all move the
+// dialog's **focus** (`useAgentCatalog.focusedId`) — the agent the editor edits
+// — regardless of the 045 session lock. Selecting/creating *also* re-binds the
+// conversation's agent **only when it is not locked** (you can't swap the agent
+// of a conversation that already has messages). When locked the catalog is still
+// fully editable; only the session binding is fixed.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useT } from "../i18n";
+import { useAgentCatalog } from "../lib/agentCatalog";
 import {
   createAgent,
   deleteAgent,
-  listAgents,
   setSessionAgent,
   type AgentMeta,
 } from "../lib/chatApi";
@@ -27,18 +27,14 @@ const MAX_VISIBLE = 10;
 
 export function AgentCatalogSidebar() {
   const t = useT().agentAnatomy.catalog;
-  // 045-composer-agent-selector: the lock string is shared with the composer
-  // chip; live under `chat.agentSelector` rather than the dialog's own slot
-  // because both surfaces are in sync.
-  const lockedString = useT().chat.agentSelector.locked;
-  const activeAgent = useChat((c) => {
+  const sessionAgent = useChat((c) => {
     const id = c.activeSessionId;
     if (!id) return null;
     return c.sessions.find((s) => s.id === id)?.agent ?? null;
   });
   // 045-composer-agent-selector: locked if the active conversation has at
-  // least one persisted message. Drives the row disabled state below and
-  // mirrors the composer chip — both lock together, in sync.
+  // least one persisted message. With 064 this only gates the *session
+  // re-binding* below — rows stay selectable for editing.
   const locked = useChat((c) => {
     const id = c.activeSessionId;
     if (!id) return false;
@@ -48,49 +44,34 @@ export function AgentCatalogSidebar() {
   const replaceSession = useChat((c) => c.replaceSession);
   const ensureSession = useChat((c) => c.ensureSession);
 
-  const [catalog, setCatalog] = useState<AgentMeta[] | null>(null);
+  // 064: shared catalog store — single source of truth for list + focus.
+  const catalog = useAgentCatalog((s) => s.agents);
+  const focusedId = useAgentCatalog((s) => s.focusedId);
+  const refresh = useAgentCatalog((s) => s.refresh);
+  const setFocused = useAgentCatalog((s) => s.setFocused);
+  const upsert = useAgentCatalog((s) => s.upsert);
+  const removeLocal = useAgentCatalog((s) => s.remove);
+
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      setCatalog(await listAgents());
-    } catch {
-      setCatalog([]);
-    }
-  }, []);
-
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (catalog === null) void refresh();
+  }, [catalog, refresh]);
 
-  // When the active agent's name / fields change, surface the latest copy
-  // into our local catalog without a full refetch.
-  useEffect(() => {
-    if (!activeAgent || !catalog) return;
-    setCatalog((cur) => {
-      if (!cur) return cur;
-      const idx = cur.findIndex((a) => a.id === activeAgent.id);
-      if (idx === -1) return cur;
-      const next = cur.slice();
-      next[idx] = activeAgent;
-      return next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAgent?.name, activeAgent?.id]);
-
-  // The active id falls back to the catalog's default when there's no session
-  // (draft); the rest of the dialog uses `useActiveAgent` which does the same
-  // resolution, so selecting another row updates both halves.
+  // The highlighted row follows the focus first, then the conversation's bound
+  // agent, then the catalog default (matches `useActiveAgent`'s resolution).
   const activeId =
-    activeAgent?.id ?? catalog?.find((a) => a.is_default)?.id ?? null;
+    focusedId ?? sessionAgent?.id ?? catalog?.find((a) => a.is_default)?.id ?? null;
+  const focusedAgent: AgentMeta | null =
+    catalog?.find((a) => a.id === activeId) ?? sessionAgent ?? null;
 
   async function onSelect(nextId: string) {
     if (!nextId || nextId === activeId) return;
-    // 045-composer-agent-selector: defensive client-side gate. The chip
-    // already disables, and the server returns 409, but if a row's disabled
-    // attr is somehow bypassed (a11y tools, programmatic dispatch), we still
-    // refuse to re-link a started conversation.
+    // 064: always focus the row for editing — the editor follows the focus.
+    setFocused(nextId);
+    // Re-binding the conversation's agent is what the 045 lock forbids. When
+    // locked, focusing is enough; we leave the session's running agent intact.
     if (locked) return;
     setBusy(true);
     try {
@@ -110,30 +91,39 @@ export function AgentCatalogSidebar() {
     try {
       const cloneFrom = activeId ?? undefined;
       const created = await createAgent({ clone_from: cloneFrom });
-      // Lazy-persist the conversation so we can point it at the new agent —
-      // otherwise the user clicks "+ Novo" and nothing visibly changes in the
-      // dialog (the new agent shows up in the sidebar but the active row
-      // stays on the default fallback).
-      const sid = await ensureSession();
-      if (sid) {
-        const updated = await setSessionAgent(sid, created.id);
-        if (updated) replaceSession(updated);
+      // 064: surface the new agent into the list and focus it so the editor
+      // immediately shows (and can edit) it — even while the session is locked.
+      upsert(created);
+      setFocused(created.id);
+      // Re-bind the conversation to the new agent only when it isn't locked.
+      if (!locked) {
+        const sid = await ensureSession();
+        if (sid) {
+          const updated = await setSessionAgent(sid, created.id);
+          if (updated) replaceSession(updated);
+        }
       }
-      await refresh();
     } finally {
       setBusy(false);
     }
   }
 
   async function onConfirmDelete() {
-    if (!activeAgent || activeAgent.is_default) return;
+    if (!focusedAgent || focusedAgent.is_default) return;
     setBusy(true);
     try {
-      const result = await deleteAgent(activeAgent.id);
-      const sid = await ensureSession();
-      if (sid) {
-        const updated = await setSessionAgent(sid, result.default_agent_id);
-        if (updated) replaceSession(updated);
+      const result = await deleteAgent(focusedAgent.id);
+      removeLocal(focusedAgent.id);
+      setFocused(null);
+      // Re-point the conversation to the default only when it isn't locked; a
+      // locked conversation keeps its binding (the server's ON DELETE repoint
+      // is the accepted edge if the deleted agent was its bound one).
+      if (!locked) {
+        const sid = await ensureSession();
+        if (sid) {
+          const updated = await setSessionAgent(sid, result.default_agent_id);
+          if (updated) replaceSession(updated);
+        }
       }
       await refresh();
     } finally {
@@ -142,7 +132,7 @@ export function AgentCatalogSidebar() {
     }
   }
 
-  const rows: AgentMeta[] = catalog ?? (activeAgent ? [activeAgent] : []);
+  const rows: AgentMeta[] = catalog ?? (sessionAgent ? [sessionAgent] : []);
   const visible = rows.slice(0, MAX_VISIBLE);
   const overflow = Math.max(0, rows.length - MAX_VISIBLE);
 
@@ -185,10 +175,9 @@ export function AgentCatalogSidebar() {
                 <li key={a.id}>
                   <button
                     onClick={() => void onSelect(a.id)}
-                    disabled={busy || locked}
-                    aria-disabled={locked || undefined}
+                    disabled={busy}
                     data-testid={`agent-catalog-row-${a.id}`}
-                    title={locked ? lockedString : a.name}
+                    title={a.name}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-[var(--color-ink)] transition hover:bg-[var(--color-panel)] disabled:cursor-not-allowed disabled:opacity-60"
                     style={{
                       background: isActive ? "var(--color-panel)" : "transparent",
@@ -220,8 +209,20 @@ export function AgentCatalogSidebar() {
         )}
       </ul>
 
-      {/* Delete footer — only when a non-default is active */}
-      {activeAgent && !activeAgent.is_default && (
+      {/* 064: when the conversation is locked, editing the catalog still works —
+          only the conversation's running agent is fixed. Make that explicit so
+          selecting a row (which edits but doesn't re-bind) isn't confusing. */}
+      {locked && (
+        <p
+          data-testid="agent-catalog-locked-hint"
+          className="border-t border-[var(--color-line)] px-3 py-2 text-[10px] leading-snug text-[var(--color-label)]"
+        >
+          {t.lockedEditHint}
+        </p>
+      )}
+
+      {/* Delete footer — only when a non-default agent is focused */}
+      {focusedAgent && !focusedAgent.is_default && (
         <div className="border-t border-[var(--color-line)] px-2 py-2">
           {confirming ? (
             <div className="space-y-1.5">
