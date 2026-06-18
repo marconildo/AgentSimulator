@@ -50,7 +50,7 @@ shipped. Each item here is therefore the *seed of its own spec*.
 | Rung ↓ / Track → | RAG Quality | Agent Design | AI-Ops | Security & Trust | Scale & Infra |
 |---|---|---|---|---|---|
 | **Simple** | embedding + vector RAG ✅ | ReAct agent ✅ | — | auth stub 🔧 | single-instance ✅ |
-| **Intermediate** | chunking 🟡 · metadata 🟡 · rerank ✅ · hybrid 🟡 · MMR 🟡 · self-query 🟡 · compression 🟡 · multi-vector 🟡 · query expansion 🟡 · metrics 🟡 | DeepAgents ✅ · summarization 🟡 · honest token/cost ✅ | — | — | — |
+| **Intermediate** | chunking 🟡 · metadata 🟡 · rerank ✅ · hybrid ✅ · MMR 🟡 · self-query 🟡 · compression 🟡 · multi-vector 🟡 · query expansion 🟡 · metrics 🟡 | DeepAgents ✅ · summarization 🟡 · honest token/cost ✅ | — | — | — |
 | **Advanced** | RAGAS (full) → Eval | multi-agent: researcher/coder/critic 🏷️ | gateway 🟡 · cache 🟡 · eval/RAGAS 🟡 · observability 🟡 · model router 🔧 · multi-provider 🔧 | guardrails 🟡 · secrets/DLP 🔧 · supply chain 🔧 · sandbox 🔧 · identity 🔧 · jailbreak 🔧 · auth/rate-limit 🔧 | multi-replica 🔧 |
 
 The sections below are grouped by rung; within the Advanced rung each `###` is annotated with its
@@ -102,18 +102,24 @@ previews.
   readout** on the rerank sub-stage, and a **Cohere ReRank** (hosted) provider behind the same
   `reranker.py` seam as an alternative to local FlashRank.
 
-### 🟡 Hybrid search (BM25 + vector)
-- **Where it shows up.** Now has a **`comingSoon` preview tile** (`hybrid`) on the Intermediate
-  rung — laid out **directly below the `rag` station** as a sub-component of the RAG pipeline (an
-  extension of the retrieval step, like the reranker), tagged track `rag`
-  ([060-intermediate-preview-tiles](../specs/060-intermediate-preview-tiles/), amended 2026-06-17).
-  The tile is the first thing that lights up the Intermediate **RAG Quality** track; it does not
-  execute yet.
-- **What it is.** Combine sparse (BM25 / keyword) and dense (vector) retrieval and fuse the results
-  (e.g. RRF) — catches exact-term matches the embedding misses.
-- **What a spec would add.** Flip the tile to real: a second retriever, a fusion step (RRF), a
-  `rag.hybrid` sub-stage, and a way to compare the two sets in the inspector (so the *why hybrid?*
-  is visible, not just claimed).
+### ✅ Hybrid search (BM25 + vector) — SHIPPED (070-hybrid-search)
+- **Status.** Done. Hybrid search is a **real query-time sub-stage of the `rag` (Vector DB)
+  station** (`rag.hybrid`, no separate tile — the 060 `comingSoon` `hybrid` tile was removed/
+  absorbed, like the reranker). It **composes with the reranker** (fuse → rerank → retrieve).
+- **What shipped.** A real sparse **BM25 lane** (`backend/app/rag/hybrid.py`; local `rank_bm25`,
+  pure-python, deterministic, no key) runs alongside the dense vector search and the two ranked
+  lists are fused with **Reciprocal Rank Fusion (RRF)** (`Σ 1/(rrf_k + rank)`, `rrf_k=60`). BM25
+  ranks the **whole scoped corpus**, so a chunk the dense search missed can enter via an exact-term
+  match. New `Stage rag.hybrid` (mapped to the `rag` station + `retrieve` phase), request input
+  `hybrid: bool` (Vector-RAG only, cleared on RAGLESS). The Vector DB tile shows a `BM25+vector ·
+  fused N` readout; the RAG drill-in gains a **Vector | BM25 | → RRF** fusion table (per chunk:
+  vector rank, BM25 rank, RRF score, ↑ when BM25 lifted it), and the Inspector shows the fusion.
+  Off / Simple is byte-for-byte (no `rag.hybrid`). All prose bilingual (en + pt). See
+  [`specs/070-hybrid-search/`](../specs/070-hybrid-search/).
+- **What's still open (later specs).** **Hybrid search lacks a captured fixture in the mocked
+  GitHub Pages demo (058)** — the live app fuses, but the demo can't replay a hybrid run until its
+  trace is captured (see the demo note in the deferred list). Weighted / learned fusion and a
+  user-facing `rrf_k` slider are also deferred.
 
 ### 🟡 Summarization (context compaction) — *track: `agent`*
 - **Where it shows up.** A **`comingSoon` preview tile** (`summarization`) on the Intermediate rung,
@@ -540,7 +546,7 @@ própria spec*.
 | Degrau ↓ / Track → | RAG Quality | Agent Design | AI-Ops | Security & Trust | Scale & Infra |
 |---|---|---|---|---|---|
 | **Simples** | embedding + RAG vetorial ✅ | agente ReAct ✅ | — | stub de auth 🔧 | instância única ✅ |
-| **Intermediário** | chunking 🟡 · metadados 🟡 · rerank ✅ · híbrida 🟡 · MMR 🟡 · self-query 🟡 · compressão 🟡 · multi-vector 🟡 · expansão de query 🟡 · métricas 🟡 | DeepAgents ✅ · summarization 🟡 · custo/token honesto ✅ | — | — | — |
+| **Intermediário** | chunking 🟡 · metadados 🟡 · rerank ✅ · híbrida ✅ · MMR 🟡 · self-query 🟡 · compressão 🟡 · multi-vector 🟡 · expansão de query 🟡 · métricas 🟡 | DeepAgents ✅ · summarization 🟡 · custo/token honesto ✅ | — | — | — |
 | **Avançado** | RAGAS (completo) → Eval | multi-agente: researcher/coder/critic 🏷️ | gateway 🟡 · cache 🟡 · eval/RAGAS 🟡 · observabilidade 🟡 · model router 🔧 · multi-provider 🔧 | guardrails 🟡 · segredos/DLP 🔧 · cadeia de suprimentos 🔧 · sandbox 🔧 · identidade 🔧 · jailbreak 🔧 · auth/rate-limit 🔧 | multi-réplica 🔧 |
 
 As seções abaixo estão agrupadas por degrau; dentro do degrau Avançado cada `###` é anotado com o
@@ -593,17 +599,24 @@ visuais.
   latência?*), um **readout de latência** na sub-etapa de rerank, e um provedor **Cohere ReRank**
   (hospedado) atrás da mesma costura `reranker.py` como alternativa ao FlashRank local.
 
-### 🟡 Busca híbrida (BM25 + vetorial)
-- **Onde aparece.** Agora tem um **tile de prévia `comingSoon`** (`hybrid`) no degrau Intermediário —
-  posicionado **logo abaixo da estação `rag`** como subcomponente do pipeline RAG (uma extensão da
-  etapa de recuperação, como o reranker), tagueado com o track `rag`
-  ([060-intermediate-preview-tiles](../specs/060-intermediate-preview-tiles/), emendada em 2026-06-17).
-  O tile é o primeiro a acender o track **RAG Quality** do Intermediário; ainda não executa.
-- **O que é.** Combinar recuperação esparsa (BM25 / palavra-chave) e densa (vetorial) e fundir os
-  resultados (ex.: RRF) — pega correspondências exatas que o embedding perde.
-- **O que uma spec adicionaria.** Tornar o tile real: um segundo retriever, um passo de fusão (RRF),
-  uma sub-etapa `rag.hybrid` e uma forma de comparar os dois conjuntos no inspetor (para o *por que
-  híbrida?* ficar visível, não só afirmado).
+### ✅ Busca híbrida (BM25 + vetorial) — ENTREGUE (070-hybrid-search)
+- **Status.** Concluído. A busca híbrida é uma **sub-etapa real de tempo de consulta da estação
+  `rag` (Vector DB)** (`rag.hybrid`, sem tile separado — o tile `comingSoon` `hybrid` da 060 foi
+  removido/absorvido, como o reranker). **Compõe com o reranker** (fundir → rerank → recuperar).
+- **O que foi entregue.** Uma **lane esparsa BM25** real (`backend/app/rag/hybrid.py`; `rank_bm25`
+  local, puro-python, determinístico, sem chave) roda ao lado da busca vetorial densa e as duas
+  listas ranqueadas são fundidas com **Reciprocal Rank Fusion (RRF)** (`Σ 1/(rrf_k + posição)`,
+  `rrf_k=60`). O BM25 ranqueia **todo o corpus do escopo**, então um trecho que a busca densa perdeu
+  pode entrar por correspondência exata de termo. Novo `Stage rag.hybrid` (mapeado para a estação
+  `rag` + fase `retrieve`), input de request `hybrid: bool` (só Vector RAG, limpo no RAGLESS). O tile
+  do Vector DB mostra um readout `BM25+vetorial · fundido N`; o drill-in do RAG ganha a tabela de
+  fusão **Vetorial | BM25 | → RRF** (por trecho: posição vetorial, posição BM25, escore RRF, ↑ quando
+  o BM25 o elevou), e o Inspetor mostra a fusão. Off / Simples é byte-for-byte (sem `rag.hybrid`).
+  Toda prosa bilíngue (en + pt). Veja [`specs/070-hybrid-search/`](../specs/070-hybrid-search/).
+- **O que ainda falta (specs futuras).** **A busca híbrida não tem fixture capturada no demo mockado
+  do GitHub Pages (058)** — a app ao vivo funde, mas o demo não consegue reproduzir um run híbrido
+  até a trace ser capturada (veja a nota de demo na lista de adiados). Fusão ponderada / aprendida e
+  um slider de `rrf_k` para o usuário também ficam adiados.
 
 ### 🟡 Sumarização (compactação de contexto) — *track: `agent`*
 - **Onde aparece.** Um **tile de prévia `comingSoon`** (`summarization`) no degrau Intermediário,

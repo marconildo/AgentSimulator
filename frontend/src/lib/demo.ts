@@ -199,9 +199,11 @@ function readScenario(): string {
       // — check it before the rerank-driven "intermediate" bucket.
       const advanced = ["gateway", "guardrails", "cache", "eval", "observability"];
       if (runtime === "multiagent" || enabled.some((c) => advanced.includes(c))) return "advanced";
-      // The reranker (a real intermediate upgrade) composes with everything; hybrid /
-      // summarization are preview (won't run) so they don't change the trace.
+      // The reranker (a real intermediate upgrade) composes with everything;
+      // summarization is preview (won't run) so it doesn't change the trace. 070 —
+      // hybrid IS real (vector-only) and keys its own captured fixture (below).
       const rerank = enabled.includes("rerank");
+      const hybrid = retrieval === "vector" && enabled.includes("hybrid");
       // DeepAgents (`runtime`) composes with the retrieval strategy + reranker exactly
       // like the live backend — each combination keys its OWN captured trace (agent.plan
       // + multi-search; with rerank → rag.rerank; with ragless → PageIndex). This is why
@@ -211,6 +213,10 @@ function readScenario(): string {
         return rerank ? "deepagents-rerank" : "deepagents";
       }
       if (retrieval === "ragless") return "ragless";
+      // 070-hybrid-search — hybrid composes with rerank; each combo keys its own fixture.
+      // (deepagents + hybrid has no captured fixture yet — deferred; it falls to the
+      // deepagents branch above, so a demo visitor stays on a real deepagents trace.)
+      if (hybrid) return rerank ? "hybrid-rerank" : "hybrid";
       if (rerank) return "intermediate";
     }
   } catch {

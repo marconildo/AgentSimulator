@@ -11,13 +11,15 @@ are real runs of this pipeline (constitution §3), never hand-authored.
 field from `ChatRequest`; the rung behaviours are now explicit per-feature inputs.
 So each demo "scenario" maps to the concrete request flags that reproduce it:
 `intermediate` → `rerank: true` (cross-encoder reranker), `ragless` → `ragless: true`
-(reasoning-based PageIndex retrieval).
+(reasoning-based PageIndex retrieval), `hybrid` → `hybrid: true` (BM25 + vector RRF
+fusion, 070), `hybrid-rerank` → `{hybrid, rerank}` (the compose path).
 
 Usage:
     # 1. start the backend with a real OPENAI_API_KEY (and a built Chroma index):
     cd backend && source .venv/bin/activate && uvicorn app.main:app --port 8011
-    # 2. in another shell:
+    # 2. in another shell — all scenarios, or a subset:
     python scripts/capture_demo_traces.py --base http://localhost:8011
+    python scripts/capture_demo_traces.py --base http://localhost:8011 --scenarios hybrid,hybrid-rerank
 
 Re-run whenever the event protocol (§1) changes.
 """
@@ -50,6 +52,10 @@ SCENARIOS: dict[str, dict] = {
     "deepagents": {"runtime": "deepagents"},
     "deepagents-rerank": {"runtime": "deepagents", "rerank": True},
     "deepagents-ragless": {"runtime": "deepagents", "ragless": True},
+    # 070-hybrid-search — the BM25 + vector RRF fusion sub-stage, and its compose-with-
+    # rerank path (the two combos the Build popover produces with hybrid on, ReAct runtime).
+    "hybrid": {"hybrid": True},
+    "hybrid-rerank": {"hybrid": True, "rerank": True},
 }
 
 
@@ -72,22 +78,35 @@ def _post(base: str, path: str, body: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8011")
+    # Comma-separated subset of SCENARIOS to (re)capture; default = all. Lets a single
+    # new feature (e.g. 070 hybrid) be captured without re-running every existing fixture.
+    ap.add_argument("--scenarios", default="")
+    # Skip re-snapshotting /api/config when only topping up a subset of scenarios.
+    ap.add_argument("--no-config", action="store_true")
     args = ap.parse_args()
 
+    wanted = [s.strip() for s in args.scenarios.split(",") if s.strip()] or list(SCENARIOS)
+    unknown = [s for s in wanted if s not in SCENARIOS]
+    if unknown:
+        raise SystemExit(f"unknown scenarios: {unknown}; known: {list(SCENARIOS)}")
+
     OUT.mkdir(parents=True, exist_ok=True)
-    json.dump(_get(args.base, "/api/config"), (OUT / "_config.json").open("w"), ensure_ascii=False)
-    print("saved _config.json")
+    if not args.no_config:
+        json.dump(_get(args.base, "/api/config"), (OUT / "_config.json").open("w"), ensure_ascii=False)
+        print("saved _config.json")
 
     for qid, langs in QUESTIONS:
         for lang, text in langs.items():
-            for scenario, flags in SCENARIOS.items():
+            for scenario in wanted:
+                flags = SCENARIOS[scenario]
                 body = {"message": text, "mode": "batch", **flags}
                 t0 = time.time()
                 data = _post(args.base, "/api/chat", body)
                 name = f"{qid}.{scenario}.{lang}.json"
                 json.dump(data, (OUT / name).open("w"), ensure_ascii=False)
                 stages = {e["stage"] for e in data["events"]}
-                print(f"{name:26} events={len(data['events']):3} "
+                print(f"{name:30} events={len(data['events']):3} "
+                      f"hybrid={'rag.hybrid' in stages} "
                       f"rerank={'rag.rerank' in stages} "
                       f"ragless={'pageindex.select' in stages} {round(time.time() - t0, 1)}s")
 
