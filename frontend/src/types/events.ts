@@ -164,6 +164,9 @@ export interface PlanData {
   count?: number;
   model?: string;
   query?: string;
+  // 067: the runtime's closing reconciliation (mark remaining todos completed once the
+  // answer is produced). Folded into the last plan step, not rendered as a new block.
+  finalized?: boolean;
 }
 
 // On `agent.fs.write` / `agent.fs.read` ENDs: one virtual-FS operation.

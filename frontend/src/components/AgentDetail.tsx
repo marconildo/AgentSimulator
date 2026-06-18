@@ -20,7 +20,12 @@ import {
   type Section,
 } from "../lib/turnDiff";
 import { electedToolCalls } from "../lib/usage";
-import { deriveTodos, deriveDelegations, deriveVfs, hasDeepAgents } from "../lib/deepagents";
+import {
+  deriveDeepAgentsSteps,
+  deriveVfs,
+  hasDeepAgents,
+  type DeepAgentsStep,
+} from "../lib/deepagents";
 import type { TodoItem } from "../types/events";
 import { useChat } from "../store/useChat";
 import { useSimulator } from "../store/useSimulator";
@@ -177,9 +182,10 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
   // researcher + virtual file system), projected from the trace events. Empty on
   // the Simple rung, so the DeepAgents panel only shows when the preamble ran.
   const showDeepAgents = useMemo(() => hasDeepAgents(visible), [visible]);
-  const todos = useMemo(() => deriveTodos(visible), [visible]);
+  // 067-deepagents-step-trail: the full chronological trail of DeepAgents actions
+  // (plan / file write / file read / delegate), not just the final plan snapshot.
+  const steps = useMemo(() => deriveDeepAgentsSteps(visible), [visible]);
   const vfs = useMemo(() => deriveVfs(visible), [visible]);
-  const delegations = useMemo(() => deriveDelegations(visible), [visible]);
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-[color-mix(in_srgb,var(--color-base)_94%,transparent)] backdrop-blur-sm">
@@ -254,47 +260,31 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
               shown when the preamble actually ran (the Simple rung has none). */}
           {showDeepAgents && (
             <Panel title={a.plan} accent="var(--color-violet)" hint={a.planHint}>
-              {todos.length === 0 ? (
-                <p className="text-[11px] italic text-[var(--color-label)]">{a.planEmpty}</p>
-              ) : (
-                <ol className="space-y-1">
-                  {todos.map((todo, idx) => (
-                    <li
-                      key={idx}
-                      className="flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]"
-                    >
-                      <TodoStatus status={todo.status} label={a.todoStatus[todo.status]} />
-                      <span
-                        className={
-                          todo.status === "completed"
-                            ? "text-[var(--color-label)] line-through"
-                            : "text-[var(--color-ink)]"
-                        }
-                      >
-                        {todo.content}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-
-              {delegations.map((d, idx) => (
-                <Labeled key={idx} label={a.delegated}>
-                  <div title={a.delegateHint} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
-                    <div className="font-mono text-[11px] text-[var(--color-ink)]">
-                      {d.subagent} · {d.subtask}
-                    </div>
-                    {d.steps.length > 0 && (
-                      <div className="mt-0.5 font-mono text-[10px] text-[var(--color-sky)]">
-                        {a.subagentUsed}: {d.steps.join(" → ")}
-                      </div>
+              {/* 067 — the full step trail, in run order, instead of only the final
+                  plan snapshot: each plan revision, file op and delegation as its
+                  own row, so the panel shows what DeepAgents actually did. */}
+              <Labeled label={a.steps}>
+                {steps.length === 0 ? (
+                  <p className="text-[11px] italic text-[var(--color-label)]" title={a.stepsHint}>
+                    {a.planEmpty}
+                  </p>
+                ) : (
+                  <>
+                    <ol className="space-y-1" title={a.stepsHint}>
+                      {steps.map((step, idx) => (
+                        <StepRow key={idx} step={step} a={a} />
+                      ))}
+                    </ol>
+                    {/* 067 (AC6) — make the absence of a sub-agent legible, not just
+                        an inferred missing row. */}
+                    {!steps.some((s) => s.kind === "delegate") && (
+                      <p className="mt-1 text-[10px] italic text-[var(--color-muted)]">
+                        ℹ {a.noSubagent}
+                      </p>
                     )}
-                    {d.result && (
-                      <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">{d.result}</div>
-                    )}
-                  </div>
-                </Labeled>
-              ))}
+                  </>
+                )}
+              </Labeled>
 
               <Labeled label={a.vfs}>
                 {vfs.length === 0 ? (
@@ -316,11 +306,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                             <span>· {a.approxTokens(Math.max(1, Math.round(f.bytes / 4)))}</span>
                           </span>
                         </div>
-                        {f.content && (
-                          <pre className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--color-muted)]">
-                            {truncate(f.content, 280)}
-                          </pre>
-                        )}
+                        {f.content && <VfsContent content={f.content} a={a} />}
                       </div>
                     ))}
                   </div>
@@ -354,9 +340,7 @@ export function AgentDetail({ view, onClose }: AgentDetailProps) {
                       : (c.result ?? "");
                     return (
                       <div key={idx} className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
-                        <div className="font-mono text-[11px] text-[var(--color-ink)]">
-                          {c.tool}({JSON.stringify(c.args)})
-                        </div>
+                        <ToolCallArgs tool={c.tool} args={c.args} a={a} />
                         <div className="font-mono text-[11px] text-[var(--color-ok-soft)]">→ {display}</div>
                         {isAbstain && (
                           <div
@@ -807,6 +791,79 @@ function TodoStatus({ status, label }: { status: TodoItem["status"]; label: stri
   );
 }
 
+// 067-deepagents-step-trail — one row in the chronological DeepAgents trail. A plan
+// step expands its own todo snapshot; a file step shows the path; a delegation shows
+// the sub-agent hand-off, its result and its tool trail.
+function StepRow({ step, a }: { step: DeepAgentsStep; a: ReturnType<typeof useT>["agentDetail"] }) {
+  if (step.kind === "plan") {
+    const todos = step.todos ?? [];
+    return (
+      <li className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1">
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span className="text-[var(--color-violet)]">◐</span>
+          <span className="font-medium text-[var(--color-ink)]">{a.plan}</span>
+          <span className="text-[var(--color-muted)]">· {todos.length} todos</span>
+        </div>
+        {todos.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {todos.map((todo, i) => (
+              <li key={i} className="flex items-center gap-2 text-[11px]">
+                <TodoStatus status={todo.status} label={a.todoStatus[todo.status]} />
+                <span
+                  className={
+                    todo.status === "completed"
+                      ? "text-[var(--color-label)] line-through"
+                      : "text-[var(--color-ink)]"
+                  }
+                >
+                  {todo.content}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  if (step.kind === "delegate") {
+    return (
+      <li
+        title={a.delegateHint}
+        className="rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1"
+      >
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span>🤝</span>
+          <span className="font-medium text-[var(--color-ink)]">{a.delegated}</span>
+          <span className="font-mono text-[var(--color-muted)]">· {step.subagent}</span>
+        </div>
+        {step.subtask && (
+          <div className="mt-0.5 text-[11px] text-[var(--color-text-soft)]">{step.subtask}</div>
+        )}
+        {step.steps && step.steps.length > 0 && (
+          <div className="mt-0.5 font-mono text-[10px] text-[var(--color-sky)]">
+            {a.subagentUsed}: {step.steps.join(" → ")}
+          </div>
+        )}
+        {step.result && (
+          <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">{step.result}</div>
+        )}
+      </li>
+    );
+  }
+
+  // fs-write / fs-read — a virtual file operation.
+  return (
+    <li className="flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[11px]">
+      <span>📄</span>
+      <span className="text-[var(--color-text-soft)]">
+        {step.kind === "fs-write" ? a.wroteFile : a.readFile}
+      </span>
+      <span className="font-mono text-[var(--color-ink)]">{step.path}</span>
+    </li>
+  );
+}
+
 function KV({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between py-0.5 text-[12px]">
@@ -835,4 +892,72 @@ function Mono({ children }: { children: ReactNode }) {
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+// 067-deepagents-step-trail (AC7) — render a tool call's `tool(args)` line, truncating
+// long serialized args (e.g. a write_file with a big `content`) behind a Read more /
+// Show less toggle so one long call no longer scrolls the panel for screens.
+const ARGS_LIMIT = 140;
+
+function ToolCallArgs({
+  tool,
+  args,
+  a,
+}: {
+  tool: string;
+  args: unknown;
+  a: ReturnType<typeof useT>["agentDetail"];
+}) {
+  const [open, setOpen] = useState(false);
+  const json = JSON.stringify(args);
+  const long = json.length > ARGS_LIMIT;
+  const shown = !long || open ? json : `${json.slice(0, ARGS_LIMIT)}…`;
+  return (
+    <div className="break-words font-mono text-[11px] text-[var(--color-ink)]">
+      {tool}({shown})
+      {long && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="ml-1 font-sans text-[10px] font-medium text-[var(--color-sky)] hover:underline"
+        >
+          {open ? a.readLess : a.readMore}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// 067 — a virtual-FS file's content, collapsed to a short preview by default with a
+// Read more / Show less toggle that reveals the full content (in a scroll box). Keeps
+// the VFS section compact when a file holds screens of synthesized notes.
+const VFS_PREVIEW_LIMIT = 200;
+
+function VfsContent({
+  content,
+  a,
+}: {
+  content: string;
+  a: ReturnType<typeof useT>["agentDetail"];
+}) {
+  const [open, setOpen] = useState(false);
+  const long = content.length > VFS_PREVIEW_LIMIT;
+  return (
+    <>
+      <pre
+        className={`mt-0.5 whitespace-pre-wrap font-mono text-[10px] text-[var(--color-muted)] ${
+          open ? "max-h-48 overflow-y-auto" : ""
+        }`}
+      >
+        {!long || open ? content : `${content.slice(0, VFS_PREVIEW_LIMIT)}…`}
+      </pre>
+      {long && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="font-sans text-[10px] font-medium text-[var(--color-sky)] hover:underline"
+        >
+          {open ? a.readLess : a.readMore}
+        </button>
+      )}
+    </>
+  );
 }

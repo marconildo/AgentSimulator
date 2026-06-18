@@ -62,6 +62,9 @@ export interface Strings {
     agent: string;
     sources: string;
     fromDoc: string;
+    // Per-search subheader in "Sources used" when the agent searched the KB more than
+    // once (the chunks are grouped by the search that retrieved them).
+    searchGroup: (n: number, query: string) => string;
     emptyThread: string;
     messages: (n: number) => string;
     uploadPdf: string;
@@ -199,6 +202,10 @@ export interface Strings {
     tool: string;
     args: string;
     result: string;
+    // 067 — DeepAgents local tools (write_todos/write_file/…) that run in-process,
+    // not over the MCP transport (so they carry no JSON-RPC frame).
+    localToolCalls: string;
+    localToolCallsHint: string;
     // 017-failure-injection — label for an injected (simulated) failure block.
     simulatedError: string;
     // 051-failure-treatments — labels for the resilience treatment the simulator
@@ -573,6 +580,14 @@ export interface Strings {
     plan: string;
     planHint: string;
     planEmpty: string;
+    // 067-deepagents-step-trail — the chronological trail of every DeepAgents action.
+    steps: string;
+    stepsHint: string;
+    wroteFile: string;
+    readFile: string;
+    noSubagent: string;
+    readMore: string;
+    readLess: string;
     todoStatus: { pending: string; in_progress: string; completed: string };
     delegated: string;
     delegateHint: string;
@@ -582,6 +597,24 @@ export interface Strings {
     vfsEmpty: string;
     wrote: string;
     read: string;
+  };
+  // 068-llm-rounds-history — the LLM drill-in ("open full view" on the LLM node):
+  // every model call of the turn, each with its full prompt, latency and tokens.
+  llmDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    noCalls: string;
+    reasoningRound: (n: number) => string;
+    generation: string;
+    decisionCalledTools: string;
+    decisionAnswered: string;
+    latency: string;
+    promptFor: string; // section heading for the round's assembled prompt
+    // The model's OUTPUT for the round: the tool call(s) it emitted, or — when it
+    // decided to answer — a note pointing at the generation call.
+    response: string;
+    decidedToAnswer: string;
   };
   // 054-rag-block-expansion — the RAG pipeline drill-in (Vector DB "open full view").
   ragDetail: {
@@ -850,6 +883,7 @@ const en: Strings = {
     agent: "Agent",
     sources: "Sources used",
     fromDoc: "your PDF",
+    searchGroup: (n, query) => `Search ${n}: “${query}”`,
     emptyThread: "Send a message to start this conversation.",
     messages: (n) => `${n} message${n === 1 ? "" : "s"}`,
     uploadPdf: "Upload PDF",
@@ -974,6 +1008,9 @@ const en: Strings = {
     tool: "tool",
     args: "args",
     result: "result",
+    localToolCalls: "Local tool calls (DeepAgents)",
+    localToolCallsHint:
+      "In-process agent tools (todo list, scratchpad, sub-agents) — not over the MCP transport, so no JSON-RPC frame. Animated in detail at the Agent node.",
     simulatedError: "⚠️ Simulated failure (injected)",
     attempt: "Attempt",
     backoff: "Backoff",
@@ -1438,6 +1475,13 @@ const en: Strings = {
     plan: "Plan",
     planHint: "On the Intermediate rung the agent maintains a todo list (write_todos), marking items as it works.",
     planEmpty: "No plan this run — the Simple rung runs the bounded ReAct loop directly.",
+    steps: "Steps",
+    stepsHint: "every DeepAgents action this run, in order",
+    wroteFile: "wrote file",
+    readFile: "read file",
+    noSubagent: "no sub-agent delegated this run",
+    readMore: "Read more",
+    readLess: "Show less",
     todoStatus: { pending: "pending", in_progress: "in progress", completed: "completed" },
     delegated: "Delegated to sub-agent",
     delegateHint: "A self-contained sub-task handed to a sub-agent that runs with its own isolated context and tools, returning only its result.",
@@ -1569,6 +1613,20 @@ const en: Strings = {
       title: "Skills",
       sharedNote: "Skills are shared across all conversations.",
     },
+  },
+  llmDetail: {
+    title: "LLM · calls this turn",
+    subtitle: "Every model call of this turn — prompt, latency and tokens.",
+    back: "Overview",
+    noCalls: "No LLM calls yet — step forward to watch the rounds appear.",
+    reasoningRound: (n) => `Reasoning round ${n}`,
+    generation: "Answer generation",
+    decisionCalledTools: "called tools",
+    decisionAnswered: "answered",
+    latency: "latency",
+    promptFor: "Assembled prompt",
+    response: "LLM response",
+    decidedToAnswer: "Decided to answer → see the Answer generation call below.",
   },
   ragDetail: {
     title: "RAG Pipeline",
@@ -1711,6 +1769,7 @@ const pt: Strings = {
     agent: "Agente",
     sources: "Fontes usadas",
     fromDoc: "seu PDF",
+    searchGroup: (n, query) => `Busca ${n}: “${query}”`,
     emptyThread: "Envie uma mensagem para começar esta conversa.",
     messages: (n) => `${n} mensage${n === 1 ? "m" : "ns"}`,
     uploadPdf: "Enviar PDF",
@@ -1836,6 +1895,9 @@ const pt: Strings = {
     tool: "ferramenta",
     args: "args",
     result: "resultado",
+    localToolCalls: "Chamadas de ferramentas locais (DeepAgents)",
+    localToolCallsHint:
+      "Ferramentas do agente em processo (lista de tarefas, rascunho, subagentes) — não passam pelo transporte MCP, então não têm frame JSON-RPC. Detalhadas no nó do Agente.",
     simulatedError: "⚠️ Falha simulada (injetada)",
     attempt: "Tentativa",
     backoff: "Espera (backoff)",
@@ -2303,6 +2365,13 @@ const pt: Strings = {
     plan: "Plano",
     planHint: "No degrau Intermediário o agente mantém uma lista de todos (write_todos), marcando os itens conforme avança.",
     planEmpty: "Sem plano nesta execução — o degrau Simples roda o loop ReAct limitado direto.",
+    steps: "Etapas",
+    stepsHint: "cada ação do DeepAgents nesta execução, em ordem",
+    wroteFile: "escreveu arquivo",
+    readFile: "leu arquivo",
+    noSubagent: "nenhum subagente nesta execução",
+    readMore: "Leia mais",
+    readLess: "Mostrar menos",
     todoStatus: { pending: "pendente", in_progress: "em andamento", completed: "concluído" },
     delegated: "Delegado a subagente",
     delegateHint: "Uma subtarefa autocontida entregue a um subagente que roda com contexto e ferramentas próprios isolados, devolvendo só o resultado.",
@@ -2435,6 +2504,20 @@ const pt: Strings = {
       title: "Skills",
       sharedNote: "Skills são compartilhadas entre todas as conversas.",
     },
+  },
+  llmDetail: {
+    title: "LLM · chamadas deste turno",
+    subtitle: "Cada chamada ao modelo neste turno — prompt, latência e tokens.",
+    back: "Visão geral",
+    noCalls: "Nenhuma chamada ao LLM ainda — avance para ver as rodadas surgirem.",
+    reasoningRound: (n) => `Rodada de raciocínio ${n}`,
+    generation: "Geração da resposta",
+    decisionCalledTools: "chamou ferramentas",
+    decisionAnswered: "respondeu",
+    latency: "latência",
+    promptFor: "Prompt montado",
+    response: "Resposta do LLM",
+    decidedToAnswer: "Decidiu responder → veja a chamada de Geração da resposta abaixo.",
   },
   ragDetail: {
     title: "Pipeline RAG",

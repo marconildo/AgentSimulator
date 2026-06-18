@@ -21,6 +21,7 @@ import {
 } from "./components/icons";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { LanguageToggle } from "./components/LanguageToggle";
+import { LLMDetail } from "./components/LLMDetail";
 import { MobileShell } from "./components/MobileShell";
 import { ScenarioBuilder } from "./components/ScenarioBuilder";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -209,6 +210,7 @@ export default function App() {
         {detail === "pageindex" && <PageIndexPipelinePanel />}
       </ReactFlowProvider>
       {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
+      {detail === "llm" && <LLMDetail onClose={closeDetail} />}
     </>
   );
 

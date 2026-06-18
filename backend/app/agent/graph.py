@@ -502,6 +502,32 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     }
 
 
+async def _finalize_plan(state: Mapping[str, Any], emitter: TraceEmitter) -> dict[str, Any]:
+    """Close out a DeepAgents plan once the final answer is produced (067).
+
+    The lead agent typically marks its synthesis todo ``in_progress`` and then answers
+    directly — synthesising the answer *is* that step — without a final ``write_todos``
+    to flip it to ``completed``, which leaves the plan looking unfinished. Now that the
+    answer has been delivered, the runtime reconciles the plan: every remaining todo is
+    marked ``completed`` and a closing ``agent.plan`` is emitted, so the plan honestly
+    reflects that all its work is done. No-op when there is no plan (the Simple/ReAct
+    runtime never plans) or the plan is already fully completed (nothing to reconcile).
+    """
+    plan = [dict(t) for t in (state.get("plan") or [])]
+    if not plan or all(t.get("status") == "completed" for t in plan):
+        return {}
+    completed = [{"content": t.get("content", ""), "status": "completed"} for t in plan]
+    async with emitter.stage(Stage.AGENT_PLAN, "Finalizing the plan") as rec:
+        rec.data = {
+            "todos": completed,
+            "steps": [t["content"] for t in completed],
+            "count": len(completed),
+            "finalized": True,
+        }
+        rec.metrics["steps"] = float(len(completed))
+    return {"plan": completed}
+
+
 async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     emitter, provider, _registry = _deps(config)
 
@@ -549,8 +575,12 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
         if provider.last_stream_usage:
             rec.metrics.update(usage_metrics(provider.model_name, provider.last_stream_usage))
 
+    # 067: on a DeepAgents run, reconcile the plan to all-completed now that the answer
+    # is written, so it doesn't read as unfinished. No-op for the Simple/ReAct runtime.
+    plan_update = await _finalize_plan(state, emitter)
+
     # Close the canonical thread with the final assistant message.
-    return {"answer": answer, "messages": [AIMessage(content=answer)]}
+    return {"answer": answer, "messages": [AIMessage(content=answer)], **plan_update}
 
 
 async def respond_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:

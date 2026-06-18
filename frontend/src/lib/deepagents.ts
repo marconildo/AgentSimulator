@@ -110,3 +110,82 @@ export function deriveDelegations(events: TraceEvent[]): Delegation[] {
 export function hasDeepAgents(events: TraceEvent[]): boolean {
   return events.some((e) => isEnd(e, "agent.plan"));
 }
+
+/** One chronological step in the DeepAgents trail (067-deepagents-step-trail). */
+export type DeepAgentsStepKind = "plan" | "fs-write" | "fs-read" | "delegate";
+
+export interface DeepAgentsStep {
+  kind: DeepAgentsStepKind;
+  todos?: TodoItem[]; // `plan` — this step's own todo snapshot
+  path?: string; // `fs-write` / `fs-read` — the file path
+  subagent?: string; // `delegate` — the sub-agent type
+  subtask?: string;
+  result?: string;
+  steps?: string[]; // `delegate` — the sub-agent's tool trail
+}
+
+/** Normalize one `agent.plan` END's payload into its own `{content, status}[]` snapshot. */
+function planTodos(data: Partial<PlanData>): TodoItem[] {
+  if (Array.isArray(data.todos) && data.todos.length) {
+    return data.todos.map((t) => ({
+      content: String(t.content ?? ""),
+      status: t.status ?? "pending",
+    }));
+  }
+  return Array.isArray(data.steps)
+    ? data.steps.map((s) => ({ content: String(s), status: "pending" as const }))
+    : [];
+}
+
+/**
+ * The full chronological trail of DeepAgents actions this run — one step per
+ * `agent.plan` / `agent.fs.write` / `agent.fs.read` / `agent.delegate` END, in order.
+ * Unlike `deriveTodos` (which keeps only the *last* plan), every step is preserved so
+ * the drill-in can show what the runtime actually did, not just its final plan snapshot.
+ * `[]` on the Simple rung (no DeepAgents stages).
+ */
+export function deriveDeepAgentsSteps(events: TraceEvent[]): DeepAgentsStep[] {
+  const out: DeepAgentsStep[] = [];
+  // The plan is ONE evolving artifact — the agent calls write_todos repeatedly to update
+  // statuses. Rendering one block per call duplicates a near-identical list. So keep a
+  // single `plan` step (at the first plan's position) and update its todos in place to the
+  // latest snapshot, including the runtime's closing reconciliation (067). File/delegate
+  // steps still each render in order (those are distinct actions, not one evolving thing).
+  let planStep: DeepAgentsStep | null = null;
+  for (const e of events) {
+    if (e.phase !== "end") continue;
+    switch (e.stage) {
+      case "agent.plan": {
+        const todos = planTodos(e.data as Partial<PlanData>);
+        if (planStep) {
+          planStep.todos = todos;
+        } else {
+          planStep = { kind: "plan", todos };
+          out.push(planStep);
+        }
+        break;
+      }
+      case "agent.fs.write":
+      case "agent.fs.read": {
+        const d = e.data as Partial<VfsOpData>;
+        out.push({
+          kind: e.stage === "agent.fs.write" ? "fs-write" : "fs-read",
+          path: String(d.path ?? ""),
+        });
+        break;
+      }
+      case "agent.delegate": {
+        const d = e.data as Partial<DelegateData>;
+        out.push({
+          kind: "delegate",
+          subagent: String(d.subagent ?? ""),
+          subtask: String(d.subtask ?? ""),
+          result: String(d.result ?? d.digest ?? ""),
+          steps: Array.isArray(d.steps) ? d.steps.map(String) : [],
+        });
+        break;
+      }
+    }
+  }
+  return out;
+}

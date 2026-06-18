@@ -61,6 +61,11 @@ export interface ChatChunk {
   title?: string;
   score: number;
   uploaded?: boolean;
+  // The KB search that retrieved this chunk (the agent may search more than once):
+  // `query` is that search's text, `search` its 1-based index. "Sources used" groups
+  // by `search` so a multi-search turn shows every search's hits, not just the last.
+  query?: string;
+  search?: number;
 }
 
 export interface ChatMessage {

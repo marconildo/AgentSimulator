@@ -775,29 +775,59 @@ function SkillsBadge({ skills, t }: { skills: string[]; t: Strings }) {
   );
 }
 
+function ChunkRow({ c, t }: { c: ChatChunk; t: Strings }) {
+  return (
+    <div className="rounded-md bg-[var(--color-panel)] p-1.5">
+      <div className="flex items-center justify-between gap-2 text-[10px]">
+        <span className="truncate font-mono text-[var(--color-text-soft)]">{c.source}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {c.uploaded && (
+            <span className="rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase text-[var(--color-ok-soft)]">
+              {t.chat.fromDoc}
+            </span>
+          )}
+          <span className="font-mono text-[var(--color-ok-soft)]">{c.score.toFixed(2)}</span>
+        </div>
+      </div>
+      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[var(--color-muted)]">
+        {c.text}
+      </p>
+    </div>
+  );
+}
+
 function Sources({ chunks, t }: { chunks: ChatChunk[]; t: Strings }) {
+  // Group by the search that retrieved each chunk. The agent may search the KB more than
+  // once; grouping shows every search's hits (not just the last) with each query's own
+  // scores. Subheaders appear only when there really was more than one search (older
+  // traces / RAGLESS carry no `search` → one flat group, unchanged look).
+  const groups = new Map<number, { query?: string; items: ChatChunk[] }>();
+  for (const c of chunks) {
+    const key = c.search ?? 1;
+    const g = groups.get(key) ?? { query: c.query, items: [] };
+    g.items.push(c);
+    groups.set(key, g);
+  }
+  const ordered = [...groups.entries()].sort((a, b) => a[0] - b[0]);
+  const grouped = ordered.length > 1;
+
   return (
     <details className="mt-2 w-full rounded-xl border border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-panel)_60%,transparent)] p-2">
       <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
         {t.chat.sources} ({chunks.length})
       </summary>
-      <div className="mt-1.5 space-y-1.5">
-        {chunks.map((c, idx) => (
-          <div key={idx} className="rounded-md bg-[var(--color-panel)] p-1.5">
-            <div className="flex items-center justify-between gap-2 text-[10px]">
-              <span className="truncate font-mono text-[var(--color-text-soft)]">{c.source}</span>
-              <div className="flex shrink-0 items-center gap-1">
-                {c.uploaded && (
-                  <span className="rounded-full bg-[color-mix(in_srgb,var(--color-ok)_22%,transparent)] px-1.5 py-px text-[9px] font-semibold uppercase text-[var(--color-ok-soft)]">
-                    {t.chat.fromDoc}
-                  </span>
-                )}
-                <span className="font-mono text-[var(--color-ok-soft)]">{c.score.toFixed(2)}</span>
+      <div className="mt-1.5 space-y-2">
+        {ordered.map(([key, g]) => (
+          <div key={key} className="space-y-1.5">
+            {grouped && (
+              <div className="text-[10px] font-medium text-[var(--color-text-soft)]">
+                {t.chat.searchGroup(key, g.query ?? "—")}{" "}
+                <span className="text-[var(--color-label)]">({g.items.length})</span>
               </div>
-            </div>
-            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[var(--color-muted)]">
-              {c.text}
-            </p>
+            )}
+            {g.items.map((c, idx) => (
+              <ChunkRow key={idx} c={c} t={t} />
+            ))}
           </div>
         ))}
       </div>

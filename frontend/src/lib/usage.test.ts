@@ -254,6 +254,29 @@ describe("electedToolCalls (026 follow-up — retrieval is a tool too)", () => {
     expect(calls[0].retrievalSummary?.count).toBe(0);
   });
 
+  it("does not let a DeepAgents tool (no mcp.call) steal a genuine MCP call's result", () => {
+    // DeepAgents mode: write_todos / write_file execute via agent.* stages (no mcp.call),
+    // while load_skill is a genuine MCP call. Pairing by order would hand write_todos the
+    // load_skill result; pairing by tool name keeps each call's own observation.
+    seq = 0;
+    const events: TraceEvent[] = [
+      ev("agent.think", "end", {
+        decision: "call_tools",
+        tool_calls: [
+          { name: "write_todos", args: { todos: ["a"] } },
+          { name: "load_skill", args: { name: "explicar" } },
+        ],
+      }),
+      // only load_skill rides the MCP transport; write_todos emitted agent.plan.
+      ev("agent.plan", "end", { todos: [{ content: "a", status: "pending" }], count: 1 }),
+      ev("mcp.call", "end", { tool: "load_skill", args: { name: "explicar" }, result: "SKILL BODY" }),
+    ];
+    const calls = electedToolCalls(events);
+    expect(calls.map((c) => c.tool)).toEqual(["write_todos", "load_skill"]);
+    expect(calls[0].result).toBeUndefined(); // write_todos has no mcp.call observation
+    expect(calls[1].result).toBe("SKILL BODY"); // load_skill keeps its own result
+  });
+
   it("returns an empty list for a trace with no agent.think.tool_calls", () => {
     seq = 0;
     expect(electedToolCalls([ev("frontend", "end"), ev("backend", "end")])).toEqual([]);

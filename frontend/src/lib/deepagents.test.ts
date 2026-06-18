@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Phase, Stage, TraceEvent } from "../types/events";
 import {
+  deriveDeepAgentsSteps,
   derivePlan,
   deriveTodos,
   deriveDelegations,
@@ -121,5 +122,119 @@ describe("hasDeepAgents", () => {
   it("is true on a DeepAgents run and false on Simple", () => {
     expect(hasDeepAgents(deepRun())).toBe(true);
     expect(hasDeepAgents(simpleRun())).toBe(false);
+  });
+});
+
+describe("deriveDeepAgentsSteps", () => {
+  // AC1 — every DeepAgents action this run, in chronological order, each tagged kind.
+  it("returns the five steps in run order with the right kinds", () => {
+    const steps = deriveDeepAgentsSteps(deepRun());
+    expect(steps.map((s) => s.kind)).toEqual([
+      "plan",
+      "fs-write",
+      "delegate",
+      "fs-write",
+      "fs-read",
+    ]);
+  });
+
+  // AC2 — repeated write_todos collapse into ONE plan step showing the LATEST snapshot
+  // (the plan is one evolving artifact, not a new block per revision).
+  it("collapses repeated agent.plan events into a single plan step (latest snapshot)", () => {
+    seq = 0;
+    const evs: TraceEvent[] = [
+      ev("agent.plan", "end", {
+        todos: [
+          { content: "Search the KB", status: "in_progress" },
+          { content: "Answer", status: "pending" },
+        ],
+        count: 2,
+      }),
+      ev("agent.plan", "end", {
+        todos: [
+          { content: "Search the KB", status: "completed" },
+          { content: "Answer", status: "completed" },
+        ],
+        count: 2,
+      }),
+    ];
+    const steps = deriveDeepAgentsSteps(evs);
+    expect(steps.filter((s) => s.kind === "plan")).toHaveLength(1);
+    // the single plan step shows the latest (all-completed) snapshot.
+    expect(steps[0].todos).toEqual([
+      { content: "Search the KB", status: "completed" },
+      { content: "Answer", status: "completed" },
+    ]);
+  });
+
+  // AC3 — file steps carry the path; the delegate step carries the hand-off tuple.
+  it("carries the path on fs steps and the hand-off on the delegate step", () => {
+    const steps = deriveDeepAgentsSteps(deepRun());
+    const writes = steps.filter((s) => s.kind === "fs-write");
+    expect(writes.map((s) => s.path)).toEqual(["plan.md", "research.md"]);
+    expect(steps.find((s) => s.kind === "fs-read")?.path).toBe("research.md");
+    const del = steps.find((s) => s.kind === "delegate");
+    expect(del?.subagent).toBe("researcher");
+    expect(del?.subtask).toBe("Search the KB");
+    expect(del?.result).toContain("Chunk size");
+    expect(del?.steps).toEqual(["search_knowledge_base"]);
+  });
+
+  // AC4 — Simple rung has no DeepAgents stages → empty trail (panel stays hidden).
+  it("returns [] on a Simple-rung run", () => {
+    expect(deriveDeepAgentsSteps(simpleRun())).toEqual([]);
+  });
+
+  // AC8 — many plan revisions interleaved with file ops still yield exactly ONE plan step
+  // (the latest snapshot), positioned at the first plan; file steps render in order.
+  it("keeps a single plan step across revisions interleaved with file ops", () => {
+    seq = 0;
+    const evs: TraceEvent[] = [
+      ev("agent.plan", "end", {
+        todos: [
+          { content: "Search", status: "pending" },
+          { content: "Synthesize", status: "pending" },
+        ],
+        count: 2,
+      }),
+      ev("agent.fs.write", "end", { path: "notes.md", content: "x", bytes: 1 }),
+      ev("agent.plan", "end", {
+        todos: [
+          { content: "Search", status: "completed" },
+          { content: "Synthesize", status: "in_progress" },
+        ],
+        count: 2,
+      }),
+      ev("agent.plan", "end", {
+        finalized: true,
+        todos: [
+          { content: "Search", status: "completed" },
+          { content: "Synthesize", status: "completed" },
+        ],
+        count: 2,
+      }),
+    ];
+    const steps = deriveDeepAgentsSteps(evs);
+    // exactly one plan step (first position), then the file write.
+    expect(steps.map((s) => s.kind)).toEqual(["plan", "fs-write"]);
+    expect(steps[0].todos).toEqual([
+      { content: "Search", status: "completed" },
+      { content: "Synthesize", status: "completed" },
+    ]);
+  });
+
+  // AC6 — a DeepAgents run that planned + used files but never delegated yields a
+  // trail with no `delegate` step (the panel renders the explicit "no sub-agent" line).
+  it("has no delegate step when the run did not delegate", () => {
+    seq = 0;
+    const evs: TraceEvent[] = [
+      ev("agent.plan", "end", { todos: [{ content: "Research RAG", status: "pending" }], count: 1 }),
+      ev("agent.fs.write", "end", { path: "research.md", content: "x", bytes: 1 }),
+      ev("agent.fs.read", "end", { path: "research.md", content: "x", found: true }),
+    ];
+    const steps = deriveDeepAgentsSteps(evs);
+    expect(steps.some((s) => s.kind === "delegate")).toBe(false);
+    // sanity: the run still produced the plan + file steps.
+    expect(steps.map((s) => s.kind)).toEqual(["plan", "fs-write", "fs-read"]);
   });
 });

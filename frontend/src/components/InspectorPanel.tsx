@@ -18,6 +18,7 @@ import {
   type StationMeta,
 } from "../lib/stations";
 import { executionTree } from "../lib/executionTree";
+import { electedToolCalls } from "../lib/usage";
 import { formatLatency } from "../lib/time";
 import { useSimulator } from "../store/useSimulator";
 import type {
@@ -127,7 +128,7 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
 
       <WhySection meta={meta} i={i} />
       <TechSection meta={meta} lang={lang} i={i} />
-      {renderDetail(selected, rt.events, i, view.usage)}
+      {renderDetail(selected, rt.events, i, view.usage, events)}
     </div>
   );
 }
@@ -221,7 +222,16 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
   );
 }
 
-function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTotals) {
+// `events` is the station's filtered slice; `allEvents` is the whole turn's log (some
+// details — e.g. the MCP station's local DeepAgents tool calls — need cross-station data
+// like `agent.think.tool_calls` that isn't in the station's own slice).
+function renderDetail(
+  id: StationId,
+  events: TraceEvent[],
+  i: I,
+  usage: UsageTotals,
+  allEvents: TraceEvent[],
+) {
   switch (id) {
     case "frontend": {
       const sent = pick(events, "frontend", "end");
@@ -502,6 +512,14 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
       const discover = pick(events, "mcp.discover", "end");
       const tools = (discover?.data.tools as Array<{ name: string; description: string }>) ?? [];
       const calls = events.filter((e) => e.stage === "mcp.call" && e.phase === "end");
+      // 067: DeepAgents local tools (write_todos / write_file / read_file / edit_file /
+      // ls / task) execute via agent.* stages, not the MCP transport, so they never emit
+      // mcp.call and were invisible here. Surface them too — they're elected tool calls
+      // with no mcp.call result and no retrieval summary — so the tool station shows the
+      // full activity in DeepAgents mode (they're animated in detail at the Agent node).
+      const localCalls = electedToolCalls(allEvents).filter(
+        (c) => c.result === undefined && c.retrievalSummary === undefined,
+      );
       return (
         <>
           {discover && (
@@ -536,6 +554,22 @@ function renderDetail(id: StationId, events: TraceEvent[], i: I, usage: UsageTot
               )}
             </Section>
           ))}
+          {localCalls.length > 0 && (
+            <Section title={i.localToolCalls}>
+              <p className="mb-1.5 text-[11px] text-[var(--color-muted)]">{i.localToolCallsHint}</p>
+              <div className="space-y-1.5">
+                {localCalls.map((c, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2"
+                  >
+                    <KeyVal k={i.tool} v={c.tool} />
+                    <KeyVal k={i.args} v={JSON.stringify(c.args)} />
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
         </>
       );
     }

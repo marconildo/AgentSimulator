@@ -75,7 +75,12 @@ interface Chunk {
 export function electedToolCalls(events: TraceEvent[]): ElectedToolCall[] {
   const mcpEnds = events.filter((e) => e.stage === "mcp.call" && e.phase === "end");
   const ragEnds = events.filter((e) => e.stage === "rag.retrieve" && e.phase === "end");
-  let mcpI = 0;
+  // Pair non-retrieval calls with the next *unconsumed* mcp.call of the SAME tool name.
+  // Order alone is wrong in DeepAgents mode: write_todos / write_file / read_file / task
+  // execute via agent.* stages and emit no mcp.call, so blind order would hand them the
+  // next genuine MCP call's result. A DeepAgents tool simply finds no match (its
+  // observation is the agent.* stage, surfaced at the Agent station).
+  const mcpUsed = new Array<boolean>(mcpEnds.length).fill(false);
   let ragI = 0;
   const out: ElectedToolCall[] = [];
   for (const ev of events) {
@@ -98,8 +103,10 @@ export function electedToolCalls(events: TraceEvent[]): ElectedToolCall[] {
           call.found = chunks.length > 0;
         }
       } else {
-        const m = mcpEnds[mcpI++];
-        if (m) {
+        const idx = mcpEnds.findIndex((m, i) => !mcpUsed[i] && m.data.tool === c.name);
+        if (idx >= 0) {
+          mcpUsed[idx] = true;
+          const m = mcpEnds[idx];
           if (typeof m.data.result === "string") call.result = m.data.result;
           if (typeof m.data.found === "boolean") call.found = m.data.found;
         }

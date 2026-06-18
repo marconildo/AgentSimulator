@@ -23,6 +23,8 @@ const COLLAPSED_H = 108;
 // view (e.g. LLM with token charts) can opt in without touching the default.
 const COLLAPSED_H_OVERRIDE: Partial<Record<StationId, number>> = {
   agent: 140,
+  // 068-llm-rounds-history — the LLM node now carries the "Open full view" button.
+  llm: 140,
 };
 // Expanded heights are tuned per station to fit their inner content. The
 // 008-scenario-framework preview nodes are collapsed-only (no expanded body),
@@ -37,7 +39,7 @@ const EXPANDED_H: Record<StationId, number> = {
   pageindex: 212,
   ingestion: 236,
   mcp: 208,
-  llm: 208,
+  llm: 244,
   gateway: COLLAPSED_H,
   guardrails: COLLAPSED_H,
   cache: COLLAPSED_H,

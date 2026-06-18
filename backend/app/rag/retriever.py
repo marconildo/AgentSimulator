@@ -156,7 +156,9 @@ async def retrieve(
         chunks: list[dict[str, Any]] = [
             {**c, "rank": rank} for rank, c in enumerate(selected, start=1)
         ]
-        rec.data = {"chunks": chunks, "k": k}
+        # Carry the query so a multi-search turn can attribute each chunk to the search
+        # that retrieved it ("Sources used" groups by search — see main._retrieved_chunks).
+        rec.data = {"chunks": chunks, "k": k, "query": query}
         if chunks:
             rec.metrics["top_score"] = chunks[0]["score"]
 

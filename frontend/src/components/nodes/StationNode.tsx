@@ -33,6 +33,9 @@ const HAS_DETAIL: Partial<Record<StationId, boolean>> = {
   agent: true,
   rag: true,
   pageindex: true,
+  // 068-llm-rounds-history — the LLM node opens a per-call drill-in (every model
+  // call of the turn, not just the last one the Inspector shows).
+  llm: true,
 };
 
 export function StationNode(props: NodeProps) {

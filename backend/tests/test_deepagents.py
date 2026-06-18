@@ -15,7 +15,7 @@ import pytest
 
 from app.agent import run_agent
 from app.agent.deepagents import run_deepagents_tool
-from app.agent.graph import _with_deepagents
+from app.agent.graph import _finalize_plan, _with_deepagents
 from app.agent.tools import DEEPAGENTS_TOOLS, agent_tool_specs
 from app.llm.provider import get_provider
 from app.mcp.client import get_registry
@@ -111,6 +111,40 @@ async def test_write_todos_updates_statuses():
     )
     assert plan[0] == {"content": "Search KB", "status": "completed"}
     assert plan[1] == {"content": "Answer", "status": "in_progress"}
+
+
+# --- 067: the runtime closes out the plan when the answer is produced -----------
+
+
+async def test_finalize_plan_completes_remaining_todos_on_finish():
+    # The model left the synthesis todo in_progress and answered directly; on finish the
+    # runtime reconciles the plan to all-completed and emits a closing agent.plan.
+    state = {
+        "plan": [
+            {"content": "Search KB", "status": "completed"},
+            {"content": "Synthesize the answer", "status": "in_progress"},
+        ]
+    }
+    updates, events = await _collect(lambda em: _finalize_plan(state, em))
+    ends = _ends(events, "agent.plan")
+    assert ends, "finalizing should emit a closing agent.plan"
+    assert ends[0].data["finalized"] is True
+    assert [t["status"] for t in ends[0].data["todos"]] == ["completed", "completed"]
+    assert all(t["status"] == "completed" for t in updates["plan"])
+    # content is preserved, order kept.
+    assert [t["content"] for t in updates["plan"]] == ["Search KB", "Synthesize the answer"]
+
+
+async def test_finalize_plan_is_noop_when_already_complete_or_no_plan():
+    # already fully completed → nothing to reconcile, no extra event, no state churn.
+    done = {"plan": [{"content": "x", "status": "completed"}]}
+    upd, events = await _collect(lambda em: _finalize_plan(done, em))
+    assert upd == {}
+    assert not _ends(events, "agent.plan")
+    # Simple/ReAct runtime has no plan at all → no-op.
+    upd2, events2 = await _collect(lambda em: _finalize_plan({}, em))
+    assert upd2 == {}
+    assert not _ends(events2, "agent.plan")
 
 
 # --- Pillar 2: the virtual file system — write / read / edit / ls ---------------

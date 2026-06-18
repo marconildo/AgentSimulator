@@ -51,13 +51,27 @@ from .trace import TraceEmitter, trace_store
 def _retrieved_chunks(emitter: TraceEmitter) -> list[dict[str, Any]]:
     """The chunks the agent retrieved this run, persisted with the message (D5/AC8).
 
-    Prefers the vector ``rag.retrieve`` END event. 066-retrieval-strategy-radio: under
-    the RAGLESS strategy the vector path is skipped (no ``rag.retrieve``), so fall back
-    to the PageIndex-selected sections (``pageindex.select`` END) — those are what
-    actually grounded the answer, so "Sources used" stays honest."""
-    for ev in reversed(emitter.events):
+    Prefers the vector ``rag.retrieve`` events. The agent may search the knowledge base
+    **more than once** (each ``search_knowledge_base`` call is its own ``rag.retrieve``),
+    so this returns **every** chunk from **every** search, in order, each tagged with the
+    ``query`` that retrieved it and a 1-based ``search`` index. No dedup: the same chunk
+    retrieved by two queries is honestly shown under both (with each query's own score),
+    so "Sources used" groups by search and shows everything that grounded the answer —
+    not just the final query's hits.
+
+    066-retrieval-strategy-radio: under the RAGLESS strategy the vector path is skipped
+    (no ``rag.retrieve``), so fall back to the PageIndex-selected sections
+    (``pageindex.select`` END) — those are what actually grounded the answer."""
+    out: list[dict[str, Any]] = []
+    search = 0
+    for ev in emitter.events:
         if ev.stage == Stage.RAG_RETRIEVE and ev.phase == Phase.END:
-            return list(ev.data.get("chunks", []))
+            search += 1
+            query = ev.data.get("query")
+            for chunk in ev.data.get("chunks", []) or []:
+                out.append({**chunk, "query": query, "search": search})
+    if out:
+        return out
     for ev in reversed(emitter.events):
         if ev.stage == Stage.PAGEINDEX_SELECT and ev.phase == Phase.END:
             return list(ev.data.get("chunks", []))
