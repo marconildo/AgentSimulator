@@ -48,11 +48,10 @@ export type StationId =
   | "researcher"
   | "coder"
   | "critic"
-  // 060-intermediate-preview-tiles — the Intermediate rung's first preview tiles,
-  // lighting up its 059 tracks: `hybrid` (RAG Quality, a RAG-pipeline extension laid
-  // out directly below the RAG station) + `summarization` (Agent Design, under the
-  // agent). Non-executing (`stages: []`).
-  | "hybrid"
+  // 060-intermediate-preview-tiles — the Intermediate rung's preview tile lighting up
+  // its 059 `agent` track: `summarization` (Agent Design, under the agent), non-executing
+  // (`stages: []`). (The `hybrid` tile was removed in 070 — hybrid search is now the
+  // `rag.hybrid` sub-stage of the `rag` station, not a tile.)
   | "summarization";
 export type TierId = "client" | "api" | "agent" | "services" | "aiops";
 export type NetworkZone = "public" | "private";
@@ -518,7 +517,10 @@ const STATIONS_SRC: StationSrc[] = [
     // 054-rag-block-expansion: `rag.rerank` is a query-time sub-stage of RAG (fires
     // only on the Intermediate rung); it animates this same Vector DB tile and its
     // before/after detail lives in the RAG drill-in (RagDetail), not a separate node.
-    stages: ["rag.embed", "rag.search", "rag.rerank", "rag.retrieve"],
+    // 070-hybrid-search: `rag.hybrid` (BM25 + vector, RRF) is a query-time sub-stage of
+    // RAG too (between search and rerank); it animates this same Vector DB tile and its
+    // Vector | BM25 | → RRF fusion detail lives in the RAG drill-in, not a separate node.
+    stages: ["rag.embed", "rag.search", "rag.hybrid", "rag.rerank", "rag.retrieve"],
     position: { x: 980, y: 320 },
   },
   {
@@ -890,36 +892,11 @@ const STATIONS_SRC: StationSrc[] = [
   // --- 060-intermediate-preview-tiles — the Intermediate rung's first previews ----
   // They light up the rung's 059 tracks (rag + agent) so the selector becomes
   // meaningful there. Non-executing (`stages: []`); each becomes real in its own
-  // future spec (Hybrid search; DeepAgents summarization middleware).
-  // 060 amendment: `hybrid` is an *extension of the RAG retrieval pipeline* (like the
-  // reranker), not a standalone data service — so it is reframed as a RAG sub-component
-  // and laid out directly below the RAG node (layout.ts), while staying a `comingSoon`
-  // `rag`-track preview so the Intermediate track selector still lights up.
-  {
-    id: "hybrid",
-    tier: "services",
-    title: { en: "Hybrid Search", pt: "Busca Híbrida" },
-    subtitle: { en: "RAG retrieval · BM25 + vector", pt: "Recuperação RAG · BM25 + vetorial" },
-    icon: "🔀",
-    accent: "var(--color-ok)",
-    tag: "HYBRID",
-    blurb: {
-      en: "Extends the RAG retrieval step: runs a keyword (BM25) search alongside the vector search and fuses both result sets (RRF), catching exact-term matches that dense embeddings miss. It augments the same vector store — a sub-component of the RAG pipeline, not a separate retriever.",
-      pt: "Estende a etapa de recuperação do RAG: roda uma busca por palavra-chave (BM25) ao lado da busca vetorial e funde os dois conjuntos (RRF), pegando correspondências exatas que os embeddings densos perdem. Aproveita o mesmo banco vetorial — um subcomponente do pipeline RAG, não um retriever separado.",
-    },
-    generic: { en: "Hybrid retriever (sparse + dense)", pt: "Retriever híbrido (esparso + denso)" },
-    clouds: {
-      azure: "AI Search (hybrid)",
-      aws: "OpenSearch hybrid / Kendra",
-      gcp: "Vertex AI Search (hybrid)",
-    },
-    tech: [{ k: { en: "fusion", pt: "fusão" }, v: "BM25 + vector · RRF" }],
-    stages: [],
-    position: { x: 980, y: 360 },
-    scenarios: ["intermediate", "advanced"],
-    comingSoon: true,
-    tracks: ["rag"],
-  },
+  // future spec (DeepAgents summarization middleware).
+  // 070-hybrid-search: the `hybrid` preview tile was REMOVED — hybrid search is now a
+  // real query-time sub-stage of the `rag` station (`rag.hybrid`), like the reranker,
+  // not a tile of its own. Its cloud examples (AI Search hybrid / OpenSearch / Vertex
+  // Search) live in the `Hybrid search` glossary entry below.
   {
     id: "summarization",
     tier: "agent",

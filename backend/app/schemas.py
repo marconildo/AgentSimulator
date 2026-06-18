@@ -41,6 +41,12 @@ class Stage(StrEnum):
     AGENT_THINK = "agent.think"
     RAG_EMBED = "rag.embed"
     RAG_SEARCH = "rag.search"
+    # Hybrid search (070-hybrid-search): a sparse BM25 lane runs alongside the dense
+    # vector search and the two ranked lists are fused with RRF. Fires only when the
+    # request's `hybrid` toggle is on (Vector-RAG path), between rag.search and
+    # rag.rerank; off / Simple never emits it (byte-for-byte). Maps to the `rag` station
+    # (a query-time sub-stage, like rag.rerank — no tile of its own).
+    RAG_HYBRID = "rag.hybrid"
     # Reranking (054-rag-block-expansion): the Intermediate rung re-scores the wider
     # candidate pool from rag.search with a local cross-encoder, then trims to top-k.
     # Fires only on the Intermediate branch, between rag.search and rag.retrieve; the
@@ -193,6 +199,14 @@ class ChatRequest(BaseModel):
     # Simple run byte-for-byte (no rerank, ReAct loop).
     rerank: bool = False
     runtime: Runtime = Runtime.REACT
+
+    # --- Hybrid search (070-hybrid-search) -----------------------------------
+    # Runs a sparse BM25 lane alongside the dense vector search and fuses the two
+    # ranked lists with RRF (catches exact rare-term matches the embedding misses).
+    # Vector-RAG only (cleared when the retrieval radio is RAGLESS); composes with
+    # ``rerank`` (fuse, then rerank). Request-only; ``False`` (default) reproduces
+    # today's single-dense-search behavior byte-for-byte (no ``rag.hybrid`` stage).
+    hybrid: bool = False
 
     # --- RAGLESS / PageIndex (056-ragless-pageindex) -------------------------
     # Opt-in reasoning-based retrieval that runs *alongside* Vector RAG so the

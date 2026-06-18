@@ -12,6 +12,7 @@ from ..config import get_settings
 from ..schemas import Stage
 from ..trace import TraceEmitter
 from .embeddings import embedding_model_name
+from .hybrid import bm25_rank, rrf_fuse
 from .reranker import rerank as rerank_chunks
 from .store import get_vectorstore, reset_vectorstore_cache
 
@@ -56,6 +57,34 @@ def _search_with_recovery(query: str, k: int, where: dict[str, Any]):
         return get_vectorstore().similarity_search_with_score(query, k=k, filter=where)
 
 
+def _all_scoped_chunks(store, where: dict[str, Any]) -> list[dict[str, Any]]:
+    """Fetch every chunk in scope (corpus + this conversation's uploads) for the BM25 lane.
+
+    The sparse lane ranks the *whole* scoped universe — not just the dense candidates — so a
+    chunk the vector search missed entirely can still enter the fused pool via an exact-term
+    match. That's the point of hybrid search.
+    """
+    got = store.get(where=where, include=["documents", "metadatas"])
+    docs = got.get("documents") or []
+    metas = got.get("metadatas") or []
+    chunks: list[dict[str, Any]] = []
+    for text, meta in zip(docs, metas, strict=False):
+        meta = meta or {}
+        chunks.append(
+            {
+                "text": text,
+                "source": meta.get("source") or meta.get("filename", ""),
+                "title": meta.get("title", ""),
+                # Sparse-only chunks have no cosine score; keep the keys present so the
+                # downstream retrieve/rerank path never KeyErrors on a BM25-only hit.
+                "score": 0.0,
+                "similarity": None,
+                "uploaded": not meta.get("corpus", False),
+            }
+        )
+    return chunks
+
+
 def _to_chunk(doc, distance, rank: int) -> dict[str, Any]:
     """Normalize a (doc, distance) search hit into the chunk dict the UI consumes."""
     dist = round(float(distance), 4)
@@ -85,6 +114,7 @@ async def retrieve(
     *,
     rerank: bool = False,
     rerank_threshold: float = 0.0,
+    hybrid: bool = False,
 ) -> tuple[str, list[dict[str, Any]]]:
     store = get_vectorstore()
     where = _scope_filter(session_id)
@@ -94,9 +124,11 @@ async def retrieve(
     # flag). When on, it fetches a WIDER candidate pool (so the cross-encoder sees more
     # than it returns), re-scores it, and trims back to top-k. Off, it searches exactly
     # top-k and skips rerank entirely — byte-for-byte with the Simple run.
+    # 070-hybrid-search: hybrid also widens the dense pool, so both lanes feed a
+    # comparable candidate set into the RRF fusion.
     rerank_on = rerank
     settings = get_settings()
-    fetch_k = max(k, settings.rerank_fetch_k) if rerank_on else k
+    fetch_k = max(k, settings.rerank_fetch_k) if (rerank_on or hybrid) else k
 
     async with emitter.stage(Stage.RAG_EMBED, "Embedding the query") as rec:
         query_vec = store.embeddings.embed_query(query)
@@ -128,6 +160,31 @@ async def retrieve(
             # then trims to top-k (054). On Simple this pool IS the returned top-k.
             "chunks": candidates,
         }
+
+    if hybrid:
+        # 070-hybrid-search: run a sparse BM25 lane over the whole scoped corpus and fuse it
+        # with the dense candidates via RRF. Fires between rag.search and rag.rerank; the
+        # fused pool replaces the dense pool as the input to rerank/trim. Off ⇒ this whole
+        # block is skipped (byte-for-byte with today).
+        async with emitter.stage(Stage.RAG_HYBRID, "Fusing keyword (BM25) + vector results") as rec:
+            vector_n = len(candidates)
+            scoped = _all_scoped_chunks(store, where)
+            bm25_ranked = bm25_rank(query, scoped, top_k=settings.bm25_top_k)
+            fusion = rrf_fuse(candidates, bm25_ranked, rrf_k=settings.rrf_k)
+            candidates = fusion.fused
+            rec.data = {
+                "rrf_k": settings.rrf_k,
+                "bm25_k": settings.bm25_top_k,
+                # Pool sizes per lane + after fusion, so the drill-in can show the two lanes
+                # converging (vector_candidates, bm25_candidates → fused).
+                "vector_candidates": vector_n,
+                "bm25_candidates": len(bm25_ranked),
+                "fused": len(candidates),
+                # Per-candidate fusion (vector_rank/bm25_rank/rrf_score/new_rank) for the
+                # Vector | BM25 | → RRF inspector view (mirrors rerank's `candidates`).
+                "candidates": fusion.movement,
+            }
+            rec.metrics["fused"] = float(len(candidates))
 
     if rerank_on:
         async with emitter.stage(Stage.RAG_RERANK, "Reranking candidates") as rec:

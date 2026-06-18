@@ -1451,8 +1451,8 @@ const SECTIONS_SRC: SectionSrc[] = [
           pt: "Roda busca por palavra-chave (BM25) e busca vetorial semântica lado a lado, depois funde as duas listas ordenadas — tipicamente com Reciprocal Rank Fusion (RRF) — em um único conjunto de resultados.",
         },
         why: {
-          en: "Dense vectors capture meaning but miss exact terms (names, codes, acronyms); keyword search nails those but misses paraphrase. Fusing both recovers what either alone would drop. Today retrieval is dense-only; Intermediate adds the hybrid path.",
-          pt: "Vetores densos captam significado mas erram termos exatos (nomes, códigos, siglas); a busca por palavra-chave acerta esses mas erra paráfrases. Fundir as duas recupera o que cada uma sozinha deixaria passar. Hoje a recuperação é só densa; o Intermediário adiciona o caminho híbrido.",
+          en: "Dense vectors capture meaning but miss exact terms (names, codes, acronyms); keyword search nails those but misses paraphrase. Fusing both recovers what either alone would drop. Enable Hybrid Search (Vector RAG) in the Build popover to run the BM25 lane and fuse it with RRF.",
+          pt: "Vetores densos captam significado mas erram termos exatos (nomes, códigos, siglas); a busca por palavra-chave acerta esses mas erra paráfrases. Fundir as duas recupera o que cada uma sozinha deixaria passar. Ative a Busca Híbrida (Vector RAG) no popover Build para rodar a lane BM25 e fundir com RRF.",
         },
         how: {
           en: "BM25 ranks by exact term overlap; dense search ranks by embedding similarity; Reciprocal Rank Fusion merges the two ranked lists by summing 1/(k + rank) so a doc high in either list rises.",
@@ -1462,7 +1462,7 @@ const SECTIONS_SRC: SectionSrc[] = [
           en: "Alternatives to RRF: weighted score fusion, or a learned ranker over both signals. Many vector DBs (Weaviate, Qdrant, Azure AI Search) ship hybrid search built in.",
           pt: "Alternativas ao RRF: fusão ponderada de scores, ou um ranker aprendido sobre os dois sinais. Muitos bancos vetoriais (Weaviate, Qdrant, Azure AI Search) já trazem busca híbrida embutida.",
         },
-        where: "backend/app/rag/retriever.py (today: dense-only) · Intermediate preview",
+        where: "backend/app/rag/hybrid.py · retriever.py (rag.hybrid sub-stage) · Intermediate",
       },
       {
         id: "llm-gateway",

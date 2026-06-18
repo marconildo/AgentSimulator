@@ -133,6 +133,63 @@ describe("deriveRagPipeline (054)", () => {
   });
 });
 
+// 070-hybrid-search — the BM25 + vector RRF fusion sub-stage (AC7).
+describe("deriveRagPipeline hybrid (070)", () => {
+  // A run that fuses: rag.hybrid fires between search and rerank, carrying the per-
+  // candidate fusion (vector_rank / bm25_rank / rrf_score).
+  function hybridLog(): TraceEvent[] {
+    seq = 0;
+    return [
+      ev("rag.embed", "end", { model: "text-embedding-3-small", dim: 1536 }),
+      ev("rag.search", "end", { metric: "cosine", k: 10, candidates: 10, chunks: [] }),
+      ev("rag.hybrid", "start"),
+      ev("rag.hybrid", "end", {
+        rrf_k: 60,
+        bm25_k: 10,
+        vector_candidates: 10,
+        bm25_candidates: 8,
+        fused: 12,
+        candidates: [
+          { source: "embeddings.md", vector_rank: 5, bm25_rank: 1, rrf_score: 0.0318, new_rank: 1 },
+          { source: "rag.md", vector_rank: 1, bm25_rank: null, rrf_score: 0.0164, new_rank: 2 },
+        ],
+      }),
+      ev("rag.retrieve", "end", { k: 4, chunks: [{ source: "embeddings.md", score: 0.5 }] }),
+      ev("llm.prompt", "end", { context: "[embeddings.md] …", context_budget: { retrieved: 200 } }),
+    ];
+  }
+
+  it("hybrid is inactive when the run carried no fusion pass", () => {
+    // Today's single-search run never emits rag.hybrid (byte-for-byte; pure projection).
+    const p = deriveRagPipeline(log(), 8);
+    expect(byId(p).hybrid.status).toBe("inactive");
+    // The rest of the pipeline is unaffected.
+    expect(byId(p).retrieval.status).toBe("done");
+  });
+
+  it("surfaces the fusion (rrf_k, lane sizes, movement) when hybrid fired", () => {
+    const events = hybridLog();
+    const p = deriveRagPipeline(events, events.length - 1);
+    const h = byId(p).hybrid;
+    expect(h.status).toBe("done");
+    expect(h.data.rrf_k).toBe(60);
+    expect(h.data.vectorCandidates).toBe(10);
+    expect(h.data.bm25Candidates).toBe(8);
+    expect(h.data.fused).toBe(12);
+    const movement = h.data.movement as Array<{ new_rank: number; bm25_rank: number | null }>;
+    expect(movement).toHaveLength(2);
+    // The exact-token chunk BM25 ranked #1 leads the fused order.
+    expect(movement[0].bm25_rank).toBe(1);
+    expect(movement[0].new_rank).toBe(1);
+  });
+
+  it("orders hybrid between retrieval and rerank in the pipeline", () => {
+    const order = RAG_STAGE_ORDER;
+    expect(order.indexOf("hybrid")).toBeGreaterThan(order.indexOf("retrieval"));
+    expect(order.indexOf("hybrid")).toBeLessThan(order.indexOf("rerank"));
+  });
+});
+
 describe("cosineAngleDeg (054)", () => {
   it("maps cosine similarity to the angle between the vectors", () => {
     expect(cosineAngleDeg(1)).toBeCloseTo(0); // identical direction

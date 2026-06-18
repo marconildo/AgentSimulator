@@ -38,7 +38,7 @@ export type RetrievalStrategy = "vector" | "ragless";
 export type ComponentId =
   | "mcp" // MCP Tools (optional base, default-on)
   | "rerank" // RAG reranker (real; sub-stage, no station of its own; vector-only)
-  | "hybrid" // Hybrid search (preview; vector-only)
+  | "hybrid" // Hybrid search BM25 + vector (real; sub-stage, no station; vector-only)
   | "summarization" // context compaction (preview)
   | "gateway"
   | "guardrails"
@@ -52,10 +52,9 @@ export const SKELETON: readonly StationId[] = ["frontend", "backend", "agent", "
 /** The Advanced-rung sub-agent stations revealed by the `multiagent` runtime. */
 const SUBAGENT_STATIONS: readonly StationId[] = ["researcher", "coder", "critic"];
 
-/** Component → the station it shows (omitted for `rerank`, which is a sub-stage). */
+/** Component → the station it shows (omitted for `rerank`/`hybrid`, which are sub-stages). */
 const COMPONENT_STATION: Partial<Record<ComponentId, StationId>> = {
   mcp: "mcp",
-  hybrid: "hybrid",
   summarization: "summarization",
   gateway: "gateway",
   guardrails: "guardrails",
@@ -102,7 +101,7 @@ export function isLocked(id: ComponentId): boolean {
 export const COMPONENT_IS_REAL: Record<ComponentId, boolean> = {
   mcp: true,
   rerank: true,
-  hybrid: false,
+  hybrid: true, // 070-hybrid-search: real BM25 + vector RRF fusion sub-stage
   summarization: false,
   gateway: false,
   guardrails: false,
@@ -200,10 +199,11 @@ export function requestInputs(
   enabled: ReadonlySet<ComponentId>,
   runtime: Runtime,
   retrieval: RetrievalStrategy,
-): { rerank: boolean; runtime: Runtime; ragless: boolean } {
+): { rerank: boolean; hybrid: boolean; runtime: Runtime; ragless: boolean } {
   return {
-    // Rerank only rides Vector RAG — it cannot apply to the reasoning-based path (066).
+    // Rerank/hybrid only ride Vector RAG — they cannot apply to the reasoning-based path (066).
     rerank: retrieval === "vector" && enabled.has("rerank"),
+    hybrid: retrieval === "vector" && enabled.has("hybrid"),
     runtime,
     ragless: retrieval === "ragless",
   };
@@ -386,7 +386,12 @@ export function useMaturity(): Maturity {
   return useMemo(() => classify(enabled, runtime, retrieval), [enabled, runtime, retrieval]);
 }
 
-export function currentRequestInputs(): { rerank: boolean; runtime: Runtime; ragless: boolean } {
+export function currentRequestInputs(): {
+  rerank: boolean;
+  hybrid: boolean;
+  runtime: Runtime;
+  ragless: boolean;
+} {
   const { enabled, runtime, retrieval } = useSelection.getState();
   return requestInputs(enabled, runtime, retrieval);
 }

@@ -11,7 +11,13 @@
 
 import type { ContextBudget, Stage, TraceEvent } from "../types/events";
 
-export type RagStageId = "chunking" | "embedding" | "retrieval" | "rerank" | "augmented";
+export type RagStageId =
+  | "chunking"
+  | "embedding"
+  | "retrieval"
+  | "hybrid"
+  | "rerank"
+  | "augmented";
 
 // offline  — the ingestion-time precursor (chunking), never a live query stage
 // inactive — exists on a higher rung only (rerank on the Simple rung)
@@ -36,6 +42,7 @@ export const RAG_STAGE_ORDER: RagStageId[] = [
   "chunking",
   "embedding",
   "retrieval",
+  "hybrid",
   "rerank",
   "augmented",
 ];
@@ -46,7 +53,8 @@ export interface PipelineChunk {
   source: string;
   text: string;
   score: number;
-  similarity?: number;
+  // null for a fused BM25-only chunk (no cosine similarity) — 070-hybrid-search.
+  similarity?: number | null;
   distance?: number;
   rank?: number;
 }
@@ -152,7 +160,31 @@ export function deriveRagPipeline(events: TraceEvent[], cursor: number): RagPipe
     },
   };
 
-  // 4 — Rerank: inactive on the Simple rung (it's an Intermediate upgrade); else
+  // 4 — Hybrid (070-hybrid-search): inactive unless the run fused a BM25 lane with the
+  // vector lane (RRF). `movement` carries each fused chunk's vector_rank / bm25_rank /
+  // rrf_score for the Vector | BM25 | → RRF view. Like rerank, a pure projection of the
+  // trace: a hybrid run emits rag.hybrid *somewhere*, so the full log decides inactive vs
+  // pending; status resolves pending/active/done at the cursor.
+  const hybrid = lastEnd("rag.hybrid");
+  const hybridMovement =
+    (hybrid?.data.candidates as Array<{ new_rank: number }> | undefined) ?? [];
+  const runHasHybrid = events.some((e) => e.stage === "rag.hybrid");
+  const hybridStage: RagStage = {
+    id: "hybrid",
+    status: runHasHybrid ? status(["rag.hybrid"]) : "inactive",
+    data: hybrid
+      ? {
+          rrf_k: hybrid.data.rrf_k,
+          bm25_k: hybrid.data.bm25_k,
+          vectorCandidates: hybrid.data.vector_candidates,
+          bm25Candidates: hybrid.data.bm25_candidates,
+          fused: hybrid.data.fused,
+          movement: hybridMovement,
+        }
+      : {},
+  };
+
+  // 5 — Rerank: inactive on the Simple rung (it's an Intermediate upgrade); else
   // its live status. `movement` exposes the rank reordering.
   const rerank = lastEnd("rag.rerank");
   const movement = (rerank?.data.candidates as Array<{ new_rank: number }>) ?? [];
@@ -194,14 +226,25 @@ export function deriveRagPipeline(events: TraceEvent[], cursor: number): RagPipe
 
   const started = present("rag.embed") || present("rag.search") || present("rag.retrieve");
 
-  return { stages: [chunking, embedding, retrieval, rerankStage, augmented], started };
+  return {
+    stages: [chunking, embedding, retrieval, hybridStage, rerankStage, augmented],
+    started,
+  };
 }
 
 // 069-rag-executions-history — the agent can elect `search_knowledge_base` more than
 // once in a turn; each call runs its own embed → search → [rerank] → retrieve cycle.
 // `deriveRagPipeline` reads each stage with `lastEnd`, so it only shows the LAST cycle.
 // This splits the turn into one RagPipeline per cycle so the drill-in can navigate them.
-const CYCLE_STAGES: Stage[] = ["rag.embed", "rag.search", "rag.rerank", "rag.retrieve"];
+const CYCLE_STAGES: Stage[] = [
+  "rag.embed",
+  "rag.search",
+  // 070-hybrid-search — the fusion sub-stage is per-cycle too, so it's attributed to
+  // the search that produced it (not treated as a global event).
+  "rag.hybrid",
+  "rag.rerank",
+  "rag.retrieve",
+];
 
 export function deriveRagExecutions(events: TraceEvent[], cursor: number): RagPipeline[] {
   const visible = cursor >= 0 ? events.slice(0, cursor + 1) : [];

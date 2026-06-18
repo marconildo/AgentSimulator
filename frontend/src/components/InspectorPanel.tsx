@@ -395,6 +395,10 @@ function renderDetail(
       const movement = (rerank?.data.candidates as RerankMove[]) ?? [];
       const rerankK = (rerank?.data.k as number | undefined) ?? movement.length;
       const rerankThreshold = (rerank?.data.threshold as number | undefined) ?? 0;
+      // 070-hybrid-search: the BM25 + vector RRF fusion runs as a RAG sub-stage too, so
+      // its per-candidate fusion shows on this same Vector DB station.
+      const hybrid = pick(events, "rag.hybrid", "end");
+      const fusion = (hybrid?.data.candidates as HybridMove[]) ?? [];
       return (
         <>
           {embed && (
@@ -406,6 +410,11 @@ function renderDetail(
                   [{(embed.data.preview as number[]).slice(0, 8).map((n) => n.toFixed(3)).join(", ")}, …]
                 </Mono>
               )}
+            </Section>
+          )}
+          {hybrid && fusion.length > 0 && (
+            <Section title={i.hybridFusion((hybrid.data.fused as number | undefined) ?? fusion.length)}>
+              <HybridFusionList fusion={fusion} i={i} />
             </Section>
           )}
           {rerank && (
@@ -438,9 +447,10 @@ function renderDetail(
                       </div>
                     </div>
                     <ScoreBar value={c.score} />
-                    {(c.similarity !== undefined || c.distance !== undefined) && (
+                    {(typeof c.similarity === "number" || c.distance !== undefined) && (
                       <div className="mt-1 flex gap-3 font-mono text-[10px] text-[var(--color-label)]">
-                        {c.similarity !== undefined && (
+                        {/* 070-hybrid-search: a fused BM25-only chunk has null similarity. */}
+                        {typeof c.similarity === "number" && (
                           <span>
                             {i.similarity}: {c.similarity.toFixed(4)}
                           </span>
@@ -663,7 +673,8 @@ interface RagChunk {
   // 007-numeric-transparency: raw distance, its inverse similarity, and a stable
   // rank, so the inspector can render a ranked similarity table.
   distance?: number;
-  similarity?: number;
+  // null for a fused BM25-only chunk (no cosine similarity) — 070-hybrid-search.
+  similarity?: number | null;
   rank?: number;
 }
 
@@ -674,7 +685,8 @@ export interface RerankMove {
   score: number;
   // 055/follow-up — the original vector-search cosine similarity, shown beside the
   // (differently-scaled) cross-encoder rerank `score` so the re-scoring is explicit.
-  similarity?: number;
+  // null for a fused BM25-only chunk reranked under hybrid search (070).
+  similarity?: number | null;
   source?: string;
   title?: string;
 }
@@ -753,7 +765,9 @@ export function RerankMovementList({
                 )}
               </div>
               <span className="flex shrink-0 items-baseline gap-1 font-mono">
-                {m.similarity !== undefined && (
+                {/* 070-hybrid-search: a fused BM25-only chunk has no cosine similarity
+                    (it's null), so guard for a real number — not just `!== undefined`. */}
+                {typeof m.similarity === "number" && (
                   <span className="text-[9.5px] text-[var(--color-label)]" title={i.rerankCosine}>
                     cos {m.similarity.toFixed(2)} →
                   </span>
@@ -776,6 +790,54 @@ export function RerankMovementList({
               </div>
             )}
           </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+// 070-hybrid-search — one fused candidate: its rank in each lane (null when a lane
+// didn't rank it) and the combined RRF score.
+export interface HybridMove {
+  source?: string;
+  vector_rank: number | null;
+  bm25_rank: number | null;
+  rrf_score: number;
+  new_rank: number;
+}
+
+// The BM25 + vector fusion list: each fused chunk as `vec# / BM25#` → its RRF score,
+// ordered by the fused rank. ↑ marks a chunk BM25 lifted above its dense rank. Shared
+// by the Inspector's Vector DB detail (the RAG drill-in renders its own wider table).
+export function HybridFusionList({ fusion, i }: { fusion: HybridMove[]; i: I }) {
+  const byNew = [...fusion].sort((a, b) => a.new_rank - b.new_rank);
+  return (
+    <div className="space-y-1">
+      {byNew.map((m, idx) => {
+        const lifted =
+          m.bm25_rank !== null && (m.vector_rank === null || m.new_rank < m.vector_rank);
+        return (
+          <div
+            key={idx}
+            className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-line)] px-2 py-1 text-[11px]"
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 font-mono text-[10px] text-[var(--color-muted)]">
+                #{m.new_rank}
+              </span>
+              {lifted && <span className="shrink-0 font-mono text-[10px] text-[var(--color-ok-soft)]">↑</span>}
+              {m.source && (
+                <span className="truncate font-mono text-[var(--color-text-soft)]">{m.source}</span>
+              )}
+            </div>
+            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-[10px]">
+              <span className="text-[var(--color-blue)]" title={i.hybridColVector}>
+                {i.hybridColVector} {m.vector_rank ?? "—"}
+              </span>
+              <span className="text-[var(--color-ok-soft)]">BM25 {m.bm25_rank ?? "—"}</span>
+              <span className="text-[var(--color-text-soft)]">RRF {m.rrf_score.toFixed(4)}</span>
+            </span>
+          </div>
         );
       })}
     </div>

@@ -52,6 +52,11 @@ class AgentState(TypedDict):
     # PageIndex path (which grounds the answer). False (default) reproduces today's
     # behavior byte-for-byte.
     ragless: bool
+    # Hybrid search (070-hybrid-search), request-only. When True the retrieval tool
+    # runs a sparse BM25 lane alongside the dense vector search and fuses them with RRF
+    # (Vector-RAG only). False (default) reproduces today's single-search behavior
+    # byte-for-byte (no ``rag.hybrid`` stage).
+    hybrid: bool
     # Forced failure for this run (017-failure-injection), request-only:
     #   "none" (default, unchanged) | "tool_error" | "llm_timeout".
     simulate_failure: str

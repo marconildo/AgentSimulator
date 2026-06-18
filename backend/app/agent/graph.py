@@ -447,6 +447,7 @@ async def _run_retrieval_tool(
         session_id=state["session_id"],
         rerank=state["rerank"],
         rerank_threshold=state["rerank_threshold"],
+        hybrid=state["hybrid"],
     )
 
     observation = context or "(no relevant passages found in the knowledge base)"
@@ -652,6 +653,7 @@ async def run_agent_state(
     agent_description: str | None = None,
     rerank_threshold: float = 0.0,
     ragless: bool = False,
+    hybrid: bool = False,
 ) -> AgentState:
     """Run the agent for one message and return the final graph state.
 
@@ -677,6 +679,7 @@ async def run_agent_state(
         "rerank": rerank,
         "runtime": runtime,
         "ragless": ragless,
+        "hybrid": hybrid,
         "simulate_failure": simulate_failure,
         "history": history or [],
         "skills_catalog": skills_catalog or [],
@@ -717,6 +720,7 @@ async def run_agent(
     agent_description: str | None = None,
     rerank_threshold: float = 0.0,
     ragless: bool = False,
+    hybrid: bool = False,
 ) -> str:
     """Run the full agent for one message, emitting trace events as it goes.
 
@@ -759,5 +763,6 @@ async def run_agent(
         agent_description=agent_description,
         rerank_threshold=rerank_threshold,
         ragless=ragless,
+        hybrid=hybrid,
     )
     return final_state["answer"]

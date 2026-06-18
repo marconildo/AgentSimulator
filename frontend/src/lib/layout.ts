@@ -48,8 +48,7 @@ const EXPANDED_H: Record<StationId, number> = {
   researcher: COLLAPSED_H,
   coder: COLLAPSED_H,
   critic: COLLAPSED_H,
-  // 060-intermediate-preview-tiles — collapsed-only previews.
-  hybrid: COLLAPSED_H,
+  // 060-intermediate-preview-tiles — collapsed-only preview.
   summarization: COLLAPSED_H,
 };
 
@@ -89,10 +88,7 @@ const COLUMNS: Column[] = [
   {
     x: 1016,
     gap: 36,
-    // 060: `hybrid` (Hybrid Search preview) is a sub-component of the RAG pipeline
-    // (like the reranker), so it stacks *directly below RAG* — above MCP/LLM — to read
-    // as an extension of RAG, not a peer data service floating under the LLM.
-    members: ["database", "storage", "ingestion", "rag", "hybrid", "pageindex", "mcp", "llm"],
+    members: ["database", "storage", "ingestion", "rag", "pageindex", "mcp", "llm"],
   },
   { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
@@ -119,7 +115,6 @@ const TIER_OF: Record<StationId, TierId> = {
   coder: "agent",
   critic: "agent",
   // 060-intermediate-preview-tiles
-  hybrid: "services",
   summarization: "agent",
 };
 

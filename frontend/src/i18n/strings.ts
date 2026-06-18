@@ -155,6 +155,9 @@ export interface Strings {
     model: string;
     dimensions: string;
     retrievedChunks: (n: number) => string;
+    // 070-hybrid-search — the BM25 + vector RRF fusion shown on the Vector DB station.
+    hybridFusion: (n: number) => string;
+    hybridColVector: string;
     // 054-rag-block-expansion — the reranker drill-in: per-candidate rank movement.
     rerankMovement: (n: number) => string;
     rerankModel: string;
@@ -412,6 +415,9 @@ export interface Strings {
     // 054-rag-block-expansion — the Vector DB readout when the Intermediate rerank
     // sub-stage has run: the rerank pool → kept top-k.
     reranked: (from: number, to: number) => string;
+    // 070-hybrid-search — the Vector DB readout when the BM25 + vector RRF fusion
+    // sub-stage has run (and no rerank is downstream of it): the fused candidate count.
+    hybridFused: (n: number) => string;
     // 056-ragless-pageindex — the RAGLESS box's compact readout, following the
     // reasoning pipeline: building tree → navigating → selected N sections.
     buildingTree: string;
@@ -631,6 +637,17 @@ export interface Strings {
     reranking: string;
     rerankingBlurb: string;
     rerankInactive: string;
+    // 070-hybrid-search — the BM25 + vector RRF fusion card.
+    hybrid: string;
+    hybridBlurb: string;
+    hybridInactive: string;
+    hybridFusedLabel: string;
+    laneVector: string;
+    laneBm25: string;
+    rrfFormula: string;
+    fusionTable: string;
+    colSource: string;
+    hybridNote: string;
     augmented: string;
     augmentedBlurb: string;
     offline: string;
@@ -969,6 +986,8 @@ const en: Strings = {
     model: "model",
     dimensions: "dimensions",
     retrievedChunks: (n) => `Retrieved chunks (top-${n})`,
+    hybridFusion: (n) => `Hybrid fusion · BM25 + vector (${n} fused)`,
+    hybridColVector: "vector",
     rerankMovement: (n) => `Rerank movement (${n} candidates)`,
     rerankModel: "reranker model",
     rerankScore: "rerank score (cross-encoder)",
@@ -1180,7 +1199,10 @@ const en: Strings = {
     EVALS: "Eval runner — automated scoring of answers against test cases to catch quality regressions.",
     OTEL: "OpenTelemetry — the open standard for traces, metrics and logs that makes the pipeline observable.",
     HYBRID:
-      "Hybrid search — combines keyword (BM25) and vector retrieval and fuses the results (RRF) to catch exact-term matches embeddings miss. (Planned — not yet implemented.)",
+      "Hybrid search — combines keyword (BM25) and vector retrieval and fuses the results (RRF) to catch exact-term matches embeddings miss.",
+    BM25:
+      "BM25 — a classic keyword (sparse) ranking function (TF-IDF family) that scores documents by exact term overlap; great at rare literal tokens an embedding blurs over.",
+    RRF: "Reciprocal Rank Fusion — merges two ranked lists by summing 1/(k + rank) per item, so a chunk ranked high in either list rises without reconciling their score scales.",
     MEMORY:
       "Summarization — compacts a long conversation by summarizing old turns, so the agent keeps context within the token budget. (Planned — not yet implemented.)",
     research:
@@ -1304,6 +1326,7 @@ const en: Strings = {
     tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
     reranked: (from, to) => `reranked ${from}→${to}`,
+    hybridFused: (n) => `BM25+vector · fused ${n}`,
     buildingTree: "building tree…",
     navigating: "navigating…",
     selected: (n) => `selected ${n} section${n === 1 ? "" : "s"}`,
@@ -1386,7 +1409,7 @@ const en: Strings = {
     components: {
       mcp: { name: "MCP Tools", blurb: "Tool service (calculator, time, web search…)." },
       rerank: { name: "Reranker", blurb: "Re-scores RAG candidates with a cross-encoder." },
-      hybrid: { name: "Hybrid Search", blurb: "BM25 + vector fusion (preview)." },
+      hybrid: { name: "Hybrid Search", blurb: "BM25 + vector fusion (RRF)." },
       summarization: { name: "Summarization", blurb: "Compacts the agent's context (preview)." },
       gateway: { name: "LLM Gateway", blurb: "Routing, fallback, budgets (preview)." },
       guardrails: { name: "Guardrails", blurb: "Input/output safety (preview)." },
@@ -1650,6 +1673,18 @@ const en: Strings = {
     rerankingBlurb:
       "A local cross-encoder re-scores the candidate pool so the most relevant chunks lead, then trims to top-k.",
     rerankInactive: "Reranking runs on the Intermediate rung only — switch scenarios to see it.",
+    hybrid: "Hybrid",
+    hybridBlurb:
+      "A keyword (BM25) search runs alongside the vector search and the two ranked lists are fused with Reciprocal Rank Fusion (RRF) — catching exact, rare-term matches that dense embeddings blur over.",
+    hybridInactive: "Enable Hybrid Search (Vector RAG) in the Build popover to fuse a BM25 lane.",
+    hybridFusedLabel: "fused",
+    laneVector: "vector",
+    laneBm25: "BM25",
+    rrfFormula: "RRF score = Σ 1 / (k + rank) over the lanes that ranked the chunk",
+    fusionTable: "Fusion (Vector | BM25 | → RRF)",
+    colSource: "source",
+    hybridNote:
+      "Rank-based fusion needs no shared score scale: a chunk ranked high in either lane floats up; ↑ marks one BM25 lifted above its vector rank.",
     augmented: "Augmented",
     augmentedBlurb:
       'The retrieved chunks are assembled into the prompt context sent to the LLM — the "A" in RAG.',
@@ -1859,6 +1894,8 @@ const pt: Strings = {
     model: "modelo",
     dimensions: "dimensões",
     retrievedChunks: (n) => `Trechos recuperados (top-${n})`,
+    hybridFusion: (n) => `Fusão híbrida · BM25 + vetorial (${n} fundidos)`,
+    hybridColVector: "vetorial",
     rerankMovement: (n) => `Movimento do rerank (${n} candidatos)`,
     rerankModel: "modelo do reranker",
     rerankScore: "score do rerank (cross-encoder)",
@@ -2070,7 +2107,10 @@ const pt: Strings = {
     EVALS: "Eval runner — pontuação automática de respostas contra casos de teste para flagrar regressões de qualidade.",
     OTEL: "OpenTelemetry — o padrão aberto de traces, métricas e logs que torna o pipeline observável.",
     HYBRID:
-      "Busca híbrida — combina recuperação por palavra-chave (BM25) e vetorial e funde os resultados (RRF) para pegar correspondências exatas que o embedding perde. (Planejado — ainda não implementado.)",
+      "Busca híbrida — combina recuperação por palavra-chave (BM25) e vetorial e funde os resultados (RRF) para pegar correspondências exatas que o embedding perde.",
+    BM25:
+      "BM25 — uma função clássica de ranqueamento por palavra-chave (esparsa, família TF-IDF) que pontua documentos pela sobreposição exata de termos; ótima em tokens literais raros que o embedding borra.",
+    RRF: "Reciprocal Rank Fusion — funde duas listas ranqueadas somando 1/(k + posição) por item, fazendo um trecho bem colocado em qualquer lista subir sem reconciliar as escalas de escore.",
     MEMORY:
       "Sumarização — compacta uma conversa longa resumindo turnos antigos, para o agente manter contexto dentro do orçamento de tokens. (Planejado — ainda não implementado.)",
     research:
@@ -2194,6 +2234,7 @@ const pt: Strings = {
     tokensCost: (tok, usd) => `${tok} tok · ${usd}`,
     score: "score",
     reranked: (from, to) => `reordenado ${from}→${to}`,
+    hybridFused: (n) => `BM25+vetorial · fundido ${n}`,
     buildingTree: "montando árvore…",
     navigating: "navegando…",
     selected: (n) => `${n} seç${n === 1 ? "ão" : "ões"} selecionada${n === 1 ? "" : "s"}`,
@@ -2276,7 +2317,7 @@ const pt: Strings = {
     components: {
       mcp: { name: "MCP Tools", blurb: "Serviço de ferramentas (calculadora, hora, busca web…)." },
       rerank: { name: "Reranker", blurb: "Reordena os candidatos do RAG com um cross-encoder." },
-      hybrid: { name: "Busca Híbrida", blurb: "Fusão BM25 + vetorial (prévia)." },
+      hybrid: { name: "Busca Híbrida", blurb: "Fusão BM25 + vetorial (RRF)." },
       summarization: { name: "Sumarização", blurb: "Compacta o contexto do agente (prévia)." },
       gateway: { name: "Gateway LLM", blurb: "Roteamento, fallback, orçamentos (prévia)." },
       guardrails: { name: "Guardrails", blurb: "Segurança de entrada/saída (prévia)." },
@@ -2544,6 +2585,19 @@ const pt: Strings = {
     rerankingBlurb:
       "Um cross-encoder local reordena o pool de candidatos para os trechos mais relevantes liderarem, depois corta para o top-k.",
     rerankInactive: "O reranking roda apenas no nível Intermediário — troque de cenário para vê-lo.",
+    hybrid: "Híbrida",
+    hybridBlurb:
+      "Uma busca por palavra-chave (BM25) roda ao lado da busca vetorial e as duas listas ranqueadas são fundidas com Reciprocal Rank Fusion (RRF) — pegando correspondências exatas de termos raros que os embeddings densos borram.",
+    hybridInactive:
+      "Ative a Busca Híbrida (Vector RAG) no popover Build para fundir uma lane BM25.",
+    hybridFusedLabel: "fundido",
+    laneVector: "vetorial",
+    laneBm25: "BM25",
+    rrfFormula: "escore RRF = Σ 1 / (k + posição) sobre as lanes que ranquearam o trecho",
+    fusionTable: "Fusão (Vetorial | BM25 | → RRF)",
+    colSource: "fonte",
+    hybridNote:
+      "A fusão por posição dispensa escala de escore comum: um trecho bem ranqueado em qualquer lane sobe; ↑ marca quem o BM25 elevou acima da posição vetorial.",
     augmented: "Augmented",
     augmentedBlurb:
       'Os trechos recuperados são montados no contexto do prompt enviado à LLM — o "A" de RAG.',

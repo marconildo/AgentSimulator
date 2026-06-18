@@ -31,6 +31,7 @@ describe("selection model (061-scenario-builder / 066-retrieval-strategy-radio)"
     expect(classify(enabled, "react", "vector")).toBe("simple");
     expect(requestInputs(enabled, "react", "vector")).toEqual({
       rerank: false,
+      hybrid: false,
       runtime: "react",
       ragless: false,
     });
@@ -55,19 +56,30 @@ describe("selection model (061-scenario-builder / 066-retrieval-strategy-radio)"
     expect(ragless.has("rag")).toBe(false);
   });
 
-  it("AC3 — request inputs reflect the strategy; rerank only rides vector", () => {
+  it("AC3 — request inputs reflect the strategy; rerank/hybrid only ride vector", () => {
     expect(requestInputs(set(["mcp"]), "react", "ragless")).toEqual({
       rerank: false,
+      hybrid: false,
       runtime: "react",
       ragless: true,
     });
     expect(requestInputs(set(["mcp", "rerank"]), "deepagents", "vector")).toEqual({
       rerank: true,
+      hybrid: false,
       runtime: "deepagents",
       ragless: false,
     });
-    // Even if rerank somehow lingers in the set, a non-vector strategy never sends it.
+    // 070-hybrid-search — hybrid rides Vector RAG too, and composes with rerank.
+    expect(requestInputs(set(["mcp", "hybrid"]), "react", "vector").hybrid).toBe(true);
+    expect(requestInputs(set(["mcp", "rerank", "hybrid"]), "react", "vector")).toEqual({
+      rerank: true,
+      hybrid: true,
+      runtime: "react",
+      ragless: false,
+    });
+    // Even if rerank/hybrid linger in the set, a non-vector strategy never sends them.
     expect(requestInputs(set(["mcp", "rerank"]), "react", "ragless").rerank).toBe(false);
+    expect(requestInputs(set(["mcp", "hybrid"]), "react", "ragless").hybrid).toBe(false);
   });
 
   it("AC5 — rerank/hybrid require Vector RAG; switching to ragless clears them", () => {

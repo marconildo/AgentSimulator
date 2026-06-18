@@ -16,6 +16,10 @@ export type Stage =
   | "agent.think"
   | "rag.embed"
   | "rag.search"
+  // 070-hybrid-search: a sparse BM25 lane fused with the dense vector search (RRF),
+  // a query-time RAG sub-stage between rag.search and rag.rerank. Maps to the `rag`
+  // (Vector DB) station; the Vector | BM25 | → RRF fusion is shown in the RAG drill-in.
+  | "rag.hybrid"
   // 054-rag-block-expansion: the Intermediate rung's local reranker, a query-time
   // RAG sub-stage between rag.search and rag.retrieve. Maps to the `rag` (Vector
   // DB) station and is detailed in the RAG drill-in.

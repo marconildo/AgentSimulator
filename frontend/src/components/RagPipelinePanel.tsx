@@ -281,6 +281,7 @@ const TITLE: Record<RagStage["id"], (r: RagStrings) => string> = {
   chunking: (r) => r.chunking,
   embedding: (r) => r.embedding,
   retrieval: (r) => r.retrieval,
+  hybrid: (r) => r.hybrid,
   rerank: (r) => r.reranking,
   augmented: (r) => r.augmented,
 };
@@ -366,6 +367,14 @@ function StageBody({ stage, r }: { stage: RagStage; r: RagStrings }): ReactNode 
         <Pending />
       );
     }
+    case "hybrid":
+      if (stage.status === "inactive")
+        return <span className="italic text-[var(--color-label)]">{r.hybridInactive}</span>;
+      return d.fused !== undefined ? (
+        <Kv k="BM25⊕vec" v={`→ ${d.fused}`} sub={r.hybridFusedLabel} />
+      ) : (
+        <Pending />
+      );
     case "rerank":
       if (stage.status === "inactive")
         return <span className="italic text-[var(--color-label)]">{r.rerankInactive}</span>;

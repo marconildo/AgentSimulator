@@ -25,6 +25,8 @@ export function RagStageDetail({ stage }: { stage: RagStage }) {
       return <EmbeddingDetail data={stage.data} r={t.ragDetail} />;
     case "retrieval":
       return <RetrievalDetail data={stage.data} r={t.ragDetail} i={t.inspector} />;
+    case "hybrid":
+      return <HybridDetail data={stage.data} status={stage.status} r={t.ragDetail} />;
     case "rerank":
       return <RerankDetail data={stage.data} status={stage.status} r={t.ragDetail} i={t.inspector} />;
     case "augmented":
@@ -414,6 +416,104 @@ function CosinePlot({ chunks, r }: { chunks: PipelineChunk[]; r: RagStrings }) {
         {r.zoomHint}
       </span>
     </div>
+  );
+}
+
+// --- Hybrid (BM25 + vector, RRF fusion) -------------------------------------
+
+interface HybridMove {
+  source: string;
+  vector_rank: number | null;
+  bm25_rank: number | null;
+  rrf_score: number;
+  new_rank: number;
+}
+
+function HybridDetail({
+  data,
+  status,
+  r,
+}: {
+  data: Stage["data"];
+  status: RagStage["status"];
+  r: RagStrings;
+}) {
+  if (status === "inactive")
+    return (
+      <Wrap blurb={r.hybridBlurb}>
+        <p className="text-[11px] italic text-[var(--color-label)]">{r.hybridInactive}</p>
+      </Wrap>
+    );
+  const movement = (data.movement as HybridMove[] | undefined) ?? [];
+  const rrfK = data.rrf_k as number | undefined;
+  const vectorN = (data.vectorCandidates as number | undefined) ?? 0;
+  const bm25N = (data.bm25Candidates as number | undefined) ?? 0;
+  const fused = (data.fused as number | undefined) ?? movement.length;
+  const rows = [...movement].sort((a, b) => a.new_rank - b.new_rank);
+  return (
+    <Wrap blurb={r.hybridBlurb}>
+      <div className="grid grid-cols-2 gap-x-3">
+        <Row k="RRF k" v={String(rrfK ?? "—")} />
+        <Row k={r.hybridFusedLabel} v={String(fused)} />
+      </div>
+      {/* The two lanes converging on the fused pool: vector ⊕ BM25 → fused. */}
+      <p className="font-mono text-[10.5px] text-[var(--color-text-soft)]">
+        <span className="text-[var(--color-blue)]">{r.laneVector}</span> {vectorN}
+        {"  ⊕  "}
+        <span style={{ color: RAG }}>{r.laneBm25}</span> {bm25N}
+        {"  →  "}
+        {r.hybridFusedLabel} {fused}
+      </p>
+      <p className="text-[10px] font-mono leading-snug text-[var(--color-faint)]">
+        {r.rrfFormula}
+      </p>
+      {rows.length > 0 && (
+        <Field label={r.fusionTable}>
+          <div className="overflow-hidden rounded-lg border border-[var(--color-line)]">
+            {/* header */}
+            <div className="grid grid-cols-[1.6rem_1fr_2.6rem_2.6rem_3.4rem] gap-1 border-b border-[var(--color-line)] bg-[var(--color-panel-2)] px-1.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--color-label)]">
+              <span>#</span>
+              <span>{r.colSource}</span>
+              <span className="text-right text-[var(--color-blue)]">{r.laneVector}</span>
+              <span className="text-right" style={{ color: RAG }}>
+                {r.laneBm25}
+              </span>
+              <span className="text-right">RRF</span>
+            </div>
+            {rows.map((m, idx) => {
+              // BM25 pulled this chunk up when it's ranked by the sparse lane and the dense
+              // lane either missed it or ranked it lower than its fused position.
+              const lifted =
+                m.bm25_rank !== null && (m.vector_rank === null || m.new_rank < m.vector_rank);
+              return (
+                <div
+                  key={idx}
+                  className="grid grid-cols-[1.6rem_1fr_2.6rem_2.6rem_3.4rem] items-center gap-1 border-b border-[var(--color-line)] px-1.5 py-1 text-[10px] last:border-0"
+                >
+                  <span className="font-mono text-[var(--color-text-soft)]">
+                    {m.new_rank}
+                    {lifted && <span className="ml-0.5 text-[var(--color-ok-soft)]">↑</span>}
+                  </span>
+                  <span className="truncate font-mono text-[var(--color-muted)]">{m.source}</span>
+                  <span className="text-right font-mono text-[var(--color-blue)]">
+                    {m.vector_rank ?? "—"}
+                  </span>
+                  <span className="text-right font-mono" style={{ color: RAG }}>
+                    {m.bm25_rank ?? "—"}
+                  </span>
+                  <span className="text-right font-mono text-[var(--color-text-soft)]">
+                    {m.rrf_score.toFixed(4)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[9.5px] italic leading-snug text-[var(--color-label)]">
+            {r.hybridNote}
+          </p>
+        </Field>
+      )}
+    </Wrap>
   );
 }
 

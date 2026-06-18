@@ -25,6 +25,9 @@ chromadb>=0.5.0
 # Reranker (054-rag-block-expansion) — local cross-encoder (ONNX, no torch, no key)
 flashrank>=0.2.10
 
+# Hybrid search (070-hybrid-search) — sparse BM25 lane (pure-python, deterministic, no key)
+rank-bm25>=0.2.2
+
 # PDF ingestion (user document upload)
 pypdf>=4.0.0
 tiktoken>=0.7.0

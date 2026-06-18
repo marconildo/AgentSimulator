@@ -46,6 +46,8 @@ export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   "agent.route": "route",
   "rag.embed": "retrieve",
   "rag.search": "retrieve",
+  // 070-hybrid-search — BM25 + vector fusion is part of the retrieve phase.
+  "rag.hybrid": "retrieve",
   // 054-rag-block-expansion — reranking is part of the same retrieval phase.
   "rag.rerank": "retrieve",
   "rag.retrieve": "retrieve",

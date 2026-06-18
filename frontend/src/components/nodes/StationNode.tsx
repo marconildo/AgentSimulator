@@ -392,7 +392,6 @@ function innerRows(
     case "researcher":
     case "coder":
     case "critic":
-    case "hybrid":
     case "summarization":
       return [];
   }

@@ -85,10 +85,24 @@ describe("ingestion station (033-ingestion-node)", () => {
   });
 
   // AC8 — the rag node keeps the query-time stages (ingest.* live on `ingestion`).
-  // 054-rag-block-expansion added the rerank sub-stage between search and retrieve.
-  it("leaves the rag station with the query-time stages (incl. rerank)", () => {
+  // 054-rag-block-expansion added the rerank sub-stage; 070-hybrid-search added the
+  // hybrid (BM25 + vector RRF) sub-stage between search and rerank.
+  it("leaves the rag station with the query-time stages (incl. hybrid + rerank)", () => {
     const rag = stationsFor("en").find((s) => s.id === "rag")!;
-    expect(rag.stages).toEqual(["rag.embed", "rag.search", "rag.rerank", "rag.retrieve"]);
+    expect(rag.stages).toEqual([
+      "rag.embed",
+      "rag.search",
+      "rag.hybrid",
+      "rag.rerank",
+      "rag.retrieve",
+    ]);
+  });
+
+  // 070-hybrid-search — the standalone `hybrid` preview tile was removed (hybrid is now
+  // the rag.hybrid sub-stage of the rag station, not a tile of its own).
+  it("no longer exposes a standalone hybrid station tile", () => {
+    // `hybrid` was dropped from StationId in 070, so compare as a plain string.
+    expect(stationsFor("en").some((s) => (s.id as string) === "hybrid")).toBe(false);
   });
 });
 

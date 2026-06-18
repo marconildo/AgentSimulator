@@ -348,6 +348,10 @@ async def chat(req: ChatRequest):
     # body stays minimal (mirrors the ragless echo below).
     if req.rerank:
         request_body["rerank"] = True
+    # 070-hybrid-search: echo the hybrid flag only when on, so a default run's body
+    # stays minimal (mirrors the rerank/ragless echoes).
+    if req.hybrid:
+        request_body["hybrid"] = True
     # 056-ragless-pageindex: echo the toggle only when on, so a default run's body
     # is byte-for-byte unchanged (AC1).
     if req.ragless:
@@ -403,6 +407,7 @@ async def chat(req: ChatRequest):
                     agent_prompt=effective_agent_prompt,
                     enabled_tools=effective_enabled_tools,
                     rerank=req.rerank,
+                    hybrid=req.hybrid,
                     runtime=req.runtime.value,
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,

@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     # rung. 0 = no filter (the 054 behavior). The UI slider overrides it per conversation.
     rerank_threshold_default: float = 0.05
 
+    # 070-hybrid-search: the sparse BM25 lane + RRF fusion. `bm25_top_k` is how wide the
+    # keyword lane ranks (mirrors `rerank_fetch_k` so both lanes feed a comparable pool);
+    # `rrf_k` is the RRF damping constant — score = Σ 1/(rrf_k + rank). 60 is the de-facto
+    # standard from the original RRF paper; larger flattens the rank weighting.
+    bm25_top_k: int = 10
+    rrf_k: int = 60
+
     # --- Application database (relational system of record) ---
     app_db_path: str = "app/data/app.sqlite3"
 

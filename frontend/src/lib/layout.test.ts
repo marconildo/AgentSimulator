@@ -67,22 +67,9 @@ describe("storage write-path placement (034 AC7 · shown with showUpload)", () =
 });
 
 describe("intermediate preview tiles placement (060 AC7)", () => {
-  it("lays out hybrid directly below the RAG node as a retrieval extension", () => {
-    const sel = selectionOf(["mcp", "hybrid"]);
-    const { positions, heights, tierBoxes } = computeLayout(new Set(), sel);
-    expect(positions.hybrid).toBeDefined();
-    // 060 amendment — Hybrid Search is folded under RAG (a sub-component of the RAG
-    // pipeline, mirroring the reranker), so it stacks immediately below the RAG node
-    // and *above* MCP/LLM, not floating at the bottom of the data column.
-    expect(positions.hybrid.x).toBe(positions.rag.x);
-    expect(positions.hybrid.y).toBeGreaterThanOrEqual(positions.rag.y + heights.rag);
-    expect(positions.hybrid.y).toBeLessThan(positions.mcp.y);
-    expect(positions.hybrid.y).toBeLessThan(positions.llm.y);
-    // the services tier box wraps it
-    const box = tierBoxes.services;
-    expect(positions.hybrid.y + heights.hybrid).toBeLessThanOrEqual(box.y + box.h);
-  });
-
+  // 070-hybrid-search removed the standalone `hybrid` tile (hybrid search is now the
+  // `rag.hybrid` sub-stage of the `rag` station), so the former hybrid-placement test
+  // was dropped. The `summarization` preview tile placement still holds.
   it("places summarization under the agent, inside the agent tier", () => {
     const sel = selectionOf(["mcp", "summarization"]);
     const { positions, heights, tierBoxes } = computeLayout(new Set(), sel);

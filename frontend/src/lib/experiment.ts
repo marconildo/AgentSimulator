@@ -122,9 +122,11 @@ export interface ChatOverrides {
   rerank_threshold?: number;
   // 061-scenario-builder — per-feature inputs derived from the global component
   // selection (replaced the 008 `scenario` rung). `rerank` turns on the reranker;
-  // `runtime` picks the agent loop; `ragless` runs PageIndex. Each is sent only when
-  // away from its default so an untouched (Simple-equivalent) run sends nothing extra.
+  // `hybrid` turns on BM25 + vector RRF fusion (070); `runtime` picks the agent loop;
+  // `ragless` runs PageIndex. Each is sent only when away from its default so an
+  // untouched (Simple-equivalent) run sends nothing extra.
   rerank?: boolean;
+  hybrid?: boolean;
   runtime?: string;
   ragless?: boolean;
 }
@@ -135,8 +137,9 @@ export function overridesFor(conv: string | null): ChatOverrides {
   if (e.topK !== null) out.top_k = e.topK;
   if (e.simulateFailure && e.simulateFailure !== "none") out.simulate_failure = e.simulateFailure;
   if (e.rerankThreshold && e.rerankThreshold > 0) out.rerank_threshold = e.rerankThreshold;
-  const { rerank, runtime, ragless } = currentRequestInputs();
+  const { rerank, hybrid, runtime, ragless } = currentRequestInputs();
   if (rerank) out.rerank = true;
+  if (hybrid) out.hybrid = true;
   if (runtime !== "react") out.runtime = runtime;
   if (ragless) out.ragless = true;
   return out;

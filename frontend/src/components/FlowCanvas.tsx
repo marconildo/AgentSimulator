@@ -302,6 +302,16 @@ export function readoutFor(
           k;
         return ro.reranked(fetchK, k);
       }
+      // 070-hybrid-search: when hybrid fired (and no rerank downstream of it), surface the
+      // BM25 + vector fusion result so the tile shows the upgrade without opening the drill-in.
+      const hy = lastWith(rt.events, (e) => e.stage === "rag.hybrid" && e.phase === "end");
+      if (hy) {
+        const fused =
+          (hy.data.fused as number | undefined) ??
+          (hy.data.candidates as unknown[] | undefined)?.length ??
+          0;
+        return ro.hybridFused(fused);
+      }
       const ret = lastWith(rt.events, (e) => e.stage === "rag.retrieve" && e.phase === "end");
       if (ret) {
         const k = (ret.data.k as number | undefined) ?? (ret.data.chunks as unknown[] | undefined)?.length;
@@ -364,7 +374,6 @@ export function readoutFor(
     case "researcher":
     case "coder":
     case "critic":
-    case "hybrid":
     case "summarization":
       return "";
   }
