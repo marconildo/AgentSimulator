@@ -90,6 +90,32 @@ describe("selectDemoTrace (AC4)", () => {
     expect(ragless.has("rag.rerank")).toBe(false);
   });
 
+  it("DeepAgents replays a real DeepAgents capture (plan + multi-search), not the react trace", () => {
+    const trace = selectDemoTrace("rag", "deepagents", "en");
+    const ends = (stage: string) =>
+      (trace.events as TraceEvent[]).filter((e) => e.stage === stage && e.phase === "end");
+    // the planner ran (write_todos → agent.plan) — the DeepAgents-defining behaviour …
+    expect(ends("agent.plan").length).toBeGreaterThan(0);
+    // … and the agent searched the KB more than once (drives the per-search grouping).
+    expect(ends("rag.retrieve").length).toBeGreaterThan(1);
+    // each search carries its query so "Sources used" can group by it.
+    expect(ends("rag.retrieve").every((e) => typeof e.data.query === "string")).toBe(true);
+  });
+
+  it("DeepAgents composes with the reranker and with RAGLESS, just like live", () => {
+    const stages = (t: { events: TraceEvent[] }) => new Set(t.events.map((e) => e.stage));
+    // DeepAgents + Reranker → the plan AND rag.rerank both fire (the user's bug: rerank
+    // was inactive because deepagents replayed a no-rerank capture).
+    const deepRerank = stages(selectDemoTrace("rag", "deepagents-rerank", "en"));
+    expect(deepRerank.has("agent.plan")).toBe(true);
+    expect(deepRerank.has("rag.rerank")).toBe(true);
+    // DeepAgents + RAGLESS → the plan runs AND retrieval uses the PageIndex path (no vector).
+    const deepRagless = stages(selectDemoTrace("rag", "deepagents-ragless", "en"));
+    expect(deepRagless.has("agent.plan")).toBe(true);
+    expect(deepRagless.has("pageindex.select")).toBe(true);
+    expect(deepRagless.has("rag.retrieve")).toBe(false);
+  });
+
   it("maps every curated question label back to its id", () => {
     for (const q of DEMO_QUESTIONS) {
       expect(qidForMessage(q.label.en)).toBe(q.id);

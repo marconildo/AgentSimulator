@@ -44,8 +44,12 @@ SCENARIOS: dict[str, dict] = {
     "ragless": {"ragless": True},
     # The real DeepAgents runtime (planner + virtual file system + multi-search RAG), so
     # the demo replays the plan/step-trail, the local DeepAgents tool calls, and the
-    # per-search "Sources used" grouping just like a live run.
+    # per-search "Sources used" grouping just like a live run. DeepAgents COMPOSES with the
+    # reranker and the RAGLESS strategy (gated purely on runtime), so each combination the
+    # Build popover can produce keys its own captured trace — the demo matches live exactly.
     "deepagents": {"runtime": "deepagents"},
+    "deepagents-rerank": {"runtime": "deepagents", "rerank": True},
+    "deepagents-ragless": {"runtime": "deepagents", "ragless": True},
 }
 
 

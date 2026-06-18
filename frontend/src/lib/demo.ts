@@ -197,16 +197,21 @@ function readScenario(): string {
       // RAGLESS is its own captured pipeline (pageindex.*, no vector path) and is
       // mutually exclusive with the vector-only rerank, so it keys its own fixture
       // — check it before the rerank-driven "intermediate" bucket.
-      if (retrieval === "ragless") return "ragless";
       const advanced = ["gateway", "guardrails", "cache", "eval", "observability"];
       if (runtime === "multiagent" || enabled.some((c) => advanced.includes(c))) return "advanced";
-      // The DeepAgents runtime keys its OWN captured pipeline (agent.plan / agent.fs.* /
-      // agent.delegate + multi-search RAG), so the demo replays a real DeepAgents trace
-      // instead of folding into the vector-rerank "intermediate" bucket. Falls back
-      // gracefully (selectDemoTrace) until those fixtures are captured.
-      if (runtime === "deepagents") return "deepagents";
-      const intermediate = ["rerank", "hybrid", "summarization"];
-      if (enabled.some((c) => intermediate.includes(c))) return "intermediate";
+      // The reranker (a real intermediate upgrade) composes with everything; hybrid /
+      // summarization are preview (won't run) so they don't change the trace.
+      const rerank = enabled.includes("rerank");
+      // DeepAgents (`runtime`) composes with the retrieval strategy + reranker exactly
+      // like the live backend — each combination keys its OWN captured trace (agent.plan
+      // + multi-search; with rerank → rag.rerank; with ragless → PageIndex). This is why
+      // the demo matches local for every simple/intermediate selection.
+      if (runtime === "deepagents") {
+        if (retrieval === "ragless") return "deepagents-ragless";
+        return rerank ? "deepagents-rerank" : "deepagents";
+      }
+      if (retrieval === "ragless") return "ragless";
+      if (rerank) return "intermediate";
     }
   } catch {
     // fall through to the default rung
