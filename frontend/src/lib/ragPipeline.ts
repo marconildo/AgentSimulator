@@ -65,6 +65,16 @@ export function cosineAngleDeg(similarity: number): number {
 // The query that was embedded/searched: the model's `search_knowledge_base` tool
 // argument when present (the honest, exact query), else the user's message.
 function retrievalQuery(visible: TraceEvent[]): string {
+  // 069 — prefer the query carried on the retrieve END: the backend tags each
+  // search's retrieve with its own query, so in a per-cycle slice this attributes
+  // the right query to the right retrieval (the tool-call fallback would otherwise
+  // resolve to the *last* search_knowledge_base call across the whole turn).
+  for (let i = visible.length - 1; i >= 0; i--) {
+    const e = visible[i];
+    if (e.stage === "rag.retrieve" && e.phase === "end" && typeof e.data.query === "string") {
+      if (e.data.query) return e.data.query;
+    }
+  }
   for (let i = visible.length - 1; i >= 0; i--) {
     const calls = visible[i].data.tool_calls as
       | Array<{ name?: string; args?: { query?: string } }>
@@ -185,4 +195,35 @@ export function deriveRagPipeline(events: TraceEvent[], cursor: number): RagPipe
   const started = present("rag.embed") || present("rag.search") || present("rag.retrieve");
 
   return { stages: [chunking, embedding, retrieval, rerankStage, augmented], started };
+}
+
+// 069-rag-executions-history — the agent can elect `search_knowledge_base` more than
+// once in a turn; each call runs its own embed → search → [rerank] → retrieve cycle.
+// `deriveRagPipeline` reads each stage with `lastEnd`, so it only shows the LAST cycle.
+// This splits the turn into one RagPipeline per cycle so the drill-in can navigate them.
+const CYCLE_STAGES: Stage[] = ["rag.embed", "rag.search", "rag.rerank", "rag.retrieve"];
+
+export function deriveRagExecutions(events: TraceEvent[], cursor: number): RagPipeline[] {
+  const visible = cursor >= 0 ? events.slice(0, cursor + 1) : [];
+  // Each query cycle begins by embedding the query. Ingestion embeds via the distinct
+  // `rag.ingest.embed` stage and RAGLESS never emits `rag.*`, so this marker is
+  // unambiguous for vector retrieval.
+  const starts = visible
+    .filter((e) => e.stage === "rag.embed" && e.phase === "start")
+    .map((e) => e.seq);
+  if (starts.length === 0) return [];
+  // One (or zero) cycle → today's exact result (keeps the single-cycle path byte-for-byte).
+  if (starts.length === 1) return [deriveRagPipeline(events, cursor)];
+
+  const isCycle = (s: Stage): boolean => CYCLE_STAGES.includes(s);
+  return starts.map((startSeq, i) => {
+    const nextSeq = i + 1 < starts.length ? starts[i + 1] : Infinity;
+    // Keep every non-cycle event (ingestion / llm.prompt / thinks stay global) plus
+    // only THIS cycle's retrieval-stage events, then reuse the base projection so each
+    // cycle renders identically to a single-search turn.
+    const slice = visible.filter(
+      (e) => !isCycle(e.stage) || (e.seq >= startSeq && e.seq < nextSeq),
+    );
+    return deriveRagPipeline(slice, slice.length - 1);
+  });
 }

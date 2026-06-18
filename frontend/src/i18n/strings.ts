@@ -660,6 +660,10 @@ export interface Strings {
     thresholdLabel: string;
     thresholdOff: string;
     thresholdOffHint: string;
+    // 069-rag-executions-history — navigate every retrieval cycle of a multi-search turn.
+    executionOf: (k: number, n: number) => string;
+    prevExecution: string;
+    nextExecution: string;
   };
   // 056-ragless-pageindex — the RAGLESS drill-in panel (tree → navigate → select →
   // augmented). A pure projection like ragDetail, but for reasoning-based retrieval.
@@ -1679,6 +1683,9 @@ const en: Strings = {
     thresholdOff: "0.00 · off",
     thresholdOffHint:
       "No score filter — the top-k are kept regardless of relevance. Raise the Rerank score threshold (Settings → Experiment) to drop low-score chunks like this one.",
+    executionOf: (k, n) => `retrieval ${k} / ${n}`,
+    prevExecution: "Previous retrieval",
+    nextExecution: "Next retrieval",
   },
   pageindexDetail: {
     title: "RAGLESS Pipeline",
@@ -2570,6 +2577,9 @@ const pt: Strings = {
     thresholdOff: "0.00 · desligado",
     thresholdOffHint:
       "Sem filtro de score — o top-k é mantido independente da relevância. Suba o limiar de score do rerank (Settings → Experiment) para descartar chunks de score baixo como este.",
+    executionOf: (k, n) => `recuperação ${k} / ${n}`,
+    prevExecution: "Recuperação anterior",
+    nextExecution: "Próxima recuperação",
   },
   pageindexDetail: {
     title: "Pipeline RAGLESS",

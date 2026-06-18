@@ -16,6 +16,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { useT } from "../i18n";
 import { computeLayout } from "../lib/layout";
 import {
+  deriveRagExecutions,
   deriveRagPipeline,
   type RagPipeline,
   type RagStage,
@@ -70,7 +71,28 @@ export function RagPipelinePanel() {
 
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
   const layout = useMemo(() => computeLayout(expandedSet, sel), [expandedSet, sel]);
-  const pipeline = useMemo(() => deriveRagPipeline(events, cursor), [events, cursor]);
+  // 069-rag-executions-history — a turn can run several retrieval cycles (one per
+  // search_knowledge_base call). Derive them all and let the user step between them;
+  // a 0/1-cycle turn behaves exactly as before (no navigator, single pipeline).
+  const executions = useMemo(() => deriveRagExecutions(events, cursor), [events, cursor]);
+  const [execIndex, setExecIndex] = useState(0);
+  // Default to (and follow) the latest cycle as new ones stream in; keep the index in
+  // range when the count changes. Switching cycles re-opens on its active stage.
+  useEffect(() => {
+    setExecIndex((i) => (executions.length === 0 ? 0 : clamp(i, 0, executions.length - 1)));
+  }, [executions.length]);
+  const lastExec = useRef(0);
+  useEffect(() => {
+    if (executions.length > lastExec.current) {
+      setExecIndex(executions.length - 1);
+      setPicked(null);
+    }
+    lastExec.current = executions.length;
+  }, [executions.length]);
+  const pipeline = useMemo(
+    () => executions[execIndex] ?? deriveRagPipeline(events, cursor),
+    [executions, execIndex, events, cursor],
+  );
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -126,6 +148,25 @@ export function RagPipelinePanel() {
                 <div className="text-[13px] font-semibold text-[var(--color-ink)]">{r.title}</div>
                 <div className="truncate text-[10.5px] text-[var(--color-muted)]">{r.subtitle}</div>
               </div>
+              {/* 069 — execution navigator: only when the turn ran ≥2 retrieval cycles. */}
+              {executions.length >= 2 && (
+                <ExecutionNav
+                  index={execIndex}
+                  total={executions.length}
+                  query={
+                    (pipeline.stages.find((s) => s.id === "embedding")?.data.query as string) ?? ""
+                  }
+                  r={r}
+                  onPrev={() => {
+                    setExecIndex((i) => clamp(i - 1, 0, executions.length - 1));
+                    setPicked(null);
+                  }}
+                  onNext={() => {
+                    setExecIndex((i) => clamp(i + 1, 0, executions.length - 1));
+                    setPicked(null);
+                  }}
+                />
+              )}
               <button
                 type="button"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -173,9 +214,68 @@ export function RagPipelinePanel() {
   );
 }
 
-// --- one stage card ---------------------------------------------------------
+// --- execution navigator (069) ----------------------------------------------
 
 type RagStrings = ReturnType<typeof useT>["ragDetail"];
+
+export function ExecutionNav({
+  index,
+  total,
+  query,
+  r,
+  onPrev,
+  onNext,
+}: {
+  index: number;
+  total: number;
+  query: string;
+  r: RagStrings;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const btn =
+    "pointer-events-auto rounded-md border border-[var(--color-line)] px-1.5 text-[13px] leading-[18px] text-[var(--color-muted)] transition hover:bg-[var(--color-panel-2)] disabled:opacity-40 disabled:hover:bg-transparent";
+  return (
+    <div className="flex max-w-[260px] items-center gap-1" title={query}>
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPrev();
+        }}
+        disabled={index === 0}
+        aria-label={r.prevExecution}
+        className={btn}
+      >
+        ‹
+      </button>
+      <div className="min-w-0 text-right">
+        <div className="whitespace-nowrap text-[11px] font-medium text-[var(--color-ink)]">
+          {r.executionOf(index + 1, total)}
+        </div>
+        {query && (
+          <div className="truncate text-[9.5px] text-[var(--color-muted)]">{query}</div>
+        )}
+      </div>
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onNext();
+        }}
+        disabled={index === total - 1}
+        aria-label={r.nextExecution}
+        className={btn}
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
+// --- one stage card ---------------------------------------------------------
 
 const TITLE: Record<RagStage["id"], (r: RagStrings) => string> = {
   chunking: (r) => r.chunking,

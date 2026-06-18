@@ -2,8 +2,8 @@
 """058-online-demo-mode — capture REAL traces for the backend-less showcase build.
 
 Runs the four curated sample questions through the live backend (batch mode) for
-each executing scenario (simple, intermediate, ragless) and each language (en, pt),
-saving the verbatim `TraceSummary` JSON into `frontend/src/demo/fixtures/`. Also
+each executing scenario (simple, intermediate, ragless, deepagents) and each language
+(en, pt), saving the verbatim `TraceSummary` JSON into `frontend/src/demo/fixtures/`. Also
 snapshots `/api/config`. These captures are what the GitHub Pages demo replays — they
 are real runs of this pipeline (constitution §3), never hand-authored.
 
@@ -42,6 +42,10 @@ SCENARIOS: dict[str, dict] = {
     "simple": {},
     "intermediate": {"rerank": True},
     "ragless": {"ragless": True},
+    # The real DeepAgents runtime (planner + virtual file system + multi-search RAG), so
+    # the demo replays the plan/step-trail, the local DeepAgents tool calls, and the
+    # per-search "Sources used" grouping just like a live run.
+    "deepagents": {"runtime": "deepagents"},
 }
 
 

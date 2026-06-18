@@ -119,20 +119,31 @@ function freshId(prefix: string): string {
 const now = () => Date.now() / 1000;
 
 /** The chunks the agent retrieved this turn, reconstructed from the captured
- *  trace so a demo message carries its "Sources used" just like a live one
- *  (mirrors the backend's `_retrieved_chunks`): prefer the vector `rag.retrieve`
- *  END event, then fall back to the RAGLESS `pageindex.select` END event. */
+ *  trace so a demo message carries its "Sources used" just like a live one.
+ *  Mirrors the backend's `_retrieved_chunks`: EVERY chunk from EVERY `rag.retrieve`
+ *  (the agent may search the KB more than once), in order, each tagged with the
+ *  search's `query` + 1-based `search` index so the chat groups by search — no
+ *  dedup. Falls back to the RAGLESS `pageindex.select` END when there was no
+ *  vector retrieval. Kept byte-for-byte aligned with `main._retrieved_chunks`. */
 function retrievedChunks(events: TraceEvent[]): ChatChunk[] {
-  const pick = (stage: string) => {
-    for (let i = events.length - 1; i >= 0; i--) {
-      const ev = events[i];
-      if (ev.stage === stage && ev.phase === "end") {
-        return (ev.data.chunks as ChatChunk[] | undefined) ?? [];
-      }
+  const out: ChatChunk[] = [];
+  let search = 0;
+  for (const ev of events) {
+    if (ev.stage === "rag.retrieve" && ev.phase === "end") {
+      search += 1;
+      const query = ev.data.query as string | undefined;
+      const chunks = (ev.data.chunks as ChatChunk[] | undefined) ?? [];
+      for (const c of chunks) out.push({ ...c, query, search });
     }
-    return null;
-  };
-  return pick("rag.retrieve") ?? pick("pageindex.select") ?? [];
+  }
+  if (out.length) return out;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i];
+    if (ev.stage === "pageindex.select" && ev.phase === "end") {
+      return (ev.data.chunks as ChatChunk[] | undefined) ?? [];
+    }
+  }
+  return [];
 }
 
 /** Build (and record) a demo turn: clone the captured trace under a fresh id so
@@ -189,9 +200,13 @@ function readScenario(): string {
       if (retrieval === "ragless") return "ragless";
       const advanced = ["gateway", "guardrails", "cache", "eval", "observability"];
       if (runtime === "multiagent" || enabled.some((c) => advanced.includes(c))) return "advanced";
+      // The DeepAgents runtime keys its OWN captured pipeline (agent.plan / agent.fs.* /
+      // agent.delegate + multi-search RAG), so the demo replays a real DeepAgents trace
+      // instead of folding into the vector-rerank "intermediate" bucket. Falls back
+      // gracefully (selectDemoTrace) until those fixtures are captured.
+      if (runtime === "deepagents") return "deepagents";
       const intermediate = ["rerank", "hybrid", "summarization"];
-      if (runtime === "deepagents" || enabled.some((c) => intermediate.includes(c)))
-        return "intermediate";
+      if (enabled.some((c) => intermediate.includes(c))) return "intermediate";
     }
   } catch {
     // fall through to the default rung
