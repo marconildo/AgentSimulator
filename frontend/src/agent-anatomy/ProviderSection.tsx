@@ -70,9 +70,27 @@ export function ProviderSection() {
 
   function selectProvider(id: string) {
     if (id === provider) return;
-    updateAgent({ provider: id });
+    // 074/078 fix: switching the provider must reconcile the model — leaving an
+    // Ollama model on the OpenAI provider was the real "backend error 14/14" bug
+    // (OpenAI 404s on `phi4-mini`). Switching to OpenAI resets to the curated
+    // default; switching to Ollama, the model dropdown below forces a valid pick.
+    if (id === "openai") {
+      updateAgent({ provider: id, model: config?.default_model || "gpt-4.1-mini" });
+    } else {
+      updateAgent({ provider: id });
+    }
     flush(); // a discrete choice should persist immediately (no blur to wait for)
   }
+
+  // When the Ollama model list loads and the agent's current model isn't installed
+  // (e.g. a leftover OpenAI id after switching to Ollama), default the dropdown's
+  // selection to the first installed model so the displayed value is always valid.
+  const ollamaModelValue =
+    isOllama && models?.reachable && models.models.length > 0
+      ? models.models.some((m) => m.id === (agent?.model ?? ""))
+        ? (agent?.model ?? "")
+        : models.models[0].id
+      : (agent?.model ?? "");
 
   function saveUrl() {
     const url = baseUrl.trim();
@@ -186,7 +204,7 @@ export function ProviderSection() {
             <select
               aria-label={t.modelLabel}
               data-testid="agent-anatomy-ollama-model"
-              value={agent?.model ?? ""}
+              value={ollamaModelValue}
               onChange={(e) => selectModel(e.target.value)}
               className="w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] px-2.5 py-1.5 font-mono text-[12px] text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
             >

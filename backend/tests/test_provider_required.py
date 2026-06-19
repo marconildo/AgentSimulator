@@ -25,10 +25,16 @@ def _force_keyless(monkeypatch):
     # 078-openai-key-ui: "no key" now means no DB key AND no env key. Patch the
     # config-level get_settings (which `effective_openai_key` reads) and clear any
     # UI-saved DB key so the fail-fast guard genuinely has nothing to fall back on.
+    # 075-ollama-embeddings: `embeddings.py` no longer imports `get_settings`
+    # (it resolves via the config-level `effective_*` helpers), so patching the
+    # config-level one is what makes both the provider AND embeddings keyless.
     monkeypatch.setattr(config_mod, "get_settings", _keyless)
     monkeypatch.setattr(provider_mod, "get_settings", _keyless)
-    monkeypatch.setattr(embeddings_mod, "get_settings", _keyless)
+    # Embeddings must resolve to the OpenAI provider for the keyless guard to fire;
+    # clear any leftover DB embedding provider so it doesn't pick Ollama.
     get_store()._set_config_sync("openai_api_key", "")
+    get_store()._set_config_sync("embedding_provider", "")
+    get_store()._set_config_sync("embedding_model", "")
 
 
 def test_get_provider_without_key_raises_typed_error(monkeypatch):

@@ -134,6 +134,34 @@ describe("ProviderSection — Ollama (074)", () => {
     expect(patchAgent).toHaveBeenCalledWith("a1", { provider: "ollama" });
   });
 
+  it("switching to OpenAI resets a stale Ollama model (prevents the 404 bug)", async () => {
+    // The agent is on Ollama with an Ollama-only model; switching the provider
+    // back to OpenAI must reconcile the model so the run never sends 'phi4-mini'
+    // to OpenAI (the real "backend error 14/14" bug).
+    useChat.setState({
+      sessions: [
+        {
+          id: "s1",
+          title: null,
+          agent: { ...baseAgent, provider: "ollama", model: "phi4-mini:latest" },
+          created_at: 0,
+          updated_at: 0,
+        },
+      ],
+      activeSessionId: "s1",
+    });
+    render(<ProviderSection />);
+    const openai = await screen.findByTestId("agent-anatomy-provider-openai");
+    act(() => {
+      fireEvent.click(openai);
+    });
+    // provider AND model are patched together — model reset to a valid OpenAI id.
+    expect(patchAgent).toHaveBeenCalledWith("a1", {
+      provider: "openai",
+      model: "gpt-4.1-mini",
+    });
+  });
+
   it("shows the server-URL field + live model list when on Ollama", async () => {
     seedSession("ollama");
     render(<ProviderSection />);
