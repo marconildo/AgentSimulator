@@ -74,10 +74,22 @@ class Settings(BaseSettings):
     # error string and the rest of the app runs unchanged.
     tavily_api_key: str = ""
 
+    # --- Ollama (074-ollama-provider) ---
+    # The default local Ollama server URL. Only the *default* — the live value is
+    # persisted in the relational store (`app_config.ollama_base_url`) and editable
+    # from the UI, so it survives restart. The backend (not the browser) connects
+    # to this address; in Docker use `host.docker.internal`.
+    ollama_base_url: str = "http://localhost:11434"
+
     # --- RAG ---
     rag_top_k: int = 4
     chroma_dir: str = "app/data/chroma"
     corpus_dir: str = "app/data/corpus"
+    # 072-chunking-strategies: the ingestion-time chunker. `recursive` (default) is
+    # today's paragraph-packing splitter (byte-for-byte). `fixed`/`semantic`/`agentic`
+    # are the alternatives the ⚙️ Settings picker + re-ingest can switch to. Stored as a
+    # plain string (env CHUNK_STRATEGY) and coerced to ChunkStrategy where used.
+    chunk_strategy: str = "recursive"
 
     # --- Reranker (054-rag-block-expansion) ---
     # The Intermediate rung re-scores a wider candidate pool with a local FlashRank

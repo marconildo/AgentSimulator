@@ -649,6 +649,8 @@ async def run_agent_state(
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
     model: str | None = None,
+    provider: str = "openai",
+    base_url: str | None = None,
     agent_name: str | None = None,
     agent_description: str | None = None,
     rerank_threshold: float = 0.0,
@@ -660,7 +662,7 @@ async def run_agent_state(
     Exposed (alongside :func:`run_agent`) so tests can inspect the canonical
     message thread (``state["messages"]``) the run produced.
     """
-    provider = get_provider(model=model)
+    llm_provider = get_provider(provider=provider, model=model, base_url=base_url)
     registry = await get_registry()
     graph = get_compiled_graph()
 
@@ -693,7 +695,7 @@ async def run_agent_state(
         "vfs": {},
     }
     config: RunnableConfig = {
-        "configurable": {"emitter": emitter, "provider": provider, "registry": registry},
+        "configurable": {"emitter": emitter, "provider": llm_provider, "registry": registry},
         # Headroom for the DeepAgents loop (plan → work → files → delegate → answer);
         # each round is ~2 nodes, so this comfortably bounds DEEPAGENTS_MAX_ITERATIONS.
         "recursion_limit": 50,
@@ -716,6 +718,8 @@ async def run_agent(
     simulate_failure: str = "none",
     skills_catalog: list[dict[str, str]] | None = None,
     model: str | None = None,
+    provider: str = "openai",
+    base_url: str | None = None,
     agent_name: str | None = None,
     agent_description: str | None = None,
     rerank_threshold: float = 0.0,
@@ -759,6 +763,8 @@ async def run_agent(
         simulate_failure=simulate_failure,
         skills_catalog=skills_catalog,
         model=model,
+        provider=provider,
+        base_url=base_url,
         agent_name=agent_name,
         agent_description=agent_description,
         rerank_threshold=rerank_threshold,

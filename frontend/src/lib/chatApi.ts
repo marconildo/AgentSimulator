@@ -5,6 +5,7 @@
 import type { TraceEvent } from "../types/events";
 import type { Maturity as Scenario } from "./selection";
 import {
+  demoChunkPreview,
   demoClearData,
   demoCreateSession,
   demoGetConfig,
@@ -29,6 +30,9 @@ export interface AgentMeta {
   system_prompt: string;
   agent_prompt: string;
   model: string;
+  // 074-ollama-provider: which LLM provider this agent runs against
+  // ("openai" | "ollama"). Defaults to "openai" server-side.
+  provider: string;
   enabled_tools: string[];
   is_default: boolean;
   created_at: number;
@@ -51,7 +55,13 @@ export interface SessionMeta {
 export type AgentPatchBody = Partial<
   Pick<
     AgentMeta,
-    "name" | "description" | "system_prompt" | "agent_prompt" | "model" | "enabled_tools"
+    | "name"
+    | "description"
+    | "system_prompt"
+    | "agent_prompt"
+    | "model"
+    | "provider"
+    | "enabled_tools"
   >
 >;
 
@@ -285,6 +295,16 @@ export interface AppConfig {
   // OpenAI is active; Ollama is a disabled preview.
   providers: ProviderInfo[];
   default_provider: string;
+  // 074-ollama-provider: the default local Ollama server URL the dialog prefills
+  // the "Server URL" field with (the live persisted value comes from
+  // GET /api/settings/ollama).
+  default_ollama_base_url?: string;
+  // 071-retrieval-metrics: labelled benchmark queries for one-click retrieval scoring.
+  benchmark_queries?: { id: string; query: string }[];
+  // 072-chunking-strategies: the chunker the live index was last built with + the
+  // available strategies the Settings picker / re-ingest can choose from.
+  chunk_strategy?: string;
+  chunk_strategies?: string[];
 }
 
 let _configPromise: Promise<AppConfig> | null = null;
@@ -292,6 +312,37 @@ let _configPromise: Promise<AppConfig> | null = null;
 export const getConfig = (): Promise<AppConfig> => {
   if (!_configPromise) _configPromise = isDemo() ? demoGetConfig() : api<AppConfig>("/api/config");
   return _configPromise;
+};
+
+// 074-ollama-provider — local Ollama server config + live model listing.
+export interface OllamaModel {
+  id: string;
+  size?: number;
+  modified_at?: string;
+}
+export interface OllamaModelsResult {
+  reachable: boolean;
+  base_url: string;
+  models: OllamaModel[];
+  error?: string;
+}
+
+/** The persisted Ollama server URL (DB), falling back to the env default. */
+export const getOllamaSettings = (): Promise<{ base_url: string }> =>
+  isDemo()
+    ? Promise.resolve({ base_url: "http://localhost:11434" })
+    : api<{ base_url: string }>("/api/settings/ollama");
+
+/** Persist the instance-wide Ollama server URL. */
+export const setOllamaSettings = (baseUrl: string): Promise<{ base_url: string }> =>
+  jsonApi<{ base_url: string }>("/api/settings/ollama", "PUT", { base_url: baseUrl });
+
+/** List the models installed on an Ollama server (backend proxies `/api/tags`). */
+export const getOllamaModels = (baseUrl?: string): Promise<OllamaModelsResult> => {
+  if (isDemo())
+    return Promise.resolve({ reachable: false, base_url: baseUrl ?? "", models: [] });
+  const q = baseUrl ? `?base_url=${encodeURIComponent(baseUrl)}` : "";
+  return api<OllamaModelsResult>(`/api/ollama/models${q}`);
 };
 
 // 042-agent-anatomy: corpus listing for the Knowledge Base section.
@@ -332,5 +383,63 @@ export async function uploadDocument(
   await consumeEventStream(resp, (type, payload) => {
     if (type === "trace") handlers.onTrace(payload as TraceEvent);
     else if (type === "done") handlers.onDone(payload as UploadDone);
+  });
+}
+
+// 072-chunking-strategies — the read-only chunking playground.
+export interface ChunkPreviewChunk {
+  text: string;
+  start: number;
+  end: number;
+  chars: number;
+}
+export interface ChunkPreviewItem {
+  strategy: string;
+  count: number;
+  chunks: ChunkPreviewChunk[];
+  error?: string;
+}
+export interface ChunkPreviewResult {
+  sample_chars: number;
+  previews: ChunkPreviewItem[];
+}
+
+/** Chunk a sample (or supplied) document with one/all strategies — no embed, no index change. */
+export async function chunkPreview(
+  strategy = "all",
+  text?: string,
+): Promise<ChunkPreviewResult> {
+  // 058-online-demo-mode: replay the captured preview, no backend round-trip.
+  if (isDemo()) return demoChunkPreview();
+  const resp = await fetch(`${API_BASE}/api/rag/chunk-preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ strategy, ...(text ? { text } : {}) }),
+  });
+  if (!resp.ok) throw new Error(`chunk-preview failed: ${resp.status}`);
+  return (await resp.json()) as ChunkPreviewResult;
+}
+
+export interface ReindexDone {
+  trace_id: string;
+  strategy: string;
+  num_chunks: number;
+}
+
+/** Re-ingest the corpus with a chunking strategy, streaming the ingestion trace (animates canvas). */
+export async function reindexCorpus(
+  strategy: string,
+  handlers: { onTrace: (e: TraceEvent) => void; onDone: (d: ReindexDone) => void },
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE}/api/rag/reindex`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ strategy }),
+    signal,
+  });
+  await consumeEventStream(resp, (type, payload) => {
+    if (type === "trace") handlers.onTrace(payload as TraceEvent);
+    else if (type === "done") handlers.onDone(payload as ReindexDone);
   });
 }

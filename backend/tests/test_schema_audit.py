@@ -38,6 +38,9 @@ EXPECTED_TABLES: set[str] = {
     # 048-persist-traces: every `TraceEvent` lives in a real SQLite table now,
     # so the in-memory `TraceStore` is just a fast cache layered over this.
     "trace_events",
+    # 074-ollama-provider: instance-global key/value config (e.g. the Ollama
+    # server URL). Config, not conversation data — survives `clear_all`.
+    "app_config",
 }
 
 # Repo root = backend/tests/<this>.py → up two levels → backend/ → up one more → repo.

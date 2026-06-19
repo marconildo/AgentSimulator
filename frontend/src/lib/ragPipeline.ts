@@ -57,6 +57,13 @@ export interface PipelineChunk {
   similarity?: number | null;
   distance?: number;
   rank?: number;
+  // 073-metadata-first-class: rich metadata for the "why retrieved" chips. All optional
+  // so a legacy (pre-073) index or a partial trace still renders.
+  section?: string;
+  doc_type?: string;
+  position?: string;
+  // 071-retrieval-metrics: set when the query is a labelled benchmark (per-chunk relevance).
+  relevant?: boolean;
 }
 
 /**
@@ -157,6 +164,10 @@ export function deriveRagPipeline(events: TraceEvent[], cursor: number): RagPipe
       chunks: pool,
       query,
       top: pool[0] ? { source: pool[0].source, score: pool[0].score } : undefined,
+      // 071-retrieval-metrics — the scorecard, present only when the query is a
+      // labelled benchmark (read off the rag.retrieve END). Absent ⇒ the drill-in
+      // shows the honest "no ground truth" line instead of a fabricated 0.
+      eval: retrieve?.data.eval,
     },
   };
 

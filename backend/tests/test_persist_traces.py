@@ -147,25 +147,32 @@ def _make_pre_048_db(path: Path) -> None:
 
 
 def test_user_version_bumps_to_3_idempotently(tmp_path):
-    """AC3 — a v2 DB migrates to v3 once; subsequent opens are no-ops."""
+    """AC3 — a v2 DB migrates forward once and the 048 `trace_events` table
+    appears; subsequent opens are no-ops.
+
+    074-ollama-provider added a further additive migration, so the schema head
+    is now 4 (was 3 at 048). The 048 invariant under test — the migration runs
+    and creates `trace_events` — is unchanged; we assert the head version.
+    """
     path = tmp_path / "v3.sqlite3"
     _make_pre_048_db(path)
     with sqlite3.connect(path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
 
+    head = ConversationStore._SCHEMA_VERSION_OLLAMA_PROVIDER
     ConversationStore(path)
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
-        # The new table exists.
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == head
+        # The 048 table exists.
         rows = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='trace_events'"
         ).fetchall()
         assert rows, "trace_events should exist after migration"
 
-    # Re-init: still v3, no double-create errors.
+    # Re-init: still at head, no double-create errors.
     ConversationStore(path)
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == head
 
 
 # --- Write path ------------------------------------------------------------

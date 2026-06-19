@@ -96,19 +96,30 @@ class Provider:
         return asdict(self)
 
 
-# 065-provider-and-model-refresh: OpenAI is the one usable provider; Ollama is a
-# disabled preview. Proper nouns ("OpenAI", "Ollama (local)") are not translated.
+# 074-ollama-provider: both providers are now usable. OpenAI is the default;
+# Ollama is a real local provider (was a disabled preview in 065). Proper nouns
+# ("OpenAI", "Ollama (local)") are not translated.
 PROVIDERS: tuple[Provider, ...] = (
     Provider(id="openai", label="OpenAI", available=True),
-    Provider(id="ollama", label="Ollama (local)", available=False),
+    Provider(id="ollama", label="Ollama (local)", available=True),
 )
 
 DEFAULT_PROVIDER = "openai"
 
 
 def model_ids() -> set[str]:
-    """The set of ids the API's allowlist check uses."""
+    """The set of OpenAI model ids the API's allowlist check uses.
+
+    074-ollama-provider: this allowlist is **OpenAI-scoped**. Ollama models are
+    whatever is installed on the user's local server, so they are not validated
+    against this set.
+    """
     return {m.id for m in CURATED_MODELS}
+
+
+def provider_ids() -> set[str]:
+    """The set of selectable provider ids (used to validate request/patch input)."""
+    return {p.id for p in PROVIDERS if p.available}
 
 
 def models_payload() -> list[dict[str, str]]:

@@ -88,6 +88,7 @@ def _agent_row(row: sqlite3.Row) -> dict[str, Any]:
         "system_prompt": row["system_prompt"],
         "agent_prompt": row["agent_prompt"],
         "model": row["model"],
+        "provider": (row["provider"] if "provider" in row.keys() else "openai"),
         "enabled_tools": json.loads(row["enabled_tools"] or "[]"),
         "is_default": bool(row["is_default"]),
         "created_at": row["created_at"],
@@ -123,12 +124,22 @@ CREATE TABLE IF NOT EXISTS agents (
     system_prompt TEXT NOT NULL,
     agent_prompt  TEXT NOT NULL,
     model         TEXT NOT NULL,
+    -- 074-ollama-provider: which LLM provider this agent runs against. Defaults
+    -- to 'openai' so every pre-074 row reads back as the prior behavior.
+    provider      TEXT NOT NULL DEFAULT 'openai',
     enabled_tools TEXT NOT NULL DEFAULT '[]', -- JSON list[str]; [] = no tools
     is_default    INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
     created_at    REAL NOT NULL,
     updated_at    REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_agents_is_default ON agents(is_default);
+-- 074-ollama-provider: instance-global key/value config (not conversation data,
+-- so it survives `clear_all`). First key: `ollama_base_url`. Seeded from the env
+-- default on read when absent.
+CREATE TABLE IF NOT EXISTS app_config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS messages (
     id         TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -268,6 +279,10 @@ class ConversationStore:
         # table on existing pre-048 DBs. Gated by `PRAGMA user_version` so
         # subsequent boots are no-ops. Fresh DBs already have it via _SCHEMA.
         ConversationStore._migrate_to_persist_traces(self.path)
+        # 074-ollama-provider: additive — adds `agents.provider` (and ensures the
+        # `app_config` table). Runs AFTER the 047 rebuild, which would otherwise
+        # drop a freshly-created `provider` column. Gated by `PRAGMA user_version`.
+        ConversationStore._migrate_to_ollama_provider(self.path)
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection) -> None:
@@ -317,6 +332,10 @@ class ConversationStore:
     # 048-persist-traces: bumped after the additive `trace_events` table is
     # created. Pure `CREATE TABLE IF NOT EXISTS` — no table rebuild needed.
     _SCHEMA_VERSION_PERSIST_TRACES = 3
+    # 074-ollama-provider: bumped after the additive `agents.provider` column is
+    # added (and `app_config` ensured). Pure `ALTER TABLE ADD COLUMN` + `CREATE
+    # TABLE IF NOT EXISTS` — no table rebuild needed.
+    _SCHEMA_VERSION_OLLAMA_PROVIDER = 4
 
     @staticmethod
     def _migrate_to_shared_catalog(conn: sqlite3.Connection) -> None:
@@ -540,6 +559,31 @@ class ConversationStore:
             )
             conn.execute(f"PRAGMA user_version = {target}")
 
+    @staticmethod
+    def _migrate_to_ollama_provider(path: Path) -> None:
+        """074-ollama-provider: add `agents.provider` + ensure `app_config`.
+
+        Runs after the 047 rebuild (which recreates `agents` without `provider`)
+        so the column survives on fresh DBs too. Pure additive — idempotent
+        `ALTER TABLE ADD COLUMN` (guarded by a column-presence check) and
+        `CREATE TABLE IF NOT EXISTS`. Gated by ``PRAGMA user_version`` so
+        subsequent boots are no-ops.
+        """
+        target = ConversationStore._SCHEMA_VERSION_OLLAMA_PROVIDER
+        with sqlite3.connect(path) as conn:
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+            if current >= target:
+                return
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(agents)")}
+            if "provider" not in cols:
+                conn.execute(
+                    "ALTER TABLE agents ADD COLUMN provider TEXT NOT NULL DEFAULT 'openai'"
+                )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
+            conn.execute(f"PRAGMA user_version = {target}")
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
@@ -681,6 +725,7 @@ class ConversationStore:
         "system_prompt",
         "agent_prompt",
         "model",
+        "provider",
         "enabled_tools",
     )
 
@@ -753,10 +798,11 @@ class ConversationStore:
             now = time()
             final_name = name if (name and name.strip()) else f"{source['name']} (cópia)"
             final_desc = description if description is not None else source["description"]
+            source_provider = source["provider"] if "provider" in source.keys() else "openai"
             conn.execute(
                 "INSERT INTO agents (id, name, description, system_prompt, "
-                "agent_prompt, model, enabled_tools, is_default, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                "agent_prompt, model, provider, enabled_tools, is_default, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
                 (
                     new_id,
                     final_name[:60],
@@ -764,6 +810,7 @@ class ConversationStore:
                     source["system_prompt"],
                     source["agent_prompt"],
                     source["model"],
+                    source_provider,
                     source["enabled_tools"],
                     now,
                     now,
@@ -1294,6 +1341,27 @@ class ConversationStore:
 
     async def clear_all(self) -> dict[str, Any]:
         return await asyncio.to_thread(self._clear_all_sync)
+
+    # --- instance config (074-ollama-provider) -------------------------------
+
+    def _get_config_sync(self, key: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM app_config WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def _set_config_sync(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO app_config (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    async def get_config(self, key: str) -> str | None:
+        return await asyncio.to_thread(self._get_config_sync, key)
+
+    async def set_config(self, key: str, value: str) -> None:
+        return await asyncio.to_thread(self._set_config_sync, key, value)
 
     # --- trace events (048-persist-traces) -----------------------------------
 

@@ -15,6 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
+import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -33,10 +34,18 @@ from .db.store import (
     get_store,
 )
 from .llm.context import history_pair_tokens
-from .llm.models import DEFAULT_PROVIDER, model_ids, models_payload, providers_payload
+from .llm.models import (
+    DEFAULT_PROVIDER,
+    model_ids,
+    models_payload,
+    provider_ids,
+    providers_payload,
+)
 from .mcp.client import get_registry
-from .rag.ingest import build_index
+from .rag.chunking import ChunkStrategy
+from .rag.ingest import active_chunk_strategy, build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
+from .rag.metrics import benchmark_queries
 from .rag.store import index_matches_model, is_indexed, reset_vectorstore_cache
 from .schemas import ChatRequest, Phase, SimulateFailure, SkillIn, SkillOut, Stage
 from .storage.object_store import (
@@ -226,6 +235,15 @@ async def config() -> dict:
         "rerank_threshold_step": 0.05,
         # 056-ragless-pageindex — default state of the RAGLESS (PageIndex) toggle.
         "ragless_default": False,
+        # 071-retrieval-metrics — the labelled benchmark queries the RAG drill-in
+        # offers as one-click chips, so the metrics (Precision@k / Recall@k / MRR)
+        # are discoverable instead of hidden behind guessing the exact query.
+        "benchmark_queries": benchmark_queries(),
+        # 072-chunking-strategies — the chunker the live index was last built with,
+        # plus the strategies the ⚙️ Settings picker + re-ingest can choose from. Labels
+        # are i18n on the frontend; the backend only ships the ids.
+        "chunk_strategy": active_chunk_strategy(),
+        "chunk_strategies": [s.value for s in ChunkStrategy],
         # The full tool list the agent sees — knowledge-base retrieval plus the
         # MCP tools (026-agent-tool-autonomy) — so the experiment panel lists every
         # tool the agent can choose, not just the MCP ones.
@@ -248,24 +266,87 @@ async def config() -> dict:
         # never hardcodes provider proper nouns.
         "providers": providers_payload(),
         "default_provider": DEFAULT_PROVIDER,
+        # 074-ollama-provider: the default local server URL the FE prefills the
+        # "Server URL" field with (the live, persisted value comes from
+        # GET /api/settings/ollama). Never hardcoded client-side.
+        "default_ollama_base_url": settings.ollama_base_url,
     }
+
+
+# --- Ollama provider (074-ollama-provider) ----------------------------------
+
+
+class OllamaSettings(BaseModel):
+    """Body of ``PUT /api/settings/ollama`` — the instance-wide local server URL."""
+
+    base_url: str = Field(min_length=1, max_length=300)
+
+
+@app.get("/api/settings/ollama")
+async def get_ollama_settings() -> dict:
+    """The persisted Ollama server URL (DB), falling back to the env default.
+
+    The backend (the LLM caller) is what connects to this address, so it is
+    stored server-side rather than only in the browser — it survives restart."""
+    settings = get_settings()
+    stored = await get_store().get_config("ollama_base_url")
+    return {"base_url": stored or settings.ollama_base_url}
+
+
+@app.put("/api/settings/ollama")
+async def set_ollama_settings(body: OllamaSettings) -> dict:
+    """Persist the Ollama server URL (instance-global ``app_config`` row)."""
+    base_url = body.base_url.strip()
+    if not base_url:
+        raise HTTPException(status_code=422, detail="base_url cannot be blank")
+    await get_store().set_config("ollama_base_url", base_url)
+    return {"base_url": base_url}
+
+
+@app.get("/api/ollama/models")
+async def list_ollama_models(base_url: str | None = None) -> dict:
+    """List the models installed on an Ollama server (proxies its ``/api/tags``).
+
+    The backend probes the server (not the browser) so reachability + CORS are
+    handled here. An unreachable/erroring server yields a structured
+    ``{reachable: false, error, models: []}`` (HTTP 200) so the FE can show a
+    helpful hint instead of treating it as a hard failure."""
+    settings = get_settings()
+    url = (base_url or "").strip()
+    if not url:
+        url = (await get_store().get_config("ollama_base_url")) or settings.ollama_base_url
+    tags_url = url.rstrip("/") + "/api/tags"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(tags_url)
+            resp.raise_for_status()
+            payload = resp.json()
+    except Exception as exc:  # noqa: BLE001 - any failure is reported, not raised
+        return {"reachable": False, "error": str(exc), "base_url": url, "models": []}
+    models = [
+        {"id": m["name"], "size": m.get("size"), "modified_at": m.get("modified_at")}
+        for m in payload.get("models", [])
+        if isinstance(m, dict) and m.get("name")
+    ]
+    return {"reachable": True, "base_url": url, "models": models}
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     settings = get_settings()
-    # 042-agent-anatomy: validate the optional model override against the
-    # curated allowlist *before* doing any heavy work. An unlisted id is a
-    # 422, not a runtime surprise from the OpenAI client.
-    if req.model is not None and req.model not in model_ids():
+    # 074-ollama-provider: validate the optional provider override up front.
+    if req.provider is not None and req.provider not in provider_ids():
         raise HTTPException(
             status_code=422,
             detail={
-                "error": "model not in allowlist",
-                "model": req.model,
-                "allowed": sorted(model_ids()),
+                "error": "unknown provider",
+                "provider": req.provider,
+                "allowed": sorted(provider_ids()),
             },
         )
+    # A blank model override is rejected for either provider (AC4).
+    if req.model is not None and not req.model.strip():
+        raise HTTPException(status_code=422, detail="model cannot be blank")
     top_k = req.top_k or settings.rag_top_k
     # 055-rerank-score-threshold: explicit `is None` so a deliberate 0 from the FE
     # isn't overridden by a (future) non-zero default.
@@ -292,6 +373,8 @@ async def chat(req: ChatRequest):
     effective_agent_prompt = req.agent_prompt
     effective_enabled_tools = req.enabled_tools
     effective_model = req.model
+    # 074-ollama-provider: provider override (request wins, else the agent's row).
+    effective_provider = req.provider
     # 049-agent-self-identity: name + description are server-resolved from the
     # bound agent row (not a 006 hot-override — the FE edits them via
     # PATCH /api/agents and they propagate to every session sharing the agent,
@@ -313,9 +396,27 @@ async def chat(req: ChatRequest):
             effective_enabled_tools = list(agent["enabled_tools"])
         if effective_model is None:
             effective_model = agent["model"]
+        if effective_provider is None:
+            effective_provider = agent.get("provider")
         effective_agent_name = agent.get("name")
         effective_agent_description = agent.get("description")
     resolved_model = effective_model or settings.llm_model
+    resolved_provider = effective_provider or "openai"
+    # 074-ollama-provider: the curated model allowlist is OpenAI-scoped. Validate
+    # the resolved model only when running against OpenAI; Ollama accepts any
+    # model installed on the local server.
+    if resolved_provider == "openai" and resolved_model not in model_ids():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "model not in allowlist",
+                "model": resolved_model,
+                "allowed": sorted(model_ids()),
+            },
+        )
+    # The local server URL the backend connects to for an Ollama run: the
+    # persisted instance config, else the env default. (No-op for OpenAI.)
+    ollama_base_url = (await store.get_config("ollama_base_url")) or settings.ollama_base_url
 
     # The resolved POST body the backend actually acted on, echoed onto the
     # frontend event so the client/backend inspector can show it verbatim
@@ -333,6 +434,9 @@ async def chat(req: ChatRequest):
         # configured default) so the FE can show what actually ran without
         # having to know about the server default. Resolves AC6.
         "model": resolved_model,
+        # 074-ollama-provider: echo the resolved provider so the inspector shows
+        # which backend actually ran (default "openai").
+        "provider": resolved_provider,
     }
     if req.system_prompt is not None:
         request_body["system_prompt"] = req.system_prompt
@@ -412,6 +516,9 @@ async def chat(req: ChatRequest):
                     simulate_failure=req.simulate_failure,
                     skills_catalog=skills_catalog,
                     model=effective_model,
+                    # 074-ollama-provider: which provider + local server to run on.
+                    provider=resolved_provider,
+                    base_url=ollama_base_url,
                     rerank_threshold=rerank_threshold,
                     # 056-ragless-pageindex: run the reasoning-based PageIndex path
                     # alongside Vector RAG (Intermediate rung only; no-op otherwise).
@@ -543,6 +650,102 @@ async def list_corpus() -> dict:
     return {"files": files}
 
 
+class ChunkPreviewRequest(BaseModel):
+    # 072-chunking-strategies: which chunker(s) to preview. "all" runs every strategy
+    # so the playground can show them side by side. `text` is optional — defaults to a
+    # sample corpus file so the contrast (fixed cuts mid-sentence) is always demonstrable.
+    strategy: str = "all"
+    text: str | None = Field(default=None, max_length=20000)
+
+
+@app.post("/api/rag/chunk-preview")
+async def chunk_preview(req: ChunkPreviewRequest) -> dict:
+    """Read-only chunking playground (072-chunking-strategies).
+
+    Chunks a sample (or supplied) document with one or all strategies and returns the
+    boundaries — WITHOUT embedding or mutating the index, so comparing strategies is
+    instant and side-effect-free. `fixed`/`recursive` are keyless; `semantic`/`agentic`
+    use OpenAI, so without a key (or on a malformed response) that strategy returns an
+    `error` marker instead of failing the whole request."""
+    from .rag.chunking import ChunkStrategy, chunk
+
+    sample = req.text
+    if not sample:
+        corpus_dir = get_settings().corpus_path
+        files = sorted(corpus_dir.glob("*.md")) if corpus_dir.exists() else []
+        sample = files[0].read_text(encoding="utf-8") if files else ""
+
+    if req.strategy == "all":
+        strategies = list(ChunkStrategy)
+    else:
+        try:
+            strategies = [ChunkStrategy(req.strategy)]
+        except ValueError:
+            return {"error": f"unknown strategy {req.strategy!r}", "previews": []}
+
+    previews: list[dict[str, Any]] = []
+    for strat in strategies:
+        try:
+            chunks = await asyncio.to_thread(chunk, sample, strat)
+            previews.append(
+                {
+                    "strategy": str(strat),
+                    "count": len(chunks),
+                    "chunks": [
+                        {"text": c.text, "start": c.start, "end": c.end, "chars": len(c.text)}
+                        for c in chunks
+                    ],
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - per-strategy, so one keyed strategy can't 500
+            previews.append({"strategy": str(strat), "count": 0, "chunks": [], "error": str(exc)})
+    return {"sample_chars": len(sample), "previews": previews}
+
+
+@app.post("/api/rag/reindex")
+async def reindex_corpus(req: ChunkPreviewRequest):
+    """Re-ingest the corpus with a chosen chunking strategy, streaming the ingestion
+    stages over SSE so the canvas animates Chunking -> Embedding -> Storing (072)."""
+    from .rag.chunking import ChunkStrategy
+    from .rag.ingest import reingest_corpus
+
+    try:
+        strategy = ChunkStrategy(req.strategy)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"unknown strategy {req.strategy!r}") from None
+
+    trace_id = uuid.uuid4().hex
+    emitter = TraceEmitter(trace_id, f"reindex:{strategy}")
+    result: dict[str, Any] = {"num_chunks": -1, "strategy": str(strategy)}
+
+    async def producer() -> None:
+        try:
+            await emitter.emit(
+                Stage.BACKEND, Phase.END, "Re-ingesting corpus", {"strategy": str(strategy)}
+            )
+            out = await reingest_corpus(strategy, emitter)
+            result.update(out)
+        except Exception as exc:  # noqa: BLE001 - report to the client, don't hang
+            await emitter.emit(Stage.BACKEND, Phase.END, "error", {"error": str(exc)})
+        finally:
+            trace_store.save(emitter)
+            await emitter.close()
+
+    async def event_stream():
+        task = asyncio.create_task(producer())
+        try:
+            while True:
+                event = await emitter.queue.get()
+                if event is emitter.DONE:
+                    break
+                yield {"event": "trace", "data": event.model_dump_json()}
+        finally:
+            await task
+        yield {"event": "done", "data": json.dumps({"trace_id": trace_id, **result})}
+
+    return EventSourceResponse(event_stream())
+
+
 @app.post("/api/data/clear")
 async def clear_data():
     """Reset both stores (025-clear-databases): remove every user-imported chunk
@@ -609,6 +812,9 @@ class AgentPatch(BaseModel):
     system_prompt: str | None = Field(default=None, max_length=2000)
     agent_prompt: str | None = Field(default=None, max_length=2000)
     model: str | None = Field(default=None, max_length=120)
+    # 074-ollama-provider: "openai" | "ollama". Validated against the selectable
+    # providers; the model allowlist check is skipped when provider is "ollama".
+    provider: str | None = Field(default=None, max_length=40)
     enabled_tools: list[str] | None = Field(default=None)
 
 
@@ -715,17 +921,33 @@ async def patch_agent(agent_id: str, body: AgentPatch):
     on success). Validates ``model`` against the curated allowlist.
     """
     patch = body.model_dump(exclude_unset=True)
-    # Validate `model` against the same allowlist used by /api/chat (defense in
-    # depth — the FE dropdown also filters, but a programmatic caller might not).
-    if "model" in patch and patch["model"] not in model_ids():
+    # 074-ollama-provider: validate the provider, if present.
+    if "provider" in patch and patch["provider"] not in provider_ids():
         raise HTTPException(
             status_code=422,
             detail={
-                "error": "model not in allowlist",
-                "model": patch["model"],
-                "allowed": sorted(model_ids()),
+                "error": "unknown provider",
+                "provider": patch["provider"],
+                "allowed": sorted(provider_ids()),
             },
         )
+    # Validate `model` against the curated allowlist (same as /api/chat) — but only
+    # when the resulting provider is OpenAI. For Ollama any installed model is valid.
+    # The effective provider is the patch's value, else the agent's current row.
+    if "model" in patch:
+        effective_provider = patch.get("provider")
+        if effective_provider is None:
+            existing = await get_store().get_agent(agent_id)
+            effective_provider = existing["provider"] if existing else "openai"
+        if effective_provider == "openai" and patch["model"] not in model_ids():
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "model not in allowlist",
+                    "model": patch["model"],
+                    "allowed": sorted(model_ids()),
+                },
+            )
     # Normalize name (strip), reject post-strip emptiness explicitly so 1..60
     # actually means "1..60 visible characters".
     if "name" in patch and isinstance(patch["name"], str):

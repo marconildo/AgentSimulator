@@ -17,6 +17,7 @@ import { SettingsCloud } from "./SettingsCloud";
 import { SettingsClear } from "./SettingsClear";
 import { SettingsDelivery } from "./SettingsDelivery";
 import { SettingsExperiment } from "./SettingsExperiment";
+import { SettingsKnowledgeBase } from "./SettingsKnowledgeBase";
 
 function SectionDivider() {
   return <hr className="my-5 border-0 border-t border-[var(--color-line)]" />;
@@ -54,6 +55,14 @@ export function SettingsPage() {
         <SettingsDelivery />
         <SectionDivider />
         <SettingsExperiment />
+        {/* 072-chunking-strategies: pick the corpus chunker + re-ingest (animates the
+            canvas). Hidden in the backend-less demo — re-ingest needs a live backend. */}
+        {!isDemo() && (
+          <>
+            <SectionDivider />
+            <SettingsKnowledgeBase />
+          </>
+        )}
         {/* 058-online-demo-mode: the DB-mutating sections (Clear databases, Skills
             CRUD) have no backing store in the backend-less showcase — hide them. */}
         {!isDemo() && (

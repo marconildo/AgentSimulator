@@ -20,6 +20,21 @@ export function ModelSection() {
   const models = config?.models ?? [];
   const value = agent?.model ?? "";
 
+  // 074-ollama-provider: for an Ollama-bound agent the model is chosen from the
+  // live local-server list in the Provider section (this curated list is
+  // OpenAI-only). Point the user there instead of showing OpenAI models.
+  if (agent?.provider === "ollama") {
+    return (
+      <section data-anatomy-section="model" className="space-y-2">
+        <p className="text-[11px] leading-snug text-[var(--color-muted)]">{t.help}</p>
+        <p className="text-[11px] text-[var(--color-muted)]">
+          {t.resolved}{" "}
+          <span className="font-mono text-[var(--color-ink)]">{value || "—"}</span>
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section data-anatomy-section="model" className="space-y-2">
       <p className="text-[11px] leading-snug text-[var(--color-muted)]">{t.help}</p>

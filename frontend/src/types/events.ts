@@ -150,6 +150,21 @@ export interface PromptPreview {
   context_budget?: ContextBudget;
 }
 
+// 071-retrieval-metrics — the retrieval-quality scorecard carried additively on the
+// `rag.retrieve` END `data.eval`, present ONLY when the run's query matches a labelled
+// golden entry (else absent — honest "no ground truth"). Mirrors backend
+// app/rag/metrics.py::evaluate. Relevance is at the source-file granularity.
+export interface RetrievalEval {
+  precision_at_k: number;
+  recall_at_k: number;
+  mrr: number;
+  k: number;
+  relevant_count: number;
+  relevant_sources: string[];
+  missed: string[];
+  id?: string;
+}
+
 // 057-deepagents-runtime — typed read shapes for the DeepAgents event `data`
 // (additive, like 036's ContextBudget). The drill-in reads these via pure
 // projections in `lib/deepagents.ts`. `data` stays an open record.

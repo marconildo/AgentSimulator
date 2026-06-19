@@ -12,7 +12,8 @@ from app.main import app
 
 
 def test_config_advertises_providers():
-    """AC4 — exactly two providers: openai (available) and ollama (preview)."""
+    """AC4 — exactly two providers: openai + ollama. 074-ollama-provider made
+    Ollama a real (available) provider; it was a disabled preview under 065."""
     with TestClient(app) as client:
         body = client.get("/api/config").json()
     providers = body["providers"]
@@ -20,7 +21,8 @@ def test_config_advertises_providers():
     by_id = {p["id"]: p for p in providers}
     assert set(by_id) == {"openai", "ollama"}
     assert by_id["openai"]["available"] is True
-    assert by_id["ollama"]["available"] is False
+    # 074: Ollama is now a real, selectable provider.
+    assert by_id["ollama"]["available"] is True
     for row in providers:
         assert isinstance(row["label"], str) and row["label"]
 

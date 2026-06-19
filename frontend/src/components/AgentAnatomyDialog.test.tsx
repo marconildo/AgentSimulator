@@ -42,6 +42,7 @@ vi.mock("../lib/chatApi", () => {
     system_prompt: "GUARDRAILS",
     agent_prompt: "ROLE",
     model: "gpt-4.1-mini",
+    provider: "openai",
     enabled_tools: [],
     is_default: true,
     created_at: 0,

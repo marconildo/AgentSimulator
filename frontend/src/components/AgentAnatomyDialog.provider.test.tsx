@@ -1,12 +1,32 @@
-// 065-provider-and-model-refresh — AC5 — the Agent Anatomy dialog renders a
-// Provider section: OpenAI is the selected/active provider; Ollama is a disabled
-// preview ("coming soon"). It reads the provider list from /api/config so it
-// never hardcodes the provider names.
+// 074-ollama-provider — AC8 — the Provider section is interactive: OpenAI and
+// Ollama are both selectable. Selecting Ollama persists `provider:"ollama"` on
+// the agent, reveals the local Server-URL field, and lists the models installed
+// on that server. An unreachable server shows a bilingual hint. Selecting OpenAI
+// keeps the curated model dropdown (ModelSection).
 
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const patchAgent = vi.fn();
+const getOllamaModels = vi.fn();
+const getOllamaSettings = vi.fn();
+const setOllamaSettings = vi.fn();
+
+const baseAgent = {
+  id: "a1",
+  name: "Agent Simulator",
+  description: "",
+  system_prompt: "G",
+  agent_prompt: "R",
+  model: "gpt-4.1-mini",
+  provider: "openai",
+  enabled_tools: [] as string[],
+  is_default: true,
+  created_at: 0,
+  updated_at: 0,
+};
 
 vi.mock("../lib/chatApi", () => {
   const config = {
@@ -24,21 +44,10 @@ vi.mock("../lib/chatApi", () => {
     default_model: "gpt-4.1-mini",
     providers: [
       { id: "openai", label: "OpenAI", available: true },
-      { id: "ollama", label: "Ollama (local)", available: false },
+      { id: "ollama", label: "Ollama (local)", available: true },
     ],
     default_provider: "openai",
-  };
-  const defaultAgent = {
-    id: "default-agent",
-    name: "Agent Simulator",
-    description: "default",
-    system_prompt: "GUARDRAILS",
-    agent_prompt: "ROLE",
-    model: "gpt-4.1-mini",
-    enabled_tools: [],
-    is_default: true,
-    created_at: 0,
-    updated_at: 0,
+    default_ollama_base_url: "http://localhost:11434",
   };
   return {
     getConfig: () => Promise.resolve(config),
@@ -51,57 +60,95 @@ vi.mock("../lib/chatApi", () => {
     uploadDocument: () => Promise.resolve(),
     deleteDocument: () => Promise.resolve({}),
     patchSession: () => Promise.resolve({}),
-    listAgents: () => Promise.resolve([defaultAgent]),
-    patchAgent: () => Promise.resolve(defaultAgent),
-    createAgent: () => Promise.resolve(defaultAgent),
+    listAgents: () => Promise.resolve([baseAgent]),
+    patchAgent: (id: string, body: Record<string, unknown>) =>
+      patchAgent(id, body).then(() => ({ ...baseAgent, ...body })),
+    createAgent: () => Promise.resolve(baseAgent),
     deleteAgent: () =>
-      Promise.resolve({ deleted: true, id: "x", sessions_repointed: 0, default_agent_id: defaultAgent.id }),
+      Promise.resolve({ deleted: true, id: "x", sessions_repointed: 0, default_agent_id: "a1" }),
     setSessionAgent: () => Promise.resolve(null),
-    ApiError: class extends Error {
-      constructor(public status: number, message: string) {
-        super(message);
-      }
-    },
+    getOllamaSettings: (...a: unknown[]) => getOllamaSettings(...a),
+    getOllamaModels: (...a: unknown[]) => getOllamaModels(...a),
+    setOllamaSettings: (...a: unknown[]) => setOllamaSettings(...a),
+    ApiError: class extends Error {},
   };
 });
 
-import { AgentAnatomyDialog } from "./AgentAnatomyDialog";
-import { useAgentAnatomy } from "../lib/agentAnatomy";
-import { useAgentCatalog } from "../lib/agentCatalog";
+import { ProviderSection } from "../agent-anatomy/ProviderSection";
+import { useChat } from "../store/useChat";
+
+function seedSession(provider = "openai") {
+  useChat.setState({
+    sessions: [
+      {
+        id: "s1",
+        title: null,
+        agent: { ...baseAgent, provider },
+        created_at: 0,
+        updated_at: 0,
+      },
+    ],
+    activeSessionId: "s1",
+  });
+}
 
 beforeEach(() => {
-  useAgentAnatomy.setState({ open: true, initialSection: null });
-  useAgentCatalog.setState({ agents: null, focusedId: null });
-  Element.prototype.scrollIntoView = vi.fn();
+  patchAgent.mockReset().mockResolvedValue(undefined);
+  setOllamaSettings.mockReset().mockResolvedValue({ base_url: "http://localhost:11434" });
+  getOllamaSettings.mockReset().mockResolvedValue({ base_url: "http://localhost:11434" });
+  getOllamaModels.mockReset().mockResolvedValue({
+    reachable: true,
+    base_url: "http://localhost:11434",
+    models: [{ id: "llama3.1" }, { id: "qwen2.5" }],
+  });
 });
 
 afterEach(() => {
   cleanup();
-  useAgentAnatomy.setState({ open: false, initialSection: null });
+  useChat.setState({ sessions: [], activeSessionId: null });
   vi.restoreAllMocks();
 });
 
-describe("AgentAnatomyDialog — Provider section (065)", () => {
-  it("renders the Provider section heading (AC5)", async () => {
-    render(<AgentAnatomyDialog />);
-    await screen.findByRole("dialog");
-    expect(screen.getAllByText("Provider").length).toBeGreaterThan(0);
-  });
-
-  it("OpenAI is the selected provider and Ollama is a disabled preview (AC5)", async () => {
-    render(<AgentAnatomyDialog />);
-    await screen.findByRole("dialog");
-
-    const openai = (await screen.findByTestId(
-      "agent-anatomy-provider-openai",
-    )) as HTMLInputElement;
-    const ollama = (await screen.findByTestId(
-      "agent-anatomy-provider-ollama",
-    )) as HTMLInputElement;
-
+describe("ProviderSection — Ollama (074)", () => {
+  it("renders both providers, both selectable", async () => {
+    seedSession("openai");
+    render(<ProviderSection />);
+    const openai = (await screen.findByTestId("agent-anatomy-provider-openai")) as HTMLInputElement;
+    const ollama = (await screen.findByTestId("agent-anatomy-provider-ollama")) as HTMLInputElement;
     expect(openai.checked).toBe(true);
     expect(openai.disabled).toBe(false);
-    expect(ollama.disabled).toBe(true);
-    expect(ollama.checked).toBe(false);
+    expect(ollama.disabled).toBe(false);
+  });
+
+  it("selecting Ollama persists provider:'ollama' on the agent", async () => {
+    seedSession("openai");
+    render(<ProviderSection />);
+    const ollama = await screen.findByTestId("agent-anatomy-provider-ollama");
+    act(() => {
+      fireEvent.click(ollama);
+    });
+    expect(patchAgent).toHaveBeenCalledWith("a1", { provider: "ollama" });
+  });
+
+  it("shows the server-URL field + live model list when on Ollama", async () => {
+    seedSession("ollama");
+    render(<ProviderSection />);
+    expect(await screen.findByTestId("agent-anatomy-ollama-url")).toBeTruthy();
+    const select = (await screen.findByTestId("agent-anatomy-ollama-model")) as HTMLSelectElement;
+    await waitFor(() => expect(select.querySelectorAll("option").length).toBe(2));
+    expect(getOllamaModels).toHaveBeenCalled();
+  });
+
+  it("shows the unreachable hint when the server can't be reached", async () => {
+    getOllamaModels.mockResolvedValue({
+      reachable: false,
+      base_url: "http://nope:11434",
+      models: [],
+      error: "refused",
+    });
+    seedSession("ollama");
+    render(<ProviderSection />);
+    const hint = await screen.findByTestId("agent-anatomy-ollama-hint");
+    expect(hint.textContent).toMatch(/Ollama/i);
   });
 });

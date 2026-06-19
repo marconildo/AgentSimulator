@@ -29,6 +29,7 @@ erDiagram
         TEXT system_prompt
         TEXT agent_prompt
         TEXT model
+        TEXT provider "openai|ollama"
         TEXT enabled_tools "JSON list[str]"
         INTEGER is_default "0|1"
         REAL created_at
@@ -74,6 +75,10 @@ erDiagram
         TEXT data "JSON"
         TEXT metrics "JSON"
     }
+    app_config {
+        TEXT key PK
+        TEXT value
+    }
 
     sessions          }o--|| agents   : "agent_id ON DELETE SET NULL"
     sessions          ||--o{ messages : "ON DELETE CASCADE"
@@ -109,6 +114,10 @@ ASCII fallback (for viewers without Mermaid):
            ┌──────────────┐
            │ trace_events │  ◀── per-event log (FK session_id, CASCADE)
            └──────────────┘
+
+           ┌──────────────┐
+           │  app_config  │  ◀── instance key/value config (no FKs; kept on reset)
+           └──────────────┘
 ```
 
 ## Tables
@@ -140,7 +149,8 @@ sessions** — editing an agent propagates to every conversation using it.
 | `description` | TEXT | NO | One-line catalog blurb; ≤240 chars. Defaults to `''`. |
 | `system_prompt` | TEXT | NO | The "guardrails" layer (top of the composed system prompt). |
 | `agent_prompt` | TEXT | NO | The "role" layer (composed below `system_prompt`). |
-| `model` | TEXT | NO | OpenAI model id; validated against the curated allowlist in `llm/models.py`. |
+| `model` | TEXT | NO | Model id. For `provider = 'openai'` it is validated against the curated allowlist in `llm/models.py`; for `'ollama'` it is any model installed on the local server (no allowlist). |
+| `provider` | TEXT | NO | LLM provider this agent runs against: `'openai'` (default) or `'ollama'` (074). Defaults to `'openai'` so every pre-074 row reads back unchanged. |
 | `enabled_tools` | TEXT | NO | JSON list of MCP tool names. `[]` = no tools (tools are CODE in `mcp/server.py`; this is just a name-filter). |
 | `is_default` | INTEGER | NO | `0` or `1`, enforced by `CHECK (is_default IN (0, 1))` (047). Exactly one row has `1`. |
 | `created_at` | REAL | NO | Unix epoch seconds. |
@@ -247,6 +257,24 @@ PK: `(trace_id, seq)`. Index `idx_trace_events_session` on
 in real time (one INSERT per event, via `asyncio.to_thread`); persist
 failures are logged and swallowed so the SSE stream is never starved.
 
+### `app_config`
+
+Instance-global key/value configuration (074-ollama-provider). Not
+conversation data — it holds operator settings that must reach the
+**backend** (the LLM caller), so they live in the DB rather than the
+browser's localStorage and survive restart. No FKs.
+
+| column | type | null | meaning |
+|---|---|---|---|
+| `key` | TEXT | NO | Config key; primary key. First key: `ollama_base_url`. |
+| `value` | TEXT | NO | The stored value (a string). |
+
+Read/written via `ConversationStore.get_config` / `set_config`
+(`INSERT … ON CONFLICT(key) DO UPDATE`). The Ollama server URL falls
+back to the env default (`settings.ollama_base_url`,
+`http://localhost:11434`) when the key is absent. **`clear_all` does
+NOT touch this table** — it is configuration, not user data.
+
 ## Relationships + cascade rules
 
 | Parent | Child | Cascade |
@@ -296,6 +324,9 @@ on purpose:
     constraints done; orphan `message_documents` swept).
   - `3` — post-048 (`trace_events` table added; pure additive `CREATE
     TABLE IF NOT EXISTS`, no row rebuild).
+  - `4` — post-074 (`agents.provider` column added + `app_config` table
+    ensured; pure additive `ALTER TABLE ADD COLUMN` + `CREATE TABLE IF
+    NOT EXISTS`, run *after* the 047 rebuild so the column survives).
   A real `schema_migrations` table is deferred to a future spec — the
   current set fits on one hand and the version pragma is cheap.
 
@@ -316,7 +347,9 @@ on purpose:
 
 `message_documents` is implicit via cascade — its emptiness is asserted
 in `test_clear_coverage.py` directly via `SELECT COUNT(*)` rather than
-a reported count key.
+a reported count key. **`app_config` is intentionally left untouched** —
+it is operator configuration (e.g. the Ollama server URL), not user
+conversation data, so a "Clear databases" reset preserves it.
 
 On the HTTP side `POST /api/data/clear` adds two more counts from
 non-relational stores:
