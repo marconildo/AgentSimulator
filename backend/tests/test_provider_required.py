@@ -8,7 +8,9 @@ silently starting in a mock/fallback mode.
 
 import pytest
 
+import app.config as config_mod
 from app.config import MissingAPIKeyError, Settings
+from app.db.store import get_store
 from app.llm import provider as provider_mod
 from app.rag import embeddings as embeddings_mod
 
@@ -19,15 +21,25 @@ def _keyless() -> Settings:
     return Settings(openai_api_key="", _env_file=None)
 
 
-def test_get_provider_without_key_raises_typed_error(monkeypatch):
+def _force_keyless(monkeypatch):
+    # 078-openai-key-ui: "no key" now means no DB key AND no env key. Patch the
+    # config-level get_settings (which `effective_openai_key` reads) and clear any
+    # UI-saved DB key so the fail-fast guard genuinely has nothing to fall back on.
+    monkeypatch.setattr(config_mod, "get_settings", _keyless)
     monkeypatch.setattr(provider_mod, "get_settings", _keyless)
+    monkeypatch.setattr(embeddings_mod, "get_settings", _keyless)
+    get_store()._set_config_sync("openai_api_key", "")
+
+
+def test_get_provider_without_key_raises_typed_error(monkeypatch):
+    _force_keyless(monkeypatch)
     with pytest.raises(MissingAPIKeyError) as exc:
         provider_mod.get_provider()
     assert "OPENAI_API_KEY" in str(exc.value)
 
 
 def test_get_embeddings_without_key_raises_typed_error(monkeypatch):
-    monkeypatch.setattr(embeddings_mod, "get_settings", _keyless)
+    _force_keyless(monkeypatch)
     with pytest.raises(MissingAPIKeyError) as exc:
         embeddings_mod.get_embeddings()
     assert "OPENAI_API_KEY" in str(exc.value)

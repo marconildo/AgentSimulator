@@ -211,3 +211,83 @@ async def test_document_attaches_to_at_most_one_message(tmp_path):
     m2 = next(m for m in msgs if m["id"] == "m2")
     assert [d["document_id"] for d in m1["documents"]] == ["d1"]
     assert m2["documents"] == []
+
+
+# --- 079-db-query-detail: the App Database full view shows the real SQL ------
+# statements that ran in the turn, grouped by operation, values inlined.
+
+
+def test_inline_sql_substitutes_and_truncates():
+    # AC4 — display-only formatter: params fill the `?` left-to-right; long
+    # string/JSON values are truncated with an ellipsis. Never re-executed.
+    from app.db.store import _inline_sql
+
+    out = _inline_sql(
+        "INSERT INTO messages (id, message) VALUES (?, ?)",
+        ("abc", "hello"),
+    )
+    assert "'abc'" in out and "'hello'" in out and "?" not in out
+
+    long = "x" * 200
+    truncated = _inline_sql("UPDATE t SET v = ? WHERE id = ?", (long, 1))
+    assert "…" in truncated
+    assert long not in truncated  # the full 200-char value is not shown verbatim
+    assert "1" in truncated
+
+
+async def test_read_history_reports_executed_queries(tmp_path):
+    # AC1 — db.read carries `queries` with operation/sql/rows for each statement:
+    # the COUNT and the recent-history SELECT.
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    sid = (await store.create_session())["id"]
+
+    read = await store.read_history(sid)
+    queries = read["queries"]
+    assert len(queries) >= 2
+    for q in queries:
+        assert {"operation", "sql", "rows"} <= set(q)
+        assert q["operation"] == "SELECT"
+    sqls = " ".join(q["sql"] for q in queries)
+    assert "COUNT(*)" in sqls
+    assert "message, answer" in sqls
+    # values inlined — the session id appears, not a `?` placeholder
+    assert sid in sqls
+
+
+async def test_write_message_reports_executed_queries(tmp_path):
+    # AC2 — db.write carries `queries` in execution order: INSERT messages,
+    # UPDATE sessions, COUNT. No attachment statements when none are pinned.
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    sid = (await store.create_session())["id"]
+
+    write = await store.write_message(sid, "m1", "what time is it?", "14h")
+    queries = write["queries"]
+    ops_sql = [(q["operation"], q["sql"]) for q in queries]
+    joined = " | ".join(s for _, s in ops_sql)
+
+    assert "INSERT INTO messages" in joined
+    assert "UPDATE sessions" in joined
+    assert "COUNT(*)" in joined
+    # ordered: the message INSERT runs before the COUNT
+    insert_idx = next(i for i, (_, s) in enumerate(ops_sql) if "INSERT INTO messages" in s)
+    count_idx = next(i for i, (_, s) in enumerate(ops_sql) if "COUNT(*)" in s)
+    assert insert_idx < count_idx
+    # the real message text is inlined; rows reflect reality (1 message now)
+    assert "what time is it?" in joined
+    insert_q = next(q for q in queries if "INSERT INTO messages" in q["sql"])
+    assert insert_q["rows"] == 1
+    # no attachment statements without a pinned doc
+    assert "message_documents" not in joined
+
+
+async def test_write_message_reports_attachment_queries(tmp_path):
+    # AC3 — with a pinned attachment, the write `queries` add the documents
+    # SELECT guard + the message_documents INSERT.
+    store = ConversationStore(tmp_path / "app.sqlite3")
+    sid = (await store.create_session())["id"]
+    await store.add_document(sid, "d1", "a.pdf", chunk_count=3)
+
+    write = await store.write_message(sid, "m1", "q", "a", attached_document_ids=["d1"])
+    joined = " | ".join(q["sql"] for q in write["queries"])
+    assert "FROM documents" in joined
+    assert "INSERT INTO message_documents" in joined

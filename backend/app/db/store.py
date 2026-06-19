@@ -47,6 +47,56 @@ DEFAULT_AGENT_ID = "agent-simulator-default"
 DEFAULT_AGENT_NAME = "Agent Simulator"
 DEFAULT_AGENT_DESCRIPTION = "AI Agent Simulator — explore how an agent works."
 
+# 079-db-query-detail: the App Database full view shows the real SQL statements
+# that ran in the turn. `_inline_sql` is a DISPLAY-ONLY formatter — it fills the
+# `?` placeholders left-to-right with the bound values so the user reads the
+# concrete command, truncating over-long string/JSON values. It is never re-fed
+# to SQLite (the real execution stays parametrized), so there is no injection
+# concern. `_record_query` appends the rendered statement to a per-operation list.
+_SQL_VALUE_MAX = 80
+
+
+def _inline_sql(template: str, params: tuple[Any, ...] | list[Any] = ()) -> str:
+    """Render `template` with its bound `params` inlined (display only).
+
+    Collapses whitespace so a multi-line SQL string reads on one logical line,
+    substitutes each `?` left-to-right, and truncates long string values with `…`.
+    """
+    sql = " ".join(template.split())
+
+    def _fmt(value: Any) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, (int, float)):
+            return str(value)
+        text = str(value)
+        if len(text) > _SQL_VALUE_MAX:
+            text = text[:_SQL_VALUE_MAX] + "…"
+        # Escape single quotes for a faithful-looking literal (display only).
+        return "'" + text.replace("'", "''") + "'"
+
+    out: list[str] = []
+    it = iter(params)
+    for part in sql.split("?"):
+        out.append(part)
+        try:
+            out.append(_fmt(next(it)))
+        except StopIteration:
+            pass
+    return "".join(out)
+
+
+def _record_query(
+    log: list[dict[str, Any]],
+    operation: str,
+    template: str,
+    params: tuple[Any, ...] | list[Any] = (),
+    *,
+    rows: int = 0,
+) -> None:
+    """Append a rendered statement to a per-operation query log (079)."""
+    log.append({"operation": operation, "sql": _inline_sql(template, params), "rows": int(rows)})
+
 
 def _seed_default_agent_sync(conn: sqlite3.Connection) -> bool:
     """Insert the default agent row if it doesn't exist. Returns True when a
@@ -1106,26 +1156,31 @@ class ConversationStore:
         attached_document_ids: list[str] | None,
     ) -> dict[str, Any]:
         now = time()
+        # 079-db-query-detail: capture the real statements this write ran, with
+        # values inlined, so the App Database full view can show them per turn.
+        queries: list[dict[str, Any]] = []
         with self._connect() as conn:
             # 047-db-integrity-constraints: plain INSERT (was INSERT OR REPLACE).
             # Turns are immutable: a duplicate id is a real bug, not a race to
             # paper over. Letting REPLACE rewrite a row also bypassed
             # `message_documents.ON DELETE CASCADE` (the id is unchanged, so the
             # cascade never fired), which could orphan the join. Fail loud now.
-            conn.execute(
+            insert_msg_sql = (
                 "INSERT INTO messages "
                 "(id, session_id, message, answer, chunks, skills, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    message_id,
-                    session_id,
-                    message,
-                    answer,
-                    json.dumps(chunks or []),
-                    json.dumps(skills or []),
-                    now,
-                ),
+                "VALUES (?, ?, ?, ?, ?, ?, ?)"
             )
+            insert_msg_params = (
+                message_id,
+                session_id,
+                message,
+                answer,
+                json.dumps(chunks or []),
+                json.dumps(skills or []),
+                now,
+            )
+            cur = conn.execute(insert_msg_sql, insert_msg_params)
+            _record_query(queries, "INSERT", insert_msg_sql, insert_msg_params, rows=cur.rowcount)
             # 040-message-attachments: link uploaded docs to the turn that
             # introduced them, in the same transaction as the message itself.
             # Two guards keep this honest:
@@ -1136,10 +1191,16 @@ class ConversationStore:
             #       on (message_id, document_id) is belt-and-braces against
             #       same-message duplicates.
             for doc_id in attached_document_ids or []:
-                doc_row = conn.execute(
-                    "SELECT 1 FROM documents WHERE id = ? AND session_id = ?",
-                    (doc_id, session_id),
-                ).fetchone()
+                doc_select_sql = "SELECT 1 FROM documents WHERE id = ? AND session_id = ?"
+                doc_select_params = (doc_id, session_id)
+                doc_row = conn.execute(doc_select_sql, doc_select_params).fetchone()
+                _record_query(
+                    queries,
+                    "SELECT",
+                    doc_select_sql,
+                    doc_select_params,
+                    rows=0 if doc_row is None else 1,
+                )
                 if doc_row is None:
                     continue
                 already_linked = conn.execute(
@@ -1148,20 +1209,24 @@ class ConversationStore:
                 ).fetchone()
                 if already_linked is not None:
                     continue
-                conn.execute(
+                link_sql = (
                     "INSERT INTO message_documents "
-                    "(message_id, document_id, created_at) VALUES (?, ?, ?)",
-                    (message_id, doc_id, now),
+                    "(message_id, document_id, created_at) VALUES (?, ?, ?)"
                 )
+                link_params = (message_id, doc_id, now)
+                link_cur = conn.execute(link_sql, link_params)
+                _record_query(queries, "INSERT", link_sql, link_params, rows=link_cur.rowcount)
             # Bump activity (drives recent-first ordering) and label the session
             # by its first message if it has no title yet (D7).
-            conn.execute(
-                "UPDATE sessions SET updated_at = ?, title = COALESCE(title, ?) WHERE id = ?",
-                (now, message[:_TITLE_MAX], session_id),
+            update_sql = (
+                "UPDATE sessions SET updated_at = ?, title = COALESCE(title, ?) WHERE id = ?"
             )
-            total = conn.execute(
-                "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", (session_id,)
-            ).fetchone()["n"]
+            update_params = (now, message[:_TITLE_MAX], session_id)
+            update_cur = conn.execute(update_sql, update_params)
+            _record_query(queries, "UPDATE", update_sql, update_params, rows=update_cur.rowcount)
+            count_sql = "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?"
+            total = conn.execute(count_sql, (session_id,)).fetchone()["n"]
+            _record_query(queries, "SELECT", count_sql, (session_id,), rows=int(total))
         return {
             "table": "messages",
             "engine": "sqlite",
@@ -1169,18 +1234,22 @@ class ConversationStore:
             "row_id": message_id,
             "session_id": session_id,
             "total_rows": int(total),
+            "queries": queries,
         }
 
     def _read_history_sync(self, session_id: str, limit: int) -> dict[str, Any]:
+        # 079-db-query-detail: capture the real read statements with values inlined.
+        queries: list[dict[str, Any]] = []
         with self._connect() as conn:
-            total = conn.execute(
-                "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", (session_id,)
-            ).fetchone()["n"]
-            rows = conn.execute(
+            count_sql = "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?"
+            total = conn.execute(count_sql, (session_id,)).fetchone()["n"]
+            _record_query(queries, "SELECT", count_sql, (session_id,), rows=int(total))
+            recent_sql = (
                 "SELECT message, answer FROM messages WHERE session_id = ? "
-                "ORDER BY created_at DESC LIMIT ?",
-                (session_id, limit),
-            ).fetchall()
+                "ORDER BY created_at DESC LIMIT ?"
+            )
+            rows = conn.execute(recent_sql, (session_id, limit)).fetchall()
+            _record_query(queries, "SELECT", recent_sql, (session_id, limit), rows=len(rows))
         # Oldest-first so it reads naturally as a conversation transcript.
         recent = [{"message": r["message"], "answer": r["answer"]} for r in reversed(rows)]
         return {
@@ -1189,6 +1258,7 @@ class ConversationStore:
             "session_id": session_id,
             "total_rows": int(total),
             "recent": recent,
+            "queries": queries,
         }
 
     def _list_messages_sync(self, session_id: str) -> list[dict[str, Any]]:

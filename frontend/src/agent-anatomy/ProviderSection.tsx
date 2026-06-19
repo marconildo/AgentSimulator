@@ -87,7 +87,7 @@ export function ProviderSection() {
     flush();
   }
 
-  // 076-openai-key-ui: the OpenAI key, entered here + saved server-side.
+  // 078-openai-key-ui: the OpenAI key, entered here + saved server-side.
   const isOpenAI = provider === "openai";
   const [keyStatus, setKeyStatus] = useState<{ has_key: boolean; masked: string | null } | null>(
     null,

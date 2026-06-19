@@ -133,6 +133,15 @@ def build_index(strategy: ChunkStrategy | None = None) -> int:
     store.add_documents(docs)
     global _active_strategy
     _active_strategy = str(resolved)
+    # 075-ollama-embeddings: stamp the embedding space this index was built for so
+    # `index_matches_model()` can force a rebuild on a provider/model swap.
+    try:
+        from ..config import EMBEDDING_SIGNATURE_CONFIG_KEY, embedding_signature
+        from ..db.store import get_store
+
+        get_store()._set_config_sync(EMBEDDING_SIGNATURE_CONFIG_KEY, embedding_signature())
+    except Exception:  # noqa: BLE001 - stamping is best-effort, never fail a build
+        pass
     return len(docs)
 
 

@@ -44,7 +44,7 @@ def test_default_model_is_gpt_4_1_mini_and_listed():
 
 
 def test_chat_no_longer_hard_gates_on_curated_allowlist():
-    """076-openai-key-ui — the curated list stopped being a hard gate (OpenAI
+    """078-openai-key-ui — the curated list stopped being a hard gate (OpenAI
     models are listed live now). Any non-empty model id is accepted (no 422 from
     an allowlist guard); the curated payload survives only as the FE prefill."""
     with TestClient(app) as client:

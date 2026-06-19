@@ -24,7 +24,13 @@ from sse_starlette.sse import EventSourceResponse
 from .agent import run_agent
 from .agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from .agent.tools import agent_tool_specs
-from .config import effective_openai_key, get_settings, has_effective_openai_key
+from .config import (
+    effective_embedding_model,
+    effective_embedding_provider,
+    effective_openai_key,
+    get_settings,
+    has_effective_openai_key,
+)
 from .db.seed import seed_default_agent, seed_skills
 from .db.store import (
     AgentLocked,
@@ -167,7 +173,7 @@ async def health() -> dict:
         "status": "ok",
         "llm_provider": "openai",
         "llm_model": settings.llm_model,
-        # 076-openai-key-ui: reflect the EFFECTIVE key (UI/DB precedes env).
+        # 078-openai-key-ui: reflect the EFFECTIVE key (UI/DB precedes env).
         "has_key": has_effective_openai_key(),
         "indexed": is_indexed(),
     }
@@ -270,6 +276,10 @@ async def config() -> dict:
         # "Server URL" field with (the live, persisted value comes from
         # GET /api/settings/ollama). Never hardcoded client-side.
         "default_ollama_base_url": settings.ollama_base_url,
+        # 075-ollama-embeddings: the effective embedding provider + model so the
+        # Settings page prefills without hardcoding.
+        "embedding_provider": effective_embedding_provider(),
+        "embedding_model": effective_embedding_model(),
     }
 
 
@@ -331,7 +341,7 @@ async def list_ollama_models(base_url: str | None = None) -> dict:
     return {"reachable": True, "base_url": url, "models": models}
 
 
-# --- OpenAI key + dynamic model listing (076-openai-key-ui) -----------------
+# --- OpenAI key + dynamic model listing (078-openai-key-ui) -----------------
 
 # Chat-capable OpenAI model id prefixes (excludes embeddings/audio/image models).
 _OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
@@ -369,8 +379,7 @@ def _list_openai_chat_models(key: str) -> dict:
         {
             m.id
             for m in getattr(raw, "data", [])
-            if isinstance(getattr(m, "id", None), str)
-            and m.id.startswith(_OPENAI_CHAT_PREFIXES)
+            if isinstance(getattr(m, "id", None), str) and m.id.startswith(_OPENAI_CHAT_PREFIXES)
         }
     )
     return {"reachable": True, "models": [{"id": i} for i in ids]}
@@ -423,6 +432,55 @@ async def list_openai_models() -> dict:
     if not key:
         return {"reachable": False, "error": "no key configured", "models": []}
     return await asyncio.to_thread(_list_openai_chat_models, key)
+
+
+# --- Embeddings provider (075-ollama-embeddings) ----------------------------
+
+_EMBEDDING_PROVIDERS = ("openai", "ollama")
+
+
+class EmbeddingSettings(BaseModel):
+    """Body of ``PUT /api/settings/embeddings`` — the instance-wide embedding
+    provider + model. Both optional; only provided keys are changed."""
+
+    provider: str | None = Field(default=None, max_length=40)
+    model: str | None = Field(default=None, max_length=120)
+
+
+@app.get("/api/settings/embeddings")
+async def get_embedding_settings() -> dict:
+    """The effective embedding provider + model (DB precedes env)."""
+    return {
+        "provider": effective_embedding_provider(),
+        "model": effective_embedding_model(),
+        "providers": list(_EMBEDDING_PROVIDERS),
+    }
+
+
+@app.put("/api/settings/embeddings")
+async def set_embedding_settings(body: EmbeddingSettings) -> dict:
+    """Persist the embedding provider/model (instance-global ``app_config``).
+
+    Changing either changes the embedding space — the index rebuilds on the next
+    startup (or via the explicit re-ingest) because the stored signature no longer
+    matches (075). The blocking rebuild is never done inside this request."""
+    if body.provider is not None:
+        if body.provider not in _EMBEDDING_PROVIDERS:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "unknown embedding provider",
+                    "provider": body.provider,
+                    "allowed": list(_EMBEDDING_PROVIDERS),
+                },
+            )
+        await get_store().set_config("embedding_provider", body.provider)
+    if body.model is not None and body.model.strip():
+        await get_store().set_config("embedding_model", body.model.strip())
+    return {
+        "provider": effective_embedding_provider(),
+        "model": effective_embedding_model(),
+    }
 
 
 @app.post("/api/chat")
@@ -496,7 +554,7 @@ async def chat(req: ChatRequest):
         effective_agent_description = agent.get("description")
     resolved_model = effective_model or settings.llm_model
     resolved_provider = effective_provider or "openai"
-    # 076-openai-key-ui: the curated allowlist is no longer a hard gate — OpenAI
+    # 078-openai-key-ui: the curated allowlist is no longer a hard gate — OpenAI
     # models are listed live from the account now, so any non-empty model id is
     # accepted (mirrors Ollama, 074). A blank `req.model` was already rejected
     # above; `resolved_model` falls back to the configured default, so it's never
@@ -1018,7 +1076,7 @@ async def patch_agent(agent_id: str, body: AgentPatch):
                 "allowed": sorted(provider_ids()),
             },
         )
-    # 076-openai-key-ui: the curated allowlist is no longer a hard gate (models are
+    # 078-openai-key-ui: the curated allowlist is no longer a hard gate (models are
     # listed live now). Any non-empty model id is accepted for either provider; a
     # blank one is rejected so a PATCH can't wipe the required column.
     if "model" in patch and isinstance(patch["model"], str) and not patch["model"].strip():

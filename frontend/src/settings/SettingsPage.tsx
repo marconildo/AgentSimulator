@@ -17,6 +17,7 @@ import { SettingsCloud } from "./SettingsCloud";
 import { SettingsClear } from "./SettingsClear";
 import { SettingsDelivery } from "./SettingsDelivery";
 import { SettingsExperiment } from "./SettingsExperiment";
+import { SettingsEmbeddings } from "./SettingsEmbeddings";
 import { SettingsKnowledgeBase } from "./SettingsKnowledgeBase";
 
 function SectionDivider() {
@@ -61,6 +62,8 @@ export function SettingsPage() {
           <>
             <SectionDivider />
             <SettingsKnowledgeBase />
+            <SectionDivider />
+            <SettingsEmbeddings />
           </>
         )}
         {/* 058-online-demo-mode: the DB-mutating sections (Clear databases, Skills

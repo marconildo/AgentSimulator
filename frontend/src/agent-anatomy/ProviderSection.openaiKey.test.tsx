@@ -1,4 +1,4 @@
-// 076-openai-key-ui — AC6 — the Provider section (OpenAI selected) shows an API
+// 078-openai-key-ui — AC6 — the Provider section (OpenAI selected) shows an API
 // key field + Save; saving calls setOpenAISettings and reflects connected/failed;
 // a saved key shows the masked hint (never the full key).
 

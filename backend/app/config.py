@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     llm_model: str = "gpt-4.1-mini"
     embedding_model: str = "text-embedding-3-small"
+    # 075-ollama-embeddings: which provider produces embeddings. Instance-global
+    # (one Chroma collection = one vector dimension, so it can't be per-agent).
+    # DB `app_config.embedding_provider` overrides this env default.
+    embedding_provider: str = "openai"
 
     # --- Web search (052-web-search-tool) ---
     # Optional. Enables the `web_search` MCP tool (real Tavily search). Unlike
@@ -163,7 +167,7 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# --- 076-openai-key-ui: effective OpenAI key (DB precedes env) --------------
+# --- 078-openai-key-ui: effective OpenAI key (DB precedes env) --------------
 
 # The key the app actually uses: the UI-saved value in `app_config.openai_api_key`
 # when present, else the env `OPENAI_API_KEY`. The store import is lazy because
@@ -172,16 +176,48 @@ def get_settings() -> Settings:
 OPENAI_KEY_CONFIG_KEY = "openai_api_key"
 
 
-def effective_openai_key() -> str:
-    db_key = ""
+def _db_config(key: str) -> str:
+    """Read an `app_config` value (lazy store import; swallow DB errors)."""
     try:
         from .db.store import get_store
 
-        db_key = (get_store()._get_config_sync(OPENAI_KEY_CONFIG_KEY) or "").strip()
-    except Exception:  # noqa: BLE001 - a DB hiccup must not mask the env key
-        db_key = ""
-    return db_key or get_settings().openai_api_key.strip()
+        return (get_store()._get_config_sync(key) or "").strip()
+    except Exception:  # noqa: BLE001 - a DB hiccup must not mask the env default
+        return ""
+
+
+def effective_openai_key() -> str:
+    return _db_config(OPENAI_KEY_CONFIG_KEY) or get_settings().openai_api_key.strip()
 
 
 def has_effective_openai_key() -> bool:
     return bool(effective_openai_key())
+
+
+# --- 075-ollama-embeddings: effective embedding config (DB precedes env) -----
+
+EMBEDDING_PROVIDER_CONFIG_KEY = "embedding_provider"
+EMBEDDING_MODEL_CONFIG_KEY = "embedding_model"
+OLLAMA_BASE_URL_CONFIG_KEY = "ollama_base_url"
+EMBEDDING_SIGNATURE_CONFIG_KEY = "embedding_signature"
+
+
+def effective_embedding_provider() -> str:
+    return _db_config(EMBEDDING_PROVIDER_CONFIG_KEY) or get_settings().embedding_provider
+
+
+def effective_embedding_model() -> str:
+    return _db_config(EMBEDDING_MODEL_CONFIG_KEY) or get_settings().embedding_model
+
+
+def effective_ollama_base_url() -> str:
+    """The Ollama server URL the backend connects to (shared by chat + embeddings,
+    074). DB `app_config.ollama_base_url` overrides the env default."""
+    return _db_config(OLLAMA_BASE_URL_CONFIG_KEY) or get_settings().ollama_base_url
+
+
+def embedding_signature() -> str:
+    """A `provider:model` stamp identifying the embedding space the index was built
+    for. Stored at build time + compared on boot so a provider/model change forces a
+    rebuild even when the vector dimensions happen to coincide (075)."""
+    return f"{effective_embedding_provider()}:{effective_embedding_model()}"

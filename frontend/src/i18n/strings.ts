@@ -283,6 +283,19 @@ export interface Strings {
       done: (n: number) => string;
       active: string;
     };
+    // 075-ollama-embeddings — the instance-wide embedding provider + model.
+    embeddings: {
+      title: string;
+      hint: string;
+      provider: string;
+      openai: string;
+      ollama: string;
+      model: string;
+      modelPlaceholder: string;
+      rebuildNote: string;
+      unreachable: string;
+      saved: string;
+    };
     // Real, working controls (006-interactive-experiments) — replaced the old
     // "SOON" Tools/RAG placeholders.
     experiment: {
@@ -648,6 +661,9 @@ export interface Strings {
     empty: string;
     rowId: string;
     session: string;
+    // 079-db-query-detail
+    queriesHeading: string;
+    rowsAffected: (n: number) => string;
   };
   backendDetail: {
     title: string;
@@ -906,7 +922,7 @@ export interface Strings {
       noModels: string;
       loadingModels: string;
       modelLabel: string;
-      // 076-openai-key-ui
+      // 078-openai-key-ui
       keyLabel: string;
       keyPlaceholder: string;
       keySavedHint: string;
@@ -1205,6 +1221,18 @@ const en: Strings = {
       reingesting: "Re-ingesting…",
       done: (n) => `Re-indexed ${n} chunks`,
       active: "active",
+    },
+    embeddings: {
+      title: "Embeddings (RAG)",
+      hint: "Which model turns text into vectors for retrieval. Instance-wide — one index, one model.",
+      provider: "Provider",
+      openai: "OpenAI — cloud, needs an OpenAI key.",
+      ollama: "Ollama (local) — deploy your own embedding model (e.g. nomic-embed-text).",
+      model: "Embedding model",
+      modelPlaceholder: "nomic-embed-text",
+      rebuildNote: "Changing the embedding model rebuilds the whole index (next startup or re-ingest).",
+      unreachable: "Couldn't reach the Ollama server. Is it running?",
+      saved: "Saved.",
     },
     experiment: {
       title: "Experiment",
@@ -1804,6 +1832,8 @@ const en: Strings = {
     empty: "No database activity in this turn yet.",
     rowId: "Row id",
     session: "Session",
+    queriesHeading: "Statements executed",
+    rowsAffected: (n) => `→ ${n} rows`,
   },
   backendDetail: {
     title: "Backend — request lifecycle",
@@ -2215,6 +2245,18 @@ const pt: Strings = {
       reingesting: "Reindexando…",
       done: (n) => `${n} trechos reindexados`,
       active: "ativa",
+    },
+    embeddings: {
+      title: "Embeddings (RAG)",
+      hint: "Qual modelo transforma texto em vetores para a busca. Vale para toda a instância — um índice, um modelo.",
+      provider: "Provedor",
+      openai: "OpenAI — nuvem, requer uma chave OpenAI.",
+      ollama: "Ollama (local) — implante seu próprio modelo de embedding (ex.: nomic-embed-text).",
+      model: "Modelo de embedding",
+      modelPlaceholder: "nomic-embed-text",
+      rebuildNote: "Trocar o modelo de embedding reconstrói todo o índice (no próximo start ou reindexação).",
+      unreachable: "Não foi possível acessar o servidor Ollama. Ele está rodando?",
+      saved: "Salvo.",
     },
     experiment: {
       title: "Experimentar",
@@ -2818,6 +2860,8 @@ const pt: Strings = {
     empty: "Nenhuma atividade de banco neste turno ainda.",
     rowId: "Id da linha",
     session: "Sessão",
+    queriesHeading: "Comandos executados",
+    rowsAffected: (n) => `→ ${n} linhas`,
   },
   backendDetail: {
     title: "Backend — ciclo da requisição",

@@ -1,4 +1,4 @@
-"""076-openai-key-ui — the OpenAI key may come from the UI/DB (DB precedes env).
+"""078-openai-key-ui — the OpenAI key may come from the UI/DB (DB precedes env).
 
 Keyless tests: they force the env key empty and drive the DB value directly, so
 they run in CI without a real key. The OpenAI HTTP calls (connection test + model
@@ -18,6 +18,16 @@ from app.config import MissingAPIKeyError, Settings, effective_openai_key
 from app.db.store import get_store
 from app.llm import provider as provider_mod
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _clear_openai_db_key() -> Iterator[None]:
+    # The app DB is shared across the session; never let a DB-saved key from one
+    # test leak into another (e.g. the real-@openai tests, which must use the env
+    # key, not a bogus DB one). Clear before and after each test here.
+    get_store()._set_config_sync("openai_api_key", "")
+    yield
+    get_store()._set_config_sync("openai_api_key", "")
 
 
 @pytest.fixture

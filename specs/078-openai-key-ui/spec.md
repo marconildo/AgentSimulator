@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **ID** | 076-openai-key-ui |
-| **Status** | planned |
+| **ID** | 078-openai-key-ui |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-06-19 |
 

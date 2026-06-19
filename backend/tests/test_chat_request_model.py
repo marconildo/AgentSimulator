@@ -85,7 +85,7 @@ def test_chat_omits_model_uses_server_default():
 
 
 def test_chat_accepts_unlisted_model_after_076():
-    """076-openai-key-ui — the curated allowlist is no longer a hard gate (OpenAI
+    """078-openai-key-ui — the curated allowlist is no longer a hard gate (OpenAI
     models are listed live now), so an unlisted but non-empty ``model`` is accepted
     (no 422). A blank model is still rejected (see the next test)."""
     with TestClient(app) as client:

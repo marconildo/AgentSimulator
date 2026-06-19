@@ -8,7 +8,7 @@
 // Inspector keeps its own (theory-first) rendering, so the two affordances stay
 // independent but read the same underlying event data.
 
-import type { JsonRpcFrames, RequestBody, TraceEvent } from "../types/events";
+import type { DbQuery, JsonRpcFrames, RequestBody, TraceEvent } from "../types/events";
 import { electedToolCalls } from "./usage";
 
 // Last event matching the stage (+ optional phase), scanning newest-first — the
@@ -93,6 +93,8 @@ export interface DbDetailData {
     sessionId: string;
     totalRows: number;
     recent: DbHistoryRow[];
+    // 079-db-query-detail: the real SQL statements this read ran, ordered.
+    queries: DbQuery[];
   };
   write?: {
     table: string;
@@ -100,6 +102,8 @@ export interface DbDetailData {
     rowId: string;
     sessionId: string;
     totalRows: number;
+    // 079-db-query-detail: the real SQL statements this write ran, ordered.
+    queries: DbQuery[];
   };
 }
 
@@ -113,6 +117,7 @@ export function selectDatabase(events: TraceEvent[]): DbDetailData {
           sessionId: String(read.data.session_id ?? ""),
           totalRows: Number(read.data.total_rows ?? 0),
           recent: (read.data.recent as DbHistoryRow[] | undefined) ?? [],
+          queries: (read.data.queries as DbQuery[] | undefined) ?? [],
         }
       : undefined,
     write: write
@@ -122,6 +127,7 @@ export function selectDatabase(events: TraceEvent[]): DbDetailData {
           rowId: String(write.data.row_id ?? "—"),
           sessionId: String(write.data.session_id ?? ""),
           totalRows: Number(write.data.total_rows ?? 0),
+          queries: (write.data.queries as DbQuery[] | undefined) ?? [],
         }
       : undefined,
   };

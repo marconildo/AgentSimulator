@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useT } from "../i18n";
 import { selectDatabase } from "../lib/stationDetail";
 import { useSimulator } from "../store/useSimulator";
-import type { TraceEvent } from "../types/events";
+import type { DbQuery, TraceEvent } from "../types/events";
 import { Caption, DetailShell, KeyVal, Mono, Section } from "./DetailShell";
 
 // 076-station-full-views — App Database "open full view". Shows BOTH SQL
@@ -12,6 +12,33 @@ import { Caption, DetailShell, KeyVal, Mono, Section } from "./DetailShell";
 // theory. Pure projection of the captured trace (same cursor as the canvas).
 
 const DB = "var(--color-blue)";
+
+// 079-db-query-detail — the real SQL statements an operation ran, in order,
+// each with its values inlined and a rows-affected readout.
+function QueryList({ queries }: { queries: DbQuery[] }) {
+  const t = useT();
+  const d = t.dbDetail;
+  if (queries.length === 0) return null;
+  return (
+    <>
+      <Caption>{d.queriesHeading}</Caption>
+      <div className="space-y-2">
+        {queries.map((q, idx) => (
+          <div
+            key={idx}
+            className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2"
+          >
+            <Mono>
+              <span className="text-[var(--color-label)]">{q.operation} </span>
+              {q.sql}
+            </Mono>
+            <div className="mt-1 text-[10px] text-[var(--color-label)]">{d.rowsAffected(q.rows)}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export function DatabaseDetail({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -56,6 +83,7 @@ export function DatabaseDetail({ onClose }: { onClose: () => void }) {
           ) : (
             <p className="mt-1 text-[11px] text-[var(--color-label)]">{ins.noHistory}</p>
           )}
+          <QueryList queries={db.read.queries} />
         </Section>
       )}
 
@@ -65,6 +93,7 @@ export function DatabaseDetail({ onClose }: { onClose: () => void }) {
           <KeyVal k={d.rowId} v={db.write.rowId} />
           <KeyVal k={d.session} v={db.write.sessionId || "—"} />
           <KeyVal k={ins.totalRows} v={String(db.write.totalRows)} />
+          <QueryList queries={db.write.queries} />
         </Section>
       )}
     </DetailShell>

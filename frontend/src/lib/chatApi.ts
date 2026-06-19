@@ -345,7 +345,7 @@ export const getOllamaModels = (baseUrl?: string): Promise<OllamaModelsResult> =
   return api<OllamaModelsResult>(`/api/ollama/models${q}`);
 };
 
-// 076-openai-key-ui — OpenAI key (entered in the UI, saved server-side) + live
+// 078-openai-key-ui — OpenAI key (entered in the UI, saved server-side) + live
 // model listing. Reads never expose the full key (masked).
 export interface OpenAIKeyStatus {
   has_key: boolean;
@@ -381,6 +381,27 @@ export const getOpenAIModels = (): Promise<OpenAIModelsResult> =>
   isDemo()
     ? Promise.resolve({ reachable: false, models: [] })
     : api<OpenAIModelsResult>("/api/openai/models");
+
+// 075-ollama-embeddings — the instance-wide embedding provider + model. Embeddings
+// are NOT per-agent (one Chroma collection = one vector dimension).
+export interface EmbeddingSettings {
+  provider: string; // "openai" | "ollama"
+  model: string;
+  providers?: string[];
+}
+
+/** The effective embedding provider + model (DB precedes env). */
+export const getEmbeddingSettings = (): Promise<EmbeddingSettings> =>
+  isDemo()
+    ? Promise.resolve({ provider: "openai", model: "text-embedding-3-small" })
+    : api<EmbeddingSettings>("/api/settings/embeddings");
+
+/** Persist the embedding provider/model. Changing either rebuilds the index. */
+export const setEmbeddingSettings = (body: {
+  provider?: string;
+  model?: string;
+}): Promise<EmbeddingSettings> =>
+  jsonApi<EmbeddingSettings>("/api/settings/embeddings", "PUT", body);
 
 // 042-agent-anatomy: corpus listing for the Knowledge Base section.
 export interface CorpusFile {

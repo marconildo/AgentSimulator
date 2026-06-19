@@ -67,6 +67,14 @@ vi.mock("../lib/chatApi", () => {
     deleteAgent: () =>
       Promise.resolve({ deleted: true, id: "x", sessions_repointed: 0, default_agent_id: defaultAgent.id }),
     setSessionAgent: () => Promise.resolve(null),
+    // 074/078 — Provider + Model sections read these.
+    getOllamaSettings: () => Promise.resolve({ base_url: "http://localhost:11434" }),
+    getOllamaModels: () => Promise.resolve({ reachable: false, base_url: "", models: [] }),
+    setOllamaSettings: () => Promise.resolve({ base_url: "" }),
+    getOpenAISettings: () => Promise.resolve({ has_key: false, masked: null, source: null }),
+    setOpenAISettings: () =>
+      Promise.resolve({ ok: true, has_key: true, masked: "sk-…1234", tested: true }),
+    getOpenAIModels: () => Promise.resolve({ reachable: false, models: [] }),
     ApiError: class extends Error {
       constructor(public status: number, message: string) {
         super(message);

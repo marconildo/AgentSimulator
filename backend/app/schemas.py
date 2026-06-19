@@ -129,6 +129,12 @@ class TraceEvent(BaseModel):
     list of per-pair tiktoken counts aligned with ``recent`` (same order/length)
     that powers the Agent's turn-by-turn Memory growth panel.
 
+    079-db-query-detail adds (additively) ``queries`` to the ``db.read`` and
+    ``db.write`` END events: an ordered list of the real SQL statements the
+    operation ran, each ``{operation, sql, rows}`` with the bound values inlined
+    (display only — never re-executed). Mirrored by ``DbQuery`` in ``events.ts``.
+    No new ``Stage``.
+
     051-failure-treatments adds (additively, only under an injected failure) the
     *treatment* keys read by ``SimulatedError`` in ``events.ts``: a retried
     ``llm.prompt`` END carries ``attempt``/``max_retries`` (+ ``backoff_ms`` between

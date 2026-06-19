@@ -76,10 +76,26 @@ def index_matches_model() -> bool:
     the live model, which makes search fail or return nonsense. Comparing
     dimensions lets the app detect that and rebuild. If the current dimension can't
     be determined, we assume a match rather than force a rebuild.
+
+    075-ollama-embeddings: the dimension check alone misses a provider/model swap
+    whose dimensions happen to coincide, so we ALSO compare the stored
+    `provider:model` signature (written at build time). A signature change forces a
+    rebuild even at equal dimensions.
     """
     persisted = _persisted_dim()
     if persisted is None:
         return False
+    # 075: a recorded signature that no longer matches the active provider/model
+    # means the index belongs to a different embedding space → rebuild.
+    try:
+        from ..config import EMBEDDING_SIGNATURE_CONFIG_KEY, embedding_signature
+        from ..db.store import get_store
+
+        stored_sig = (get_store()._get_config_sync(EMBEDDING_SIGNATURE_CONFIG_KEY) or "").strip()
+        if stored_sig and stored_sig != embedding_signature():
+            return False
+    except Exception:  # noqa: BLE001 - signature check is best-effort
+        pass
     try:
         current = len(get_embeddings().embed_query("dimension probe"))
     except Exception:

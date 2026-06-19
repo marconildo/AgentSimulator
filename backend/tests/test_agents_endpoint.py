@@ -66,7 +66,7 @@ def test_patch_agent_rejects_over_cap_name():
 
 
 def test_patch_agent_accepts_unlisted_model_but_rejects_blank():
-    """076-openai-key-ui — the curated allowlist is no longer a hard gate, so an
+    """078-openai-key-ui — the curated allowlist is no longer a hard gate, so an
     unlisted (but non-empty) model is accepted; a blank model is still rejected.
     Uses a throwaway agent so the shared default model other tests rely on is
     never mutated."""

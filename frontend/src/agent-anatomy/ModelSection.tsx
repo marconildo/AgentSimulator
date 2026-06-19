@@ -17,7 +17,7 @@ export function ModelSection() {
     getConfig().then(setConfig).catch(() => {});
   }, []);
 
-  // 076-openai-key-ui: list the account's chat models live (when a key is set);
+  // 078-openai-key-ui: list the account's chat models live (when a key is set);
   // fall back to the curated list when offline / no key.
   const [liveModels, setLiveModels] = useState<{ id: string }[] | null>(null);
   useEffect(() => {

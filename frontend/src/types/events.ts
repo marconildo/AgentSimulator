@@ -94,6 +94,15 @@ export interface RequestBody {
   simulate_failure?: string;
 }
 
+// 079-db-query-detail — one real SQL statement an App Database operation ran,
+// carried (ordered) on the `queries` key of the `db.read` / `db.write` END
+// events. `sql` has the bound values inlined (display only). No new Stage.
+export interface DbQuery {
+  operation: string;
+  sql: string;
+  rows: number;
+}
+
 // 017-failure-injection — an injected (simulated) failure, carried as an `error`
 // key on the open `data` record of an existing END event (mcp.call / llm.prompt).
 // No new Stage/Phase or TraceEvent type change; this shape lets the inspector

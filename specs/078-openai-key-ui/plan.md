@@ -1,6 +1,6 @@
 # Plan: OpenAI API key in the UI + dynamic model listing
 
-> HOW for `spec.md` (076). Builds on 074's `app_config` key/value table + the
+> HOW for `spec.md` (078). Builds on 074's `app_config` key/value table + the
 > `/api/settings/*` + `/api/<provider>/models` patterns. Re-amends constitution §2.
 
 ## Approach

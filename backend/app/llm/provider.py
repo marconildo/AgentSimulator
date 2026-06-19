@@ -150,7 +150,7 @@ def get_provider(
             base_url=base_url,
         )
 
-    # 076-openai-key-ui: the key may come from the UI/DB (DB precedes env).
+    # 078-openai-key-ui: the key may come from the UI/DB (DB precedes env).
     from ..config import effective_openai_key
 
     key = effective_openai_key()

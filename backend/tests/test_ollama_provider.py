@@ -13,7 +13,9 @@ import os
 
 import pytest
 
+import app.config as config_mod
 from app.config import MissingAPIKeyError, Settings
+from app.db.store import get_store
 from app.llm import provider as provider_mod
 
 
@@ -35,7 +37,10 @@ def test_get_provider_ollama_does_not_require_openai_key(monkeypatch):
 
 def test_get_provider_openai_still_fails_fast_without_key(monkeypatch):
     # AC2 (regression) — the default/OpenAI path is unchanged: no key ⇒ typed error.
+    # 076: "no key" = no DB key AND no env key, so force both keyless.
     monkeypatch.setattr(provider_mod, "get_settings", _keyless)
+    monkeypatch.setattr(config_mod, "get_settings", _keyless)
+    get_store()._set_config_sync("openai_api_key", "")
     with pytest.raises(MissingAPIKeyError):
         provider_mod.get_provider()
     with pytest.raises(MissingAPIKeyError):

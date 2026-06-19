@@ -70,6 +70,10 @@ vi.mock("../lib/chatApi", () => {
     getOllamaSettings: (...a: unknown[]) => getOllamaSettings(...a),
     getOllamaModels: (...a: unknown[]) => getOllamaModels(...a),
     setOllamaSettings: (...a: unknown[]) => setOllamaSettings(...a),
+    // 078-openai-key-ui: ProviderSection's OpenAI branch reads these now.
+    getOpenAISettings: () => Promise.resolve({ has_key: false, masked: null, source: null }),
+    setOpenAISettings: () => Promise.resolve({ ok: true, has_key: true, masked: "sk-…1234", tested: true }),
+    getOpenAIModels: () => Promise.resolve({ reachable: false, models: [] }),
     ApiError: class extends Error {},
   };
 });
