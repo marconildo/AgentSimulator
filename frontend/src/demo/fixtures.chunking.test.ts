@@ -18,6 +18,23 @@ describe("demo chunk-preview fixture (072)", () => {
   });
 });
 
+describe("demo deepagents + hybrid fixtures (070 × deepagents)", () => {
+  it("registers deepagents-hybrid scenarios so Hybrid actually fuses under DeepAgents", () => {
+    const scenarios = new Set(DEMO_TRACES.map((t) => t.scenario));
+    expect(scenarios.has("deepagents-hybrid")).toBe(true);
+    expect(scenarios.has("deepagents-hybrid-rerank")).toBe(true);
+  });
+
+  it("the rag deepagents-hybrid fixture carries a real rag.hybrid stage", () => {
+    const f = DEMO_TRACES.find(
+      (t) => t.qid === "rag" && t.scenario === "deepagents-hybrid" && t.lang === "en",
+    );
+    expect(f).toBeDefined();
+    const stages = new Set(f!.fixture.events.map((e) => e.stage));
+    expect(stages.has("rag.hybrid")).toBe(true);
+  });
+});
+
 describe("demo rag fixtures carry 073 metadata", () => {
   it("the rag.simple retrieve chunks expose section/doc_type/position", () => {
     const rag = DEMO_TRACES.find((t) => t.qid === "rag" && t.scenario === "simple" && t.lang === "en");

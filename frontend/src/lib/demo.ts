@@ -212,12 +212,13 @@ function readScenario(): string {
       // the demo matches local for every simple/intermediate selection.
       if (runtime === "deepagents") {
         if (retrieval === "ragless") return "deepagents-ragless";
+        // 070-hybrid-search — hybrid (vector-only) composes with the DeepAgents runtime;
+        // each combo keys its own captured fixture so Hybrid actually fuses in the demo.
+        if (hybrid) return rerank ? "deepagents-hybrid-rerank" : "deepagents-hybrid";
         return rerank ? "deepagents-rerank" : "deepagents";
       }
       if (retrieval === "ragless") return "ragless";
       // 070-hybrid-search — hybrid composes with rerank; each combo keys its own fixture.
-      // (deepagents + hybrid has no captured fixture yet — deferred; it falls to the
-      // deepagents branch above, so a demo visitor stays on a real deepagents trace.)
       if (hybrid) return rerank ? "hybrid-rerank" : "hybrid";
       if (rerank) return "intermediate";
     }

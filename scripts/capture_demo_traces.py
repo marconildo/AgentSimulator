@@ -52,6 +52,11 @@ SCENARIOS: dict[str, dict] = {
     "deepagents": {"runtime": "deepagents"},
     "deepagents-rerank": {"runtime": "deepagents", "rerank": True},
     "deepagents-ragless": {"runtime": "deepagents", "ragless": True},
+    # 070-hybrid-search × DeepAgents — the Build popover lets hybrid (vector-only) compose
+    # with the DeepAgents runtime, so these combos need their own captured traces or the
+    # demo would replay a non-hybrid deepagents trace with Hybrid checked (card shows inactive).
+    "deepagents-hybrid": {"runtime": "deepagents", "hybrid": True},
+    "deepagents-hybrid-rerank": {"runtime": "deepagents", "hybrid": True, "rerank": True},
     # 070-hybrid-search — the BM25 + vector RRF fusion sub-stage, and its compose-with-
     # rerank path (the two combos the Build popover produces with hybrid on, ReAct runtime).
     "hybrid": {"hybrid": True},
