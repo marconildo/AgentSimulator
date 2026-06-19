@@ -25,6 +25,7 @@ const agent = (id: string, name: string, isDefault = false): AgentMeta => ({
   system_prompt: "g",
   agent_prompt: "a",
   model: "gpt-4o-mini",
+  provider: "openai",
   enabled_tools: [],
   is_default: isDefault,
   created_at: 0,

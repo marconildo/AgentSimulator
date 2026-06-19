@@ -122,14 +122,34 @@ class LLMProvider(ABC):
         """
 
 
-def get_provider(*, model: str | None = None) -> LLMProvider:
-    """Return the OpenAI provider, or fail fast if no key is configured.
+def get_provider(
+    *,
+    provider: str = "openai",
+    model: str | None = None,
+    base_url: str | None = None,
+) -> LLMProvider:
+    """Return the LLM provider for this run, or fail fast when misconfigured.
 
-    042-agent-anatomy: the optional ``model`` kwarg picks the OpenAI model for
-    this run; the API layer validates it against the curated allowlist before
-    calling. ``None`` keeps today's behavior (use ``settings.llm_model``).
+    042-agent-anatomy: the optional ``model`` kwarg picks the model for this run;
+    for OpenAI the API layer validates it against the curated allowlist first.
+    ``None`` keeps today's behavior (use ``settings.llm_model``).
+
+    074-ollama-provider: ``provider`` selects the backend. ``"openai"`` (default)
+    is unchanged and fails fast with :class:`MissingAPIKeyError` when no key is
+    configured. ``"ollama"`` returns a real local-Ollama provider and needs **no**
+    OpenAI key; ``base_url`` is the local server address (falls back to the
+    Ollama default).
     """
     settings = get_settings()
+
+    if provider == "ollama":
+        from .ollama_provider import OllamaProvider
+
+        return OllamaProvider(
+            model=model or settings.llm_model,
+            base_url=base_url,
+        )
+
     if not settings.has_openai_key:
         raise MissingAPIKeyError()
     from .openai_provider import OpenAIProvider

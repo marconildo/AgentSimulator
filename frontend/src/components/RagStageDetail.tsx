@@ -9,7 +9,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useT } from "../i18n";
+import { chunkPreview, type ChunkPreviewItem } from "../lib/chatApi";
 import { cosineAngleDeg, type PipelineChunk, type RagStage } from "../lib/ragPipeline";
+import type { RetrievalEval } from "../types/events";
+
+// 072-chunking-strategies — the chunking strategies in display order; `recursive` is
+// the default the playground opens on.
+const CHUNK_STRATEGIES = ["recursive", "fixed", "semantic", "agentic"] as const;
+type ChunkStrategyId = (typeof CHUNK_STRATEGIES)[number];
 import { tokenizePieces } from "../lib/tokenize";
 import { RerankMovementList, type RerankMove } from "./InspectorPanel";
 
@@ -36,12 +43,152 @@ export function RagStageDetail({ stage }: { stage: RagStage }) {
 
 // --- Chunking (offline precursor) -------------------------------------------
 
+// 072-chunking-strategies — the Chunking card is a PLAYGROUND: chunk the same sample
+// document with a chosen strategy and show it BESIDE fixed-size, so the learner sees fixed
+// cut a sentence in half while semantic/recursive keep the thought whole. Read-only
+// (`/api/rag/chunk-preview` — no embed, no index change).
 function ChunkingDetail({ data, r }: { data: Stage["data"]; r: RagStrings }) {
+  const [previews, setPreviews] = useState<ChunkPreviewItem[] | null>(null);
+  const [chosen, setChosen] = useState<ChunkStrategyId>("recursive");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    chunkPreview("all")
+      .then((res) => alive && setPreviews(res.previews))
+      .catch(() => alive && setPreviews([]))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const byStrategy = new Map((previews ?? []).map((p) => [p.strategy, p]));
+  const chosenItem = byStrategy.get(chosen);
+  const fixedItem = byStrategy.get("fixed");
+
   return (
     <Wrap blurb={r.chunkingBlurb}>
-      <Row k={r.offline} v={r.chunkConfig} />
-      {typeof data.num_chunks === "number" && <Row k="chunks" v={String(data.num_chunks)} />}
+      {typeof data.num_chunks === "number" && (
+        <Row k={r.offline} v={`${data.num_chunks} chunks`} />
+      )}
+      <div className="flex flex-wrap gap-1">
+        {CHUNK_STRATEGIES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setChosen(s)}
+            className="rounded-full border px-2 py-0.5 text-[10px] font-medium transition"
+            style={{
+              borderColor: s === chosen ? RAG : "var(--color-line)",
+              background:
+                s === chosen ? "color-mix(in srgb, var(--color-ok) 12%, transparent)" : "transparent",
+              color: s === chosen ? "var(--color-ink)" : "var(--color-muted)",
+            }}
+          >
+            {chunkStrategyLabel(s)}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] leading-snug text-[var(--color-label)]">{chunkStrategyDesc(chosen, r)}</p>
+      {loading && <p className="text-[10px] text-[var(--color-faint)]">{r.chunkPlayLoading}</p>}
+      {chosenItem && fixedItem && (
+        <ChunkCompare chosen={chosenItem} chosenStrategy={chosen} fixed={fixedItem} r={r} />
+      )}
+      <p className="text-[9.5px] italic leading-snug text-[var(--color-label)]">{r.chunkPlayWhy}</p>
     </Wrap>
+  );
+}
+
+function chunkStrategyLabel(id: string): string {
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+function chunkStrategyDesc(id: ChunkStrategyId, r: RagStrings): string {
+  return {
+    fixed: r.chunkStratFixed,
+    recursive: r.chunkStratRecursive,
+    semantic: r.chunkStratSemantic,
+    agentic: r.chunkStratAgentic,
+  }[id];
+}
+
+// Does this chunk's text end mid-sentence? (no closing sentence punctuation) — the
+// tell-tale failure of fixed-size splitting.
+function cutsMidSentence(text: string): boolean {
+  const last = text.trimEnd().slice(-1);
+  return last !== "" && !".!?".includes(last);
+}
+
+// Pure comparison render — the chosen strategy beside fixed-size, each chunk a block.
+// Exported so a Vitest can drive it from a chunk-preview payload (AC7).
+export function ChunkCompare({
+  chosen,
+  chosenStrategy,
+  fixed,
+  r,
+}: {
+  chosen: ChunkPreviewItem;
+  chosenStrategy: string;
+  fixed: ChunkPreviewItem;
+  r: RagStrings;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <ChunkColumn item={chosen} title={chunkStrategyLabel(chosenStrategy)} flagCuts={false} r={r} />
+      <ChunkColumn item={fixed} title={r.chunkCompareWithFixed} flagCuts r={r} />
+    </div>
+  );
+}
+
+function ChunkColumn({
+  item,
+  title,
+  flagCuts,
+  r,
+}: {
+  item: ChunkPreviewItem;
+  title: string;
+  flagCuts: boolean;
+  r: RagStrings;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 flex items-baseline justify-between gap-1">
+        <span className="truncate text-[10px] font-semibold text-[var(--color-ink)]">{title}</span>
+        <span className="shrink-0 font-mono text-[9px] text-[var(--color-faint)]">
+          {item.error ? "—" : `${item.count}`}
+        </span>
+      </div>
+      {item.error ? (
+        <p className="text-[9.5px] italic text-[var(--color-faint)]">{item.error}</p>
+      ) : (
+        <div className="space-y-1">
+          {item.chunks.map((c, i) => {
+            const cut = flagCuts && cutsMidSentence(c.text);
+            return (
+              <div
+                key={i}
+                className="rounded border p-1"
+                style={{
+                  borderColor: cut ? "var(--color-warn)" : "var(--color-line)",
+                  background: "var(--color-panel-2)",
+                }}
+              >
+                <div className="flex items-center justify-between gap-1 text-[8.5px]">
+                  <span className="font-mono text-[var(--color-faint)]">#{i + 1} · {c.chars}c</span>
+                  {cut && <span className="text-[var(--color-warn)]">{r.chunkMidSentence}</span>}
+                </div>
+                <p className="mt-0.5 line-clamp-3 text-[9.5px] leading-snug text-[var(--color-muted)]">
+                  {c.text}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -156,6 +303,9 @@ function RetrievalDetail({
   const chunks = (data.chunks as PipelineChunk[] | undefined) ?? [];
   const candidates = (data.candidates as number | undefined) ?? chunks.length;
   const kept = (data.kept as number | undefined) ?? chunks.length;
+  // 071-retrieval-metrics — the scorecard, present only for a labelled benchmark query.
+  const evalData = data.eval as RetrievalEval | undefined;
+  const relevantSet = new Set(evalData?.relevant_sources ?? []);
   return (
     <Wrap blurb={r.retrievalBlurb}>
       <div className="grid grid-cols-3 gap-x-3">
@@ -163,6 +313,7 @@ function RetrievalDetail({
         <Row k="k" v={String(data.k ?? "—")} />
         <Row k="candidates" v={String(candidates)} />
       </div>
+      <QualityBlock evalData={evalData} r={r} />
       {kept < chunks.length && (
         <p className="text-[10.5px] text-[var(--color-text-soft)]">{r.keptNote(chunks.length, kept)}</p>
       )}
@@ -189,6 +340,15 @@ function RetrievalDetail({
             <div className="flex items-center justify-between gap-2 text-[10.5px]">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="shrink-0 font-mono text-[var(--color-faint)]">#{c.rank ?? idx + 1}</span>
+                {evalData && (
+                  <span
+                    title={relevantSet.has(c.source) ? r.qualityRelevant : r.qualityNotRelevant}
+                    className="shrink-0 font-mono"
+                    style={{ color: relevantSet.has(c.source) ? RAG : "var(--color-faint)" }}
+                  >
+                    {relevantSet.has(c.source) ? "✓" : "✗"}
+                  </span>
+                )}
                 <span className="truncate font-mono text-[var(--color-text-soft)]">{c.source}</span>
               </span>
               <span className="shrink-0 font-mono text-[var(--color-ok-soft)]">
@@ -203,6 +363,7 @@ function RetrievalDetail({
                 {i.distance}: {c.distance.toFixed(4)}
               </div>
             )}
+            <MetaChips chunk={c} r={r} />
             {c.text && (
               <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-[var(--color-muted)]">
                 {c.text}
@@ -591,6 +752,71 @@ function AugmentedDetail({ data, r }: { data: Stage["data"]; r: RagStrings }) {
 // --- shared layout helpers --------------------------------------------------
 
 type Stage = RagStage;
+
+// 071-retrieval-metrics — the retrieval-quality scorecard. When the query is a labelled
+// benchmark, show Precision@k / Recall@k / MRR + the relevant sources that were missed;
+// otherwise an honest one-liner (no fabricated 0) nudging the learner to a benchmark query.
+function QualityBlock({ evalData, r }: { evalData: RetrievalEval | undefined; r: RagStrings }) {
+  if (!evalData) {
+    return (
+      <p className="rounded-lg border border-dashed border-[var(--color-line)] px-2 py-1.5 text-[10px] leading-snug text-[var(--color-label)]">
+        {r.qualityNoGroundTruth} <span className="text-[var(--color-faint)]">{r.qualityTryBenchmark}</span>
+      </p>
+    );
+  }
+  return (
+    <Field label={r.quality}>
+      <div className="grid grid-cols-3 gap-x-3">
+        <Metric label={r.qualityPrecision} value={evalData.precision_at_k} />
+        <Metric label={r.qualityRecall} value={evalData.recall_at_k} />
+        <Metric label={r.qualityMrr} value={evalData.mrr} />
+      </div>
+      {evalData.missed.length > 0 && (
+        <p className="mt-1 text-[9.5px] leading-snug text-[var(--color-label)]">
+          {r.qualityMissed}:{" "}
+          <span className="font-mono text-[var(--color-text-soft)]">
+            {evalData.missed.join(", ")}
+          </span>
+        </p>
+      )}
+    </Field>
+  );
+}
+
+// 073-metadata-first-class — the "why retrieved" chips: a chunk's metadata (section · type ·
+// position) beside its score, so the retrieval decision is legible. Degrades gracefully —
+// renders nothing for a legacy chunk with no metadata.
+function MetaChips({ chunk, r }: { chunk: PipelineChunk; r: RagStrings }) {
+  const chips: string[] = [];
+  if (chunk.section) chips.push(`§ ${chunk.section}`);
+  if (chunk.doc_type) chips.push(chunk.doc_type);
+  if (chunk.position) chips.push(chunk.position);
+  if (chips.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1" title={r.metaWhyRetrieved}>
+      <span className="text-[8.5px] uppercase tracking-wide text-[var(--color-label)]">
+        {r.metaWhyRetrieved}
+      </span>
+      {chips.map((c, i) => (
+        <span
+          key={i}
+          className="rounded border border-[var(--color-line)] bg-[var(--color-panel)] px-1 py-px font-mono text-[8.5px] text-[var(--color-text-soft)]"
+        >
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[9px] uppercase tracking-wide text-[var(--color-label)]">{label}</span>
+      <span className="font-mono text-[12px] text-[var(--color-ok-soft)]">{value.toFixed(2)}</span>
+    </div>
+  );
+}
 
 function Wrap({ blurb, children }: { blurb: string; children: ReactNode }) {
   return (

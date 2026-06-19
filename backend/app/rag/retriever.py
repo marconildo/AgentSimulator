@@ -13,6 +13,7 @@ from ..schemas import Stage
 from ..trace import TraceEmitter
 from .embeddings import embedding_model_name
 from .hybrid import bm25_rank, rrf_fuse
+from .metrics import evaluate, match_golden
 from .reranker import rerank as rerank_chunks
 from .store import get_vectorstore, reset_vectorstore_cache
 
@@ -35,6 +36,18 @@ def _scope_filter(session_id: str | None) -> dict[str, Any]:
     if session_id:
         return {"$or": [{"corpus": True}, {"session_id": session_id}]}
     return {"corpus": True}
+
+
+def _with_filters(scope: dict[str, Any], filters: dict[str, Any] | None) -> dict[str, Any]:
+    """AND a metadata filter onto the scope (073-metadata-first-class).
+
+    The filter seam self-querying will drive: a metadata equality map is conjoined with the
+    corpus/session ``scope`` so retrieval is *filtered*, not just ranked, while uploads-vs-corpus
+    isolation is preserved. No filter ⇒ the scope is returned unchanged (byte-for-byte).
+    """
+    if not filters:
+        return scope
+    return {"$and": [scope, *({k: v} for k, v in filters.items())]}
 
 
 def _search_with_recovery(query: str, k: int, where: dict[str, Any]):
@@ -80,6 +93,8 @@ def _all_scoped_chunks(store, where: dict[str, Any]) -> list[dict[str, Any]]:
                 "score": 0.0,
                 "similarity": None,
                 "uploaded": not meta.get("corpus", False),
+                # 073-metadata-first-class: carry the same display metadata on BM25-lane chunks.
+                **_meta_fields(meta),
             }
         )
     return chunks
@@ -103,6 +118,21 @@ def _to_chunk(doc, distance, rank: int) -> dict[str, Any]:
         # True for user-uploaded PDFs, False for the built-in corpus — lets the UI
         # badge a chunk as coming from the user's document.
         "uploaded": not doc.metadata.get("corpus", False),
+        # 073-metadata-first-class: rich metadata so the inspector can answer "why was
+        # this chunk retrieved?". Defaults keep a legacy (pre-073) index rendering safely.
+        **_meta_fields(doc.metadata),
+    }
+
+
+def _meta_fields(meta: dict[str, Any]) -> dict[str, Any]:
+    """The 073 display metadata for a chunk, degrading gracefully for a legacy index."""
+    total = meta.get("total_chunks")
+    chunk_idx = meta.get("chunk")
+    position = f"{chunk_idx + 1}/{total}" if isinstance(chunk_idx, int) and total else ""
+    return {
+        "section": meta.get("section", ""),
+        "doc_type": meta.get("doc_type", ""),
+        "position": position,
     }
 
 
@@ -213,9 +243,24 @@ async def retrieve(
         chunks: list[dict[str, Any]] = [
             {**c, "rank": rank} for rank, c in enumerate(selected, start=1)
         ]
+        # 071-retrieval-metrics: if this query is in the labelled golden set, score the
+        # retrieved chunks (Precision@k / Recall@k / MRR) against the ground truth and
+        # attach `eval` additively. No golden hit ⇒ no `eval` key (byte-for-byte). Marks
+        # each chunk `relevant` so the drill-in can show ✓/✗ per chunk.
+        golden = match_golden(query)
+        if golden:
+            relevant = set(golden["relevant_sources"])
+            for c in chunks:
+                c["relevant"] = c["source"] in relevant
+            ev = evaluate([c["source"] for c in chunks], golden["relevant_sources"], k)
+            ev["id"] = golden["id"]
         # Carry the query so a multi-search turn can attribute each chunk to the search
         # that retrieved it ("Sources used" groups by search — see main._retrieved_chunks).
         rec.data = {"chunks": chunks, "k": k, "query": query}
+        if golden:
+            rec.data["eval"] = ev
+            rec.metrics["mrr"] = ev["mrr"]
+            rec.metrics["precision_at_k"] = ev["precision_at_k"]
         if chunks:
             rec.metrics["top_score"] = chunks[0]["score"]
 

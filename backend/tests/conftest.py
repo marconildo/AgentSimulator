@@ -31,12 +31,24 @@ def _has_tavily_key() -> bool:
     return get_settings().has_tavily_key
 
 
+def _has_ollama_server() -> bool:
+    # 074: the integration test needs a reachable local Ollama. We treat the
+    # presence of both env vars as the opt-in signal (no network probe at
+    # collection time).
+    return bool(os.environ.get("OLLAMA_TEST_SERVER") and os.environ.get("OLLAMA_TEST_MODEL"))
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "openai: test needs a real OPENAI_API_KEY (skipped without one)"
     )
     config.addinivalue_line(
         "markers", "tavily: test needs a real TAVILY_API_KEY (skipped without one)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "ollama: test needs a real local Ollama server "
+        "(OLLAMA_TEST_SERVER/OLLAMA_TEST_MODEL; skipped without one)",
     )
 
     from app.config import get_settings
@@ -69,10 +81,14 @@ def pytest_configure(config):
 def pytest_collection_modifyitems(config, items):
     has_openai = _has_openai_key()
     has_tavily = _has_tavily_key()
-    skip_openai = pytest.mark.skip(reason="needs OPENAI_API_KEY (OpenAI-only app)")
+    has_ollama = _has_ollama_server()
+    skip_openai = pytest.mark.skip(reason="needs OPENAI_API_KEY (default provider)")
     skip_tavily = pytest.mark.skip(reason="needs TAVILY_API_KEY (optional web search)")
+    skip_ollama = pytest.mark.skip(reason="needs a local Ollama server (074)")
     for item in items:
         if not has_openai and "openai" in item.keywords:
             item.add_marker(skip_openai)
         if not has_tavily and "tavily" in item.keywords:
             item.add_marker(skip_tavily)
+        if not has_ollama and "ollama" in item.keywords:
+            item.add_marker(skip_ollama)

@@ -189,6 +189,11 @@ class ChatRequest(BaseModel):
     # returns 422 on an unlisted value, so the agent never sees an unvetted id.
     # ``None`` = use ``settings.llm_model`` (the configured default).
     model: str | None = Field(default=None, max_length=120)
+    # Per-conversation LLM provider override (074-ollama-provider). ``"openai"``
+    # (default) or ``"ollama"`` (local server). ``None`` = fall back to the bound
+    # agent's ``provider`` (else "openai"). The curated model allowlist is enforced
+    # only when the effective provider is OpenAI; Ollama accepts any installed model.
+    provider: str | None = Field(default=None, max_length=40)
 
     # --- Scenario builder per-feature inputs (061-scenario-builder) ----------
     # The maturity ladder (008) is retired as a request input: the client builder

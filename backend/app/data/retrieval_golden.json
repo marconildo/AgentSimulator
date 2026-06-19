@@ -1,0 +1,42 @@
+[
+  {
+    "id": "react-loop",
+    "query": "What is the ReAct loop in an AI agent?",
+    "relevant_sources": ["agents.md"]
+  },
+  {
+    "id": "cosine",
+    "query": "How does cosine similarity work in vector search?",
+    "relevant_sources": ["embeddings.md"]
+  },
+  {
+    "id": "hnsw",
+    "query": "What is HNSW?",
+    "relevant_sources": ["embeddings.md"]
+  },
+  {
+    "id": "token-cost",
+    "query": "What is a token and how does it affect cost and latency?",
+    "relevant_sources": ["llm-basics.md"]
+  },
+  {
+    "id": "context-window",
+    "query": "What is the context window of a language model?",
+    "relevant_sources": ["llm-basics.md"]
+  },
+  {
+    "id": "mcp-server",
+    "query": "What does an MCP server expose to a client?",
+    "relevant_sources": ["mcp.md"]
+  },
+  {
+    "id": "system-prompt",
+    "query": "How should I structure a system prompt?",
+    "relevant_sources": ["prompting.md"]
+  },
+  {
+    "id": "chunk-size",
+    "query": "Why does chunk size matter in a RAG pipeline?",
+    "relevant_sources": ["rag.md"]
+  }
+]

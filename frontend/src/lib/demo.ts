@@ -21,8 +21,9 @@ import type {
   Skill,
 } from "./chatApi";
 import type { DoneEvent, TraceEvent, TraceSummary } from "../types/events";
+import type { ChunkPreviewResult } from "./chatApi";
 import { useLang } from "../i18n";
-import { DEMO_CONFIG, DEMO_TRACES } from "../demo/fixtures";
+import { DEMO_CHUNK_PREVIEW, DEMO_CONFIG, DEMO_TRACES } from "../demo/fixtures";
 
 /** GitHub repo the demo banner points visitors at for the full live version. */
 export const DEMO_REPO_URL = "https://github.com/reginaldosilva27/AgentSimulator";
@@ -92,6 +93,7 @@ const demoAgent: AgentMeta = {
   system_prompt: DEMO_CONFIG.default_system_prompt,
   agent_prompt: DEMO_CONFIG.default_agent_prompt,
   model: DEMO_CONFIG.default_model,
+  provider: "openai",
   enabled_tools: DEMO_CONFIG.tools.map((t) => t.name),
   is_default: true,
   created_at: 0,
@@ -237,6 +239,11 @@ export function demoHealth() {
 }
 
 export const demoGetConfig = (): Promise<AppConfig> => Promise.resolve(DEMO_CONFIG);
+/** 072-chunking-strategies — replay the captured chunk-preview (the playground's
+ *  strategy comparison) with no backend. The supplied `text` is ignored in demo:
+ *  the bundled snapshot is over a fixed sample corpus doc. */
+export const demoChunkPreview = (): Promise<ChunkPreviewResult> =>
+  Promise.resolve(DEMO_CHUNK_PREVIEW);
 export const demoListAgents = (): Promise<AgentMeta[]> => Promise.resolve([demoAgent]);
 export const demoListSessions = (): Promise<SessionMeta[]> =>
   Promise.resolve([...store.sessions].sort((a, b) => b.updated_at - a.updated_at));

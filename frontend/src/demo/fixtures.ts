@@ -12,13 +12,19 @@
 // breaks the build (the lookup falls back; see `selectDemoTrace`).
 
 import type { TraceSummary } from "../types/events";
-import type { AppConfig } from "../lib/chatApi";
+import type { AppConfig, ChunkPreviewResult } from "../lib/chatApi";
 
 import config from "./fixtures/_config.json";
+import chunkPreview from "./fixtures/_chunk_preview.json";
 
 /** The `/api/config` snapshot, so the demo prefills the same defaults the live
  *  backend would (models, tools, top-k bounds, scenarios, …). Read-only. */
 export const DEMO_CONFIG = config as unknown as AppConfig;
+
+/** 072-chunking-strategies — the captured read-only chunk-preview (all strategies
+ *  over a sample corpus doc), so the demo's Chunking playground replays a REAL
+ *  response with no backend. */
+export const DEMO_CHUNK_PREVIEW = chunkPreview as unknown as ChunkPreviewResult;
 
 export interface DemoTrace {
   qid: string;

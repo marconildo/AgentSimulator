@@ -273,6 +273,16 @@ export interface Strings {
     streamingHint: string;
     batch: string;
     batchHint: string;
+    // 072-chunking-strategies — the Knowledge base section (chunking strategy + re-ingest).
+    kb: {
+      title: string;
+      hint: string;
+      strategy: string;
+      reingest: string;
+      reingesting: string;
+      done: (n: number) => string;
+      active: string;
+    };
     // Real, working controls (006-interactive-experiments) — replaced the old
     // "SOON" Tools/RAG placeholders.
     experiment: {
@@ -681,6 +691,27 @@ export interface Strings {
     executionOf: (k: number, n: number) => string;
     prevExecution: string;
     nextExecution: string;
+    // 071-retrieval-metrics — the retrieval-quality scorecard on the Retrieval card.
+    quality: string;
+    qualityPrecision: string;
+    qualityRecall: string;
+    qualityMrr: string;
+    qualityRelevant: string;
+    qualityNotRelevant: string;
+    qualityMissed: string;
+    qualityNoGroundTruth: string;
+    qualityTryBenchmark: string;
+    // 072-chunking-strategies — the Chunking playground (chosen strategy beside fixed).
+    chunkPlayLoading: string;
+    chunkPlayWhy: string;
+    chunkCompareWithFixed: string;
+    chunkMidSentence: string;
+    chunkStratFixed: string;
+    chunkStratRecursive: string;
+    chunkStratSemantic: string;
+    chunkStratAgentic: string;
+    // 073-metadata-first-class — the "why retrieved" metadata chips.
+    metaWhyRetrieved: string;
   };
   // 056-ragless-pageindex — the RAGLESS drill-in panel (tree → navigate → select →
   // augmented). A pure projection like ragDetail, but for reasoning-based retrieval.
@@ -811,6 +842,16 @@ export interface Strings {
       comingSoon: string;
       activeNote: string;
       previewNote: string;
+      // 074-ollama-provider
+      ollamaNote: string;
+      serverUrlLabel: string;
+      serverUrlPlaceholder: string;
+      serverUrlHelp: string;
+      refresh: string;
+      unreachable: string;
+      noModels: string;
+      loadingModels: string;
+      modelLabel: string;
     };
     model: {
       title: string;
@@ -1093,6 +1134,15 @@ const en: Strings = {
     streamingHint: "Watch each stage light up live; the answer types itself out.",
     batch: "Batch (JSON)",
     batchHint: "Wait for one JSON response, then replay the trace; the answer appears at once.",
+    kb: {
+      title: "Knowledge base",
+      hint: "Pick how the corpus is chunked, then re-ingest to rebuild the index — the canvas animates chunk → embed → store.",
+      strategy: "Chunking strategy",
+      reingest: "Re-ingest corpus",
+      reingesting: "Re-ingesting…",
+      done: (n) => `Re-indexed ${n} chunks`,
+      active: "active",
+    },
     experiment: {
       title: "Experiment",
       systemPrompt: "System prompt",
@@ -1193,6 +1243,11 @@ const en: Strings = {
     INDEX: "Vector index (HNSW) — the graph structure that makes nearest-neighbour search over embeddings fast.",
     HNSW: "HNSW — the graph-based approximate-nearest-neighbour index the vector store uses to find similar chunks fast.",
     RERANK: "Reranker — a second-pass model that reorders retrieved chunks by true relevance before they reach the LLM.",
+    Chunking: "Chunking — splitting documents into retrievable pieces before embedding; the strategy (fixed/recursive/semantic/agentic) sets the boundaries.",
+    Metadata: "Metadata — structured facts attached to each chunk (source, section, type, position) used to debug retrieval and, with self-querying, to filter it.",
+    "Precision@k": "Precision@k — of the top-k retrieved chunks, the fraction that are relevant.",
+    "Recall@k": "Recall@k — of all relevant chunks, the fraction that made the top-k.",
+    MRR: "MRR (Mean Reciprocal Rank) — 1/(rank of the first relevant chunk); higher is better.",
     GATEWAY: "LLM gateway — a proxy in front of model providers for routing, retries, rate limits and cost control.",
     SAFETY: "Guardrails — input/output checks that block unsafe or off-policy prompts and responses.",
     CACHE: "Semantic cache — reuses a past answer when a new question is close enough in meaning, skipping the LLM.",
@@ -1610,8 +1665,18 @@ const en: Strings = {
       title: "Provider",
       help: "The LLM provider this agent runs on.",
       comingSoon: "Coming soon",
-      activeNote: "Default — active provider.",
-      previewNote: "Run models locally. Preview — not yet available.",
+      activeNote: "Default — cloud provider, needs an OpenAI key.",
+      previewNote: "Run models locally on your own machine.",
+      ollamaNote: "Runs against your local Ollama server. No OpenAI key needed.",
+      serverUrlLabel: "Ollama server URL",
+      serverUrlPlaceholder: "http://localhost:11434",
+      serverUrlHelp:
+        "The backend connects to this address. In Docker use host.docker.internal.",
+      refresh: "Refresh models",
+      unreachable: "Couldn't reach the Ollama server. Is it running?",
+      noModels: "No models installed. Run `ollama pull <model>` first.",
+      loadingModels: "Listing installed models…",
+      modelLabel: "Model",
     },
     model: {
       title: "Model",
@@ -1721,6 +1786,26 @@ const en: Strings = {
     executionOf: (k, n) => `retrieval ${k} / ${n}`,
     prevExecution: "Previous retrieval",
     nextExecution: "Next retrieval",
+    quality: "Retrieval quality",
+    qualityPrecision: "Precision@k",
+    qualityRecall: "Recall@k",
+    qualityMrr: "MRR",
+    qualityRelevant: "relevant",
+    qualityNotRelevant: "not relevant",
+    qualityMissed: "Relevant chunks missed",
+    qualityNoGroundTruth:
+      "No ground truth for this query — metrics need a labelled benchmark query.",
+    qualityTryBenchmark: "Try a benchmark query to score retrieval.",
+    chunkPlayLoading: "Chunking the sample…",
+    chunkPlayWhy:
+      "Better boundaries = better retrieval — chunking is upstream of every metric.",
+    chunkCompareWithFixed: "Fixed-size",
+    chunkMidSentence: "cuts mid-sentence",
+    chunkStratFixed: "Fixed-size — splits by length; can cut a sentence in half.",
+    chunkStratRecursive: "Recursive — splits on paragraphs/sentences, with overlap.",
+    chunkStratSemantic: "Semantic — starts a new chunk when the topic shifts.",
+    chunkStratAgentic: "Agentic — an LLM segments the document into coherent units.",
+    metaWhyRetrieved: "Why retrieved",
   },
   pageindexDetail: {
     title: "RAGLESS Pipeline",
@@ -2001,6 +2086,15 @@ const pt: Strings = {
     streamingHint: "Veja cada etapa acender ao vivo; a resposta vai sendo digitada.",
     batch: "Batch (JSON)",
     batchHint: "Aguarde uma resposta JSON única e então repita o trace; a resposta aparece de uma vez.",
+    kb: {
+      title: "Base de conhecimento",
+      hint: "Escolha como o corpus é dividido em chunks e reindexe para reconstruir o índice — o canvas anima chunk → embed → store.",
+      strategy: "Estratégia de chunking",
+      reingest: "Reindexar corpus",
+      reingesting: "Reindexando…",
+      done: (n) => `${n} trechos reindexados`,
+      active: "ativa",
+    },
     experiment: {
       title: "Experimentar",
       systemPrompt: "Prompt de sistema",
@@ -2101,6 +2195,11 @@ const pt: Strings = {
     INDEX: "Índice vetorial (HNSW) — a estrutura em grafo que torna rápida a busca por vizinhos mais próximos sobre embeddings.",
     HNSW: "HNSW — o índice de vizinhos mais próximos aproximados (baseado em grafo) que o banco vetorial usa para achar trechos similares rápido.",
     RERANK: "Reranker — um modelo de segunda passada que reordena os trechos recuperados por relevância real antes do LLM.",
+    Chunking: "Chunking — dividir documentos em pedaços recuperáveis antes do embedding; a estratégia (fixo/recursivo/semântico/agêntico) define os limites.",
+    Metadata: "Metadados — fatos estruturados anexados a cada trecho (fonte, seção, tipo, posição) usados para depurar a recuperação e, com self-querying, para filtrá-la.",
+    "Precision@k": "Precisão@k — dos k trechos recuperados no topo, a fração que é relevante.",
+    "Recall@k": "Revocação@k — de todos os trechos relevantes, a fração que entrou no top-k.",
+    MRR: "MRR (Mean Reciprocal Rank) — 1/(posição do primeiro trecho relevante); maior é melhor.",
     GATEWAY: "Gateway de LLM — um proxy na frente dos provedores de modelo para roteamento, retries, limites de taxa e controle de custo.",
     SAFETY: "Guardrails — verificações de entrada/saída que bloqueiam prompts e respostas inseguros ou fora de política.",
     CACHE: "Cache semântico — reutiliza uma resposta anterior quando a nova pergunta é próxima o bastante em significado, pulando o LLM.",
@@ -2522,8 +2621,18 @@ const pt: Strings = {
       title: "Provedor",
       help: "O provedor de LLM que este agente utiliza.",
       comingSoon: "Em breve",
-      activeNote: "Padrão — provedor ativo.",
-      previewNote: "Rode modelos localmente. Prévia — ainda não disponível.",
+      activeNote: "Padrão — provedor na nuvem, requer uma chave OpenAI.",
+      previewNote: "Rode modelos localmente na sua própria máquina.",
+      ollamaNote: "Roda no seu servidor Ollama local. Não precisa de chave da OpenAI.",
+      serverUrlLabel: "URL do servidor Ollama",
+      serverUrlPlaceholder: "http://localhost:11434",
+      serverUrlHelp:
+        "O backend conecta neste endereço. No Docker use host.docker.internal.",
+      refresh: "Atualizar modelos",
+      unreachable: "Não foi possível acessar o servidor Ollama. Ele está rodando?",
+      noModels: "Nenhum modelo instalado. Rode `ollama pull <modelo>` primeiro.",
+      loadingModels: "Listando modelos instalados…",
+      modelLabel: "Modelo",
     },
     model: {
       title: "Modelo",
@@ -2634,6 +2743,26 @@ const pt: Strings = {
     executionOf: (k, n) => `recuperação ${k} / ${n}`,
     prevExecution: "Recuperação anterior",
     nextExecution: "Próxima recuperação",
+    quality: "Qualidade da recuperação",
+    qualityPrecision: "Precisão@k",
+    qualityRecall: "Revocação@k",
+    qualityMrr: "MRR",
+    qualityRelevant: "relevante",
+    qualityNotRelevant: "não relevante",
+    qualityMissed: "Trechos relevantes não recuperados",
+    qualityNoGroundTruth:
+      "Sem gabarito para esta pergunta — as métricas precisam de uma pergunta de benchmark rotulada.",
+    qualityTryBenchmark: "Experimente uma pergunta de benchmark para medir a recuperação.",
+    chunkPlayLoading: "Chunkando a amostra…",
+    chunkPlayWhy:
+      "Melhores limites = melhor recuperação — o chunking está a montante de toda métrica.",
+    chunkCompareWithFixed: "Tamanho fixo",
+    chunkMidSentence: "corta no meio da frase",
+    chunkStratFixed: "Tamanho fixo — divide por comprimento; pode cortar uma frase ao meio.",
+    chunkStratRecursive: "Recursivo — divide por parágrafos/frases, com sobreposição.",
+    chunkStratSemantic: "Semântico — inicia um novo trecho quando o tópico muda.",
+    chunkStratAgentic: "Agêntico — um LLM segmenta o documento em unidades coerentes.",
+    metaWhyRetrieved: "Por que foi recuperado",
   },
   pageindexDetail: {
     title: "Pipeline RAGLESS",

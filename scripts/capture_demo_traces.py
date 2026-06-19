@@ -81,6 +81,8 @@ def main() -> None:
     # Comma-separated subset of SCENARIOS to (re)capture; default = all. Lets a single
     # new feature (e.g. 070 hybrid) be captured without re-running every existing fixture.
     ap.add_argument("--scenarios", default="")
+    # Comma-separated subset of QUESTION ids to (re)capture; default = all.
+    ap.add_argument("--questions", default="")
     # Skip re-snapshotting /api/config when only topping up a subset of scenarios.
     ap.add_argument("--no-config", action="store_true")
     args = ap.parse_args()
@@ -90,12 +92,22 @@ def main() -> None:
     if unknown:
         raise SystemExit(f"unknown scenarios: {unknown}; known: {list(SCENARIOS)}")
 
+    qids = {q.strip() for q in args.questions.split(",") if q.strip()}
+    questions = [q for q in QUESTIONS if not qids or q[0] in qids]
+
     OUT.mkdir(parents=True, exist_ok=True)
     if not args.no_config:
         json.dump(_get(args.base, "/api/config"), (OUT / "_config.json").open("w"), ensure_ascii=False)
         print("saved _config.json")
+        # 072-chunking-strategies — snapshot the read-only chunk-preview (all strategies over
+        # a sample corpus doc) so the demo's Chunking playground replays a REAL response with
+        # no backend. Captured alongside /api/config (both are read-only boot snapshots).
+        preview = _post(args.base, "/api/rag/chunk-preview", {"strategy": "all"})
+        json.dump(preview, (OUT / "_chunk_preview.json").open("w"), ensure_ascii=False)
+        strategies = ", ".join(p["strategy"] for p in preview.get("previews", []))
+        print(f"saved _chunk_preview.json ({strategies})")
 
-    for qid, langs in QUESTIONS:
+    for qid, langs in questions:
         for lang, text in langs.items():
             for scenario in wanted:
                 flags = SCENARIOS[scenario]
