@@ -150,11 +150,15 @@ def get_provider(
             base_url=base_url,
         )
 
-    if not settings.has_openai_key:
+    # 076-openai-key-ui: the key may come from the UI/DB (DB precedes env).
+    from ..config import effective_openai_key
+
+    key = effective_openai_key()
+    if not key:
         raise MissingAPIKeyError()
     from .openai_provider import OpenAIProvider
 
     return OpenAIProvider(
         model=model or settings.llm_model,
-        api_key=settings.openai_api_key,
+        api_key=key,
     )

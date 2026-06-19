@@ -11,8 +11,6 @@ AC1 + AC6 (omitting both keeps today's behavior).
 
 from __future__ import annotations
 
-import json
-
 from fastapi.testclient import TestClient
 from httpx import Response
 
@@ -86,16 +84,20 @@ def test_chat_omits_model_uses_server_default():
         assert resp.status_code != 422
 
 
-def test_chat_rejects_unknown_model_with_422():
-    """AC2 — an unlisted ``model`` returns 422 and references the allowlist."""
+def test_chat_accepts_unlisted_model_after_076():
+    """076-openai-key-ui — the curated allowlist is no longer a hard gate (OpenAI
+    models are listed live now), so an unlisted but non-empty ``model`` is accepted
+    (no 422). A blank model is still rejected (see the next test)."""
     with TestClient(app) as client:
-        resp = _post_chat(client, {"message": "hi", "mode": "batch", "model": "not-a-real-model"})
+        resp = _post_chat(client, {"message": "hi", "mode": "batch", "model": "gpt-4.1-custom"})
+        assert resp.status_code != 422
+
+
+def test_chat_rejects_blank_model_with_422():
+    """076 — a blank ``model`` is rejected (can't run an empty model id)."""
+    with TestClient(app) as client:
+        resp = _post_chat(client, {"message": "hi", "mode": "batch", "model": "   "})
         assert resp.status_code == 422
-        body = resp.json()
-        # The error payload references the offending field and the allowlist.
-        detail = json.dumps(body).lower()
-        assert "model" in detail
-        assert "allow" in detail or "not-a-real-model" in detail
 
 
 def test_chat_accepts_allowlisted_model():

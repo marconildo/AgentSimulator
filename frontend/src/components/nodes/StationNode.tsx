@@ -36,6 +36,12 @@ const HAS_DETAIL: Partial<Record<StationId, boolean>> = {
   // 068-llm-rounds-history — the LLM node opens a per-call drill-in (every model
   // call of the turn, not just the last one the Inspector shows).
   llm: true,
+  // 076-station-full-views — the four remaining real stations get the same
+  // "open full view" drill-in (their turn data; the Inspector keeps the theory).
+  mcp: true,
+  database: true,
+  backend: true,
+  frontend: true,
 };
 
 export function StationNode(props: NodeProps) {

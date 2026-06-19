@@ -345,6 +345,43 @@ export const getOllamaModels = (baseUrl?: string): Promise<OllamaModelsResult> =
   return api<OllamaModelsResult>(`/api/ollama/models${q}`);
 };
 
+// 076-openai-key-ui — OpenAI key (entered in the UI, saved server-side) + live
+// model listing. Reads never expose the full key (masked).
+export interface OpenAIKeyStatus {
+  has_key: boolean;
+  masked: string | null;
+  source?: "db" | "env" | null;
+}
+export interface OpenAISaveResult {
+  ok: boolean;
+  has_key: boolean;
+  masked: string | null;
+  tested: boolean;
+  model_count?: number;
+  error?: string | null;
+}
+export interface OpenAIModelsResult {
+  reachable: boolean;
+  models: { id: string }[];
+  error?: string;
+}
+
+/** Whether an OpenAI key is configured (masked hint + source). Never the full key. */
+export const getOpenAISettings = (): Promise<OpenAIKeyStatus> =>
+  isDemo()
+    ? Promise.resolve({ has_key: true, masked: "sk-…demo", source: "env" })
+    : api<OpenAIKeyStatus>("/api/settings/openai");
+
+/** Save (or clear, when blank) the OpenAI key; the backend tests the connection. */
+export const setOpenAISettings = (apiKey: string): Promise<OpenAISaveResult> =>
+  jsonApi<OpenAISaveResult>("/api/settings/openai", "PUT", { api_key: apiKey });
+
+/** List the account's chat models live (backend uses the effective key). */
+export const getOpenAIModels = (): Promise<OpenAIModelsResult> =>
+  isDemo()
+    ? Promise.resolve({ reachable: false, models: [] })
+    : api<OpenAIModelsResult>("/api/openai/models");
+
 // 042-agent-anatomy: corpus listing for the Knowledge Base section.
 export interface CorpusFile {
   filename: string;

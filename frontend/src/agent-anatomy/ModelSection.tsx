@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useT } from "../i18n";
 import { useActiveAgent } from "../lib/agentAccess";
-import { getConfig, type AppConfig } from "../lib/chatApi";
+import { getConfig, getOpenAIModels, type AppConfig } from "../lib/chatApi";
 
 export function ModelSection() {
   const t = useT().agentAnatomy.model;
@@ -17,8 +17,27 @@ export function ModelSection() {
     getConfig().then(setConfig).catch(() => {});
   }, []);
 
-  const models = config?.models ?? [];
+  // 076-openai-key-ui: list the account's chat models live (when a key is set);
+  // fall back to the curated list when offline / no key.
+  const [liveModels, setLiveModels] = useState<{ id: string }[] | null>(null);
+  useEffect(() => {
+    if (agent?.provider === "ollama") return;
+    getOpenAIModels()
+      .then((r) => setLiveModels(r.reachable ? r.models : null))
+      .catch(() => setLiveModels(null));
+  }, [agent?.provider]);
+
+  const curated = config?.models ?? [];
   const value = agent?.model ?? "";
+  // Prefer the live list; else curated. Ensure the current value is always an
+  // option so the select reflects the agent's model even if it's not listed.
+  const live = liveModels && liveModels.length > 0;
+  const models: { id: string; label: string }[] = live
+    ? liveModels.map((m) => ({ id: m.id, label: m.id }))
+    : curated.map((m) => ({ id: m.id, label: m.label }));
+  if (value && !models.some((m) => m.id === value)) {
+    models.unshift({ id: value, label: value });
+  }
 
   // 074-ollama-provider: for an Ollama-bound agent the model is chosen from the
   // live local-server list in the Provider section (this curated list is
@@ -48,7 +67,7 @@ export function ModelSection() {
       >
         {models.map((m) => (
           <option key={m.id} value={m.id}>
-            {m.label} — {m.id}
+            {m.label === m.id ? m.id : `${m.label} — ${m.id}`}
           </option>
         ))}
       </select>

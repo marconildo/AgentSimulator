@@ -6,7 +6,7 @@ import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import { formatTokens, formatTps, formatUsd } from "../lib/cost";
 import type { DerivedView, UsageTotals } from "../lib/derive";
 import { hasUploadActivity } from "../lib/derive";
-import { useHealth } from "../lib/health";
+import { useActiveModel } from "../lib/activeModel";
 import { useResolvedSelection } from "../lib/selection";
 import { useSettings } from "../lib/settings";
 import {
@@ -156,7 +156,9 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
   const cloud = useCloud((s) => s.cloud);
   const mode = useSettings((s) => s.mode);
   // The LLM block's model is read live (B2), never baked into stations.ts.
-  const llmModel = useHealth((s) => s.llmModel);
+  // 074 follow-up: track the SELECTED agent's model+provider (e.g. an Ollama
+  // model), not the server default — falls back to the health default.
+  const { model: activeModel } = useActiveModel();
   const comms = useT().comms;
   const tier = tierByIdFor(lang)[meta.tier];
   const stationById = stationByIdFor(lang);
@@ -165,7 +167,7 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
 
   return (
     <Section title={i.techInfra}>
-      {meta.id === "llm" && <KeyVal k={i.model} v={llmModel ?? "—"} />}
+      {meta.id === "llm" && <KeyVal k={i.model} v={activeModel ?? "—"} />}
       {meta.tech.map((row) => (
         <KeyVal key={row.k} k={row.k} v={row.v} />
       ))}

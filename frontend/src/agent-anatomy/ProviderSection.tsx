@@ -13,11 +13,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useT } from "../i18n";
 import { useActiveAgent } from "../lib/agentAccess";
+import { useHealth } from "../lib/health";
 import {
   getConfig,
   getOllamaModels,
   getOllamaSettings,
+  getOpenAISettings,
   setOllamaSettings,
+  setOpenAISettings,
   type AppConfig,
   type OllamaModelsResult,
 } from "../lib/chatApi";
@@ -82,6 +85,33 @@ export function ProviderSection() {
   function selectModel(id: string) {
     updateAgent({ model: id });
     flush();
+  }
+
+  // 076-openai-key-ui: the OpenAI key, entered here + saved server-side.
+  const isOpenAI = provider === "openai";
+  const [keyStatus, setKeyStatus] = useState<{ has_key: boolean; masked: string | null } | null>(
+    null,
+  );
+  const [keyInput, setKeyInput] = useState("");
+  const [keyState, setKeyState] = useState<"idle" | "testing" | "connected" | "failed">("idle");
+  useEffect(() => {
+    if (!isOpenAI) return;
+    getOpenAISettings()
+      .then((s) => setKeyStatus({ has_key: s.has_key, masked: s.masked }))
+      .catch(() => {});
+  }, [isOpenAI]);
+
+  function saveKey() {
+    setKeyState("testing");
+    setOpenAISettings(keyInput.trim())
+      .then((r) => {
+        setKeyStatus({ has_key: r.has_key, masked: r.masked });
+        setKeyInput("");
+        setKeyState(r.tested ? (r.ok ? "connected" : "failed") : "idle");
+        // Refresh health so the no-key banner clears without a reload.
+        void useHealth.getState().load();
+      })
+      .catch(() => setKeyState("failed"));
   }
 
   return (
@@ -167,6 +197,52 @@ export function ProviderSection() {
               ))}
             </select>
           )}
+        </div>
+      )}
+
+      {isOpenAI && (
+        <div className="space-y-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2.5">
+          <label className="block space-y-1">
+            <span className="text-[11px] font-medium text-[var(--color-ink)]">{t.keyLabel}</span>
+            <input
+              type="password"
+              data-testid="agent-anatomy-openai-key"
+              value={keyInput}
+              placeholder={t.keyPlaceholder}
+              onChange={(e) => setKeyInput(e.target.value)}
+              className="w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] px-2.5 py-1.5 font-mono text-[12px] text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
+            />
+          </label>
+          {keyStatus?.has_key && keyStatus.masked && (
+            <p className="text-[10.5px] text-[var(--color-muted)]">
+              {t.keySavedHint} <span className="font-mono">{keyStatus.masked}</span>
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="agent-anatomy-openai-save"
+              onClick={saveKey}
+              disabled={keyState === "testing"}
+              className="rounded-md border border-[var(--color-line)] px-2.5 py-1 text-[11px] text-[var(--color-ink)] hover:border-[var(--color-accent)] disabled:opacity-50"
+            >
+              {t.keySave}
+            </button>
+            {keyState === "testing" && (
+              <span className="text-[10.5px] text-[var(--color-muted)]">{t.keyTesting}</span>
+            )}
+            {keyState === "connected" && (
+              <span data-testid="agent-anatomy-openai-status" className="text-[10.5px] text-[var(--color-ok,#2e7d32)]">
+                {t.keyConnected}
+              </span>
+            )}
+            {keyState === "failed" && (
+              <span data-testid="agent-anatomy-openai-status" className="text-[10.5px] text-[var(--color-warn,#c0392b)]">
+                {t.keyFailed}
+              </span>
+            )}
+          </div>
+          <p className="text-[10.5px] leading-snug text-[var(--color-muted)]">{t.keyEnvNote}</p>
         </div>
       )}
     </section>

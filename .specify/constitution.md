@@ -21,8 +21,10 @@ the other in the same commit.** A spec that adds a pipeline stage must list the 
 
 ### 2. OpenAI by default, real opt-in Ollama — no mock mode
 The app runs against **real** LLM providers; there is no offline/mock mode. **OpenAI is
-the default provider** and requires an `OPENAI_API_KEY` — an OpenAI-bound run with no key
-fails fast with a clear, typed error rather than falling back. A **local Ollama** provider
+the default provider** and requires an OpenAI API key — supplied either from the UI
+(persisted in the DB, which takes precedence) or the `OPENAI_API_KEY` env (fallback). An
+OpenAI-bound run with no effective key fails fast with a clear, typed error rather than
+falling back. A read endpoint never returns a stored key in full (masked). A **local Ollama** provider
 is a real opt-in alternative (per-agent): an Ollama-bound run talks to the user's local
 server and does **not** require an OpenAI key, so the app may boot and run with Ollama
 alone. Either way the provider is real — nothing is mocked. Tests exercise the real
@@ -31,7 +33,8 @@ skipped when no server is configured) and assert **structurally** — stages fir
 used, answer non-empty, relevant doc ranks first — to tolerate model variability.
 *(Amended by spec 003; was "Demo mode is deterministic and offline". Amended by spec 074;
 was "Single provider (OpenAI), required" — Ollama is now a real second provider, not a
-disabled preview.)* *(Scoped carve-out by spec 058: a clearly-labelled `VITE_DEMO_MODE`
+disabled preview. Amended by spec 076; the OpenAI key may now come from the UI/DB
+(DB precedes env, which stays a fallback), not env-only.)* *(Scoped carve-out by spec 058: a clearly-labelled `VITE_DEMO_MODE`
 build — the public GitHub Pages showcase — runs **no** provider and replays real captured
 traces with no backend; the **default** build remains key-/server-required and fails fast
 as above.)*

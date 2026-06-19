@@ -161,3 +161,27 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# --- 076-openai-key-ui: effective OpenAI key (DB precedes env) --------------
+
+# The key the app actually uses: the UI-saved value in `app_config.openai_api_key`
+# when present, else the env `OPENAI_API_KEY`. The store import is lazy because
+# `db.store` imports this module (avoid an import cycle). A store/DB failure is
+# swallowed so a broken DB never hides a perfectly good env key.
+OPENAI_KEY_CONFIG_KEY = "openai_api_key"
+
+
+def effective_openai_key() -> str:
+    db_key = ""
+    try:
+        from .db.store import get_store
+
+        db_key = (get_store()._get_config_sync(OPENAI_KEY_CONFIG_KEY) or "").strip()
+    except Exception:  # noqa: BLE001 - a DB hiccup must not mask the env key
+        db_key = ""
+    return db_key or get_settings().openai_api_key.strip()
+
+
+def has_effective_openai_key() -> bool:
+    return bool(effective_openai_key())

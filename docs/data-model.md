@@ -275,6 +275,14 @@ back to the env default (`settings.ollama_base_url`,
 `http://localhost:11434`) when the key is absent. **`clear_all` does
 NOT touch this table** — it is configuration, not user data.
 
+Keys today: `ollama_base_url` (074), `openai_api_key` (076),
+`embedding_provider` / `embedding_model` (075, planned). **Values may be
+secrets** (e.g. `openai_api_key`): read endpoints **mask** them
+(`GET /api/settings/openai` returns `{has_key, masked, source}`, never the
+full key — constitution §2). The DB value takes precedence over the
+matching env var; an empty value falls back to env. Plaintext at rest under
+the single-instance local trust model (encryption is a deferred spec).
+
 ## Relationships + cascade rules
 
 | Parent | Child | Cascade |

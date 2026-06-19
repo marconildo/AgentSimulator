@@ -632,6 +632,60 @@ export interface Strings {
     response: string;
     decidedToAnswer: string;
   };
+  // 076-station-full-views — focused drill-ins ("open full view") for the four
+  // remaining real stations, mirroring agent/llm/rag. Section/row labels are
+  // borrowed from `inspector.*`; only the overlay chrome lives here.
+  mcpDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    empty: string;
+  };
+  dbDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    empty: string;
+    rowId: string;
+    session: string;
+  };
+  backendDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    empty: string;
+    received: string;
+    assembled: string;
+    message: string;
+    delivery: string;
+    session: string;
+    answer: string;
+    latency: string;
+    // 077-backend-lifecycle-flow — the orchestration flowchart.
+    intro: string;
+    stepReceive: string;
+    stepHistory: string;
+    stepAgent: string;
+    stepPersist: string;
+    stepRespond: string;
+    hopReceive: string;
+    hopRead: string;
+    hopInvoke: string;
+    hopWrite: string;
+    hopRespond: string;
+    rowsLoaded: string;
+    reasoningRounds: string;
+    toolCalls: string;
+    retrievals: string;
+    agentHint: string;
+    pending: string;
+  };
+  frontendDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    empty: string;
+  };
   // 054-rag-block-expansion — the RAG pipeline drill-in (Vector DB "open full view").
   ragDetail: {
     title: string;
@@ -852,6 +906,15 @@ export interface Strings {
       noModels: string;
       loadingModels: string;
       modelLabel: string;
+      // 076-openai-key-ui
+      keyLabel: string;
+      keyPlaceholder: string;
+      keySavedHint: string;
+      keySave: string;
+      keyTesting: string;
+      keyConnected: string;
+      keyFailed: string;
+      keyEnvNote: string;
     };
     model: {
       title: string;
@@ -1677,6 +1740,14 @@ const en: Strings = {
       noModels: "No models installed. Run `ollama pull <model>` first.",
       loadingModels: "Listing installed models…",
       modelLabel: "Model",
+      keyLabel: "OpenAI API key",
+      keyPlaceholder: "sk-…",
+      keySavedHint: "A key is saved. Enter a new one to replace it.",
+      keySave: "Save & test",
+      keyTesting: "Testing the connection…",
+      keyConnected: "Connected — models loaded.",
+      keyFailed: "Couldn't authenticate. Check the key.",
+      keyEnvNote: "Falls back to the OPENAI_API_KEY env when empty.",
     },
     model: {
       title: "Model",
@@ -1719,6 +1790,56 @@ const en: Strings = {
     promptFor: "Assembled prompt",
     response: "LLM response",
     decidedToAnswer: "Decided to answer → see the Answer generation call below.",
+  },
+  mcpDetail: {
+    title: "MCP Tools — calls this turn",
+    subtitle: "JSON-RPC over the MCP transport",
+    back: "Canvas",
+    empty: "No tool activity in this turn yet.",
+  },
+  dbDetail: {
+    title: "App Database — operations this turn",
+    subtitle: "Read history · persist conversation",
+    back: "Canvas",
+    empty: "No database activity in this turn yet.",
+    rowId: "Row id",
+    session: "Session",
+  },
+  backendDetail: {
+    title: "Backend — request lifecycle",
+    subtitle: "FastAPI edge · request → response",
+    back: "Canvas",
+    empty: "Nothing received in this turn yet.",
+    received: "Request received",
+    assembled: "Response assembled",
+    message: "Message",
+    delivery: "Delivery",
+    session: "Session",
+    answer: "Answer",
+    latency: "Latency",
+    intro: "The backend orchestrates the turn — it coordinates each step below.",
+    stepReceive: "Payload received",
+    stepHistory: "Load history",
+    stepAgent: "AI agent invoked",
+    stepPersist: "Persist conversation",
+    stepRespond: "Response streamed back",
+    hopReceive: "HTTPS · POST",
+    hopRead: "SQL · read",
+    hopInvoke: "in-process",
+    hopWrite: "SQL · write",
+    hopRespond: "HTTPS · SSE",
+    rowsLoaded: "Rows loaded",
+    reasoningRounds: "Reasoning rounds",
+    toolCalls: "Tool calls",
+    retrievals: "Retrievals",
+    agentHint: "Open the Agent · LLM · MCP full views for the inner detail.",
+    pending: "waiting…",
+  },
+  frontendDetail: {
+    title: "Frontend — browser exchange",
+    subtitle: "POST request · streamed answer",
+    back: "Canvas",
+    empty: "Nothing sent in this turn yet.",
   },
   ragDetail: {
     title: "RAG Pipeline",
@@ -2633,6 +2754,14 @@ const pt: Strings = {
       noModels: "Nenhum modelo instalado. Rode `ollama pull <modelo>` primeiro.",
       loadingModels: "Listando modelos instalados…",
       modelLabel: "Modelo",
+      keyLabel: "Chave de API da OpenAI",
+      keyPlaceholder: "sk-…",
+      keySavedHint: "Uma chave está salva. Informe outra para substituir.",
+      keySave: "Salvar e testar",
+      keyTesting: "Testando a conexão…",
+      keyConnected: "Conectado — modelos carregados.",
+      keyFailed: "Não foi possível autenticar. Verifique a chave.",
+      keyEnvNote: "Usa a env OPENAI_API_KEY quando vazio.",
     },
     model: {
       title: "Modelo",
@@ -2675,6 +2804,56 @@ const pt: Strings = {
     promptFor: "Prompt montado",
     response: "Resposta do LLM",
     decidedToAnswer: "Decidiu responder → veja a chamada de Geração da resposta abaixo.",
+  },
+  mcpDetail: {
+    title: "MCP Tools — chamadas deste turno",
+    subtitle: "JSON-RPC sobre o transporte MCP",
+    back: "Diagrama",
+    empty: "Nenhuma atividade de ferramenta neste turno ainda.",
+  },
+  dbDetail: {
+    title: "Banco da Aplicação — operações deste turno",
+    subtitle: "Lê histórico · persiste conversa",
+    back: "Diagrama",
+    empty: "Nenhuma atividade de banco neste turno ainda.",
+    rowId: "Id da linha",
+    session: "Sessão",
+  },
+  backendDetail: {
+    title: "Backend — ciclo da requisição",
+    subtitle: "Borda FastAPI · requisição → resposta",
+    back: "Diagrama",
+    empty: "Nada recebido neste turno ainda.",
+    received: "Requisição recebida",
+    assembled: "Resposta montada",
+    message: "Mensagem",
+    delivery: "Entrega",
+    session: "Sessão",
+    answer: "Resposta",
+    latency: "Latência",
+    intro: "O backend orquestra o turno — coordena cada etapa abaixo.",
+    stepReceive: "Payload recebido",
+    stepHistory: "Carrega histórico",
+    stepAgent: "Agente de IA invocado",
+    stepPersist: "Persiste a conversa",
+    stepRespond: "Resposta devolvida",
+    hopReceive: "HTTPS · POST",
+    hopRead: "SQL · leitura",
+    hopInvoke: "em processo",
+    hopWrite: "SQL · escrita",
+    hopRespond: "HTTPS · SSE",
+    rowsLoaded: "Linhas carregadas",
+    reasoningRounds: "Rodadas de raciocínio",
+    toolCalls: "Chamadas de ferramenta",
+    retrievals: "Recuperações",
+    agentHint: "Abra as visões completas do Agente · LLM · MCP para o detalhe interno.",
+    pending: "aguardando…",
+  },
+  frontendDetail: {
+    title: "Frontend — troca do navegador",
+    subtitle: "Requisição POST · resposta transmitida",
+    back: "Diagrama",
+    empty: "Nada enviado neste turno ainda.",
   },
   ragDetail: {
     title: "Pipeline RAG",

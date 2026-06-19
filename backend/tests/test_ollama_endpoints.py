@@ -103,11 +103,15 @@ def test_list_ollama_models_unreachable_is_structured(client, monkeypatch):
 # --- allowlist scope + agent provider (AC3/AC4) ------------------------------
 
 
-def test_chat_rejects_unlisted_openai_model(client):
-    # OpenAI provider: an unlisted model is a 422 (default provider is openai).
+def test_chat_accepts_unlisted_openai_model_after_076(client, monkeypatch):
+    # 076 relaxed the curated allowlist for OpenAI too (models are listed live now),
+    # so an unlisted-but-non-empty model is accepted. Stub the run (no key in CI).
+    async def _fake_run_agent(*args, **kwargs):
+        return "ok"
+
+    monkeypatch.setattr(main_mod, "run_agent", _fake_run_agent)
     resp = client.post("/api/chat", json={"message": "hi", "model": "totally-made-up"})
-    assert resp.status_code == 422
-    assert resp.json()["detail"]["error"] == "model not in allowlist"
+    assert resp.status_code != 422
 
 
 def test_chat_accepts_arbitrary_model_for_ollama(client, monkeypatch):

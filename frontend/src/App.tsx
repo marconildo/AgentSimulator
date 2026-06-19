@@ -4,11 +4,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AgentAnatomyDialog } from "./components/AgentAnatomyDialog";
 import { AgentConfigToggle } from "./components/AgentConfigToggle";
 import { AgentDetail } from "./components/AgentDetail";
+import { BackendDetail } from "./components/BackendDetail";
 import { ChatPanel } from "./components/ChatPanel";
+import { DatabaseDetail } from "./components/DatabaseDetail";
 import { CloudToggle } from "./components/CloudToggle";
 import { ConfigToggle } from "./components/ConfigToggle";
 import { DemoBanner } from "./components/DemoBanner";
 import { FlowCanvas } from "./components/FlowCanvas";
+import { FrontendDetail } from "./components/FrontendDetail";
+import { McpDetail } from "./components/McpDetail";
 import { PageIndexPipelinePanel } from "./components/PageIndexPipelinePanel";
 import { RagPipelinePanel } from "./components/RagPipelinePanel";
 import {
@@ -33,6 +37,7 @@ import { pendingBubble } from "./lib/chatStatus";
 import { deriveView } from "./lib/derive";
 import { isDemo } from "./lib/demo";
 import { healthBanner, useHealth } from "./lib/health";
+import { useActiveModel } from "./lib/activeModel";
 import { useIsMobile } from "./lib/useIsMobile";
 import { markOnboarded, shouldAutoOnboard } from "./lib/onboarding";
 import type { Page } from "./lib/page";
@@ -177,9 +182,11 @@ export default function App() {
   // popover; only one of {sim, learn, settings} is mounted at a time.
   const [page, setPage] = useState<Page>("sim");
   const healthStatus = useHealth((s) => s.status);
-  const llmModel = useHealth((s) => s.llmModel);
   const hasKey = useHealth((s) => s.hasKey);
   const loadHealth = useHealth((s) => s.load);
+  // 074 follow-up: the header badge shows the SELECTED agent's model (e.g. an
+  // Ollama model), not the server default — falls back to the health default.
+  const { model: activeModel } = useActiveModel();
   useEffect(() => {
     loadHealth();
   }, [loadHealth]);
@@ -211,6 +218,11 @@ export default function App() {
       </ReactFlowProvider>
       {detail === "agent" && <AgentDetail view={view} onClose={closeDetail} />}
       {detail === "llm" && <LLMDetail onClose={closeDetail} />}
+      {/* 076-station-full-views — drill-ins for the four remaining real stations. */}
+      {detail === "mcp" && <McpDetail onClose={closeDetail} />}
+      {detail === "database" && <DatabaseDetail onClose={closeDetail} />}
+      {detail === "backend" && <BackendDetail onClose={closeDetail} />}
+      {detail === "frontend" && <FrontendDetail onClose={closeDetail} />}
     </>
   );
 
@@ -297,7 +309,7 @@ export default function App() {
             {page === "learn" ? t.app.simulator : t.app.learn}
           </span>
         </button>
-        {healthStatus === "ok" && llmModel && (
+        {healthStatus === "ok" && activeModel && (
           <span
             className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-[3px] text-[10.5px] text-[var(--color-muted)] xl:inline-flex"
             title={t.app.liveTitle}
@@ -309,7 +321,7 @@ export default function App() {
               <span className="absolute h-2 w-2 animate-ping rounded-full bg-[var(--color-ok)] opacity-60" />
               <span className="relative h-1.5 w-1.5 rounded-full bg-[var(--color-ok)]" />
             </span>
-            <span className="font-mono tracking-tight text-[var(--color-text-soft)]">{llmModel}</span>
+            <span className="font-mono tracking-tight text-[var(--color-text-soft)]">{activeModel}</span>
           </span>
         )}
         <a

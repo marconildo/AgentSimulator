@@ -65,15 +65,21 @@ def test_patch_agent_rejects_over_cap_name():
     assert resp.status_code == 422
 
 
-def test_patch_agent_rejects_unknown_model_with_422():
-    """AC6 (043) — model not in the curated allowlist ⇒ 422."""
+def test_patch_agent_accepts_unlisted_model_but_rejects_blank():
+    """076-openai-key-ui — the curated allowlist is no longer a hard gate, so an
+    unlisted (but non-empty) model is accepted; a blank model is still rejected.
+    Uses a throwaway agent so the shared default model other tests rely on is
+    never mutated."""
     with TestClient(app) as client:
-        created = client.post("/api/sessions").json()
-        resp = client.patch(
-            f"/api/agents/{created['agent']['id']}",
-            json={"model": "not-a-real-model"},
-        )
-    assert resp.status_code == 422
+        aid = client.post("/api/agents", json={"name": "throwaway"}).json()["id"]
+        try:
+            ok = client.patch(f"/api/agents/{aid}", json={"model": "gpt-4.1-future"})
+            assert ok.status_code == 200
+            assert ok.json()["model"] == "gpt-4.1-future"
+            blank = client.patch(f"/api/agents/{aid}", json={"model": "   "})
+            assert blank.status_code == 422
+        finally:
+            client.delete(f"/api/agents/{aid}")
 
 
 def test_patch_agent_unknown_id_is_404():

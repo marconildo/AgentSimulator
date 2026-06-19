@@ -24,7 +24,7 @@ from sse_starlette.sse import EventSourceResponse
 from .agent import run_agent
 from .agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from .agent.tools import agent_tool_specs
-from .config import get_settings
+from .config import effective_openai_key, get_settings, has_effective_openai_key
 from .db.seed import seed_default_agent, seed_skills
 from .db.store import (
     AgentLocked,
@@ -36,7 +36,6 @@ from .db.store import (
 from .llm.context import history_pair_tokens
 from .llm.models import (
     DEFAULT_PROVIDER,
-    model_ids,
     models_payload,
     provider_ids,
     providers_payload,
@@ -168,7 +167,8 @@ async def health() -> dict:
         "status": "ok",
         "llm_provider": "openai",
         "llm_model": settings.llm_model,
-        "has_key": settings.has_openai_key,
+        # 076-openai-key-ui: reflect the EFFECTIVE key (UI/DB precedes env).
+        "has_key": has_effective_openai_key(),
         "indexed": is_indexed(),
     }
 
@@ -331,6 +331,100 @@ async def list_ollama_models(base_url: str | None = None) -> dict:
     return {"reachable": True, "base_url": url, "models": models}
 
 
+# --- OpenAI key + dynamic model listing (076-openai-key-ui) -----------------
+
+# Chat-capable OpenAI model id prefixes (excludes embeddings/audio/image models).
+_OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
+
+
+class OpenAISettings(BaseModel):
+    """Body of ``PUT /api/settings/openai`` — the OpenAI API key. Blank clears it."""
+
+    api_key: str = Field(default="", max_length=300)
+
+
+def _mask_key(key: str) -> str:
+    """A safe hint for a stored secret — never the full value."""
+    key = key.strip()
+    if len(key) <= 8:
+        return "sk-…" if key else ""
+    return f"{key[:3]}…{key[-4:]}"
+
+
+def _openai_client(key: str):
+    """Construct an OpenAI client (lazy import). Patched in tests."""
+    from openai import OpenAI
+
+    return OpenAI(api_key=key)
+
+
+def _list_openai_chat_models(key: str) -> dict:
+    """Call OpenAI ``/v1/models`` and keep only chat-capable models."""
+    try:
+        client = _openai_client(key)
+        raw = client.models.list()
+    except Exception as exc:  # noqa: BLE001 - reported, not raised
+        return {"reachable": False, "error": str(exc), "models": []}
+    ids = sorted(
+        {
+            m.id
+            for m in getattr(raw, "data", [])
+            if isinstance(getattr(m, "id", None), str)
+            and m.id.startswith(_OPENAI_CHAT_PREFIXES)
+        }
+    )
+    return {"reachable": True, "models": [{"id": i} for i in ids]}
+
+
+@app.get("/api/settings/openai")
+async def get_openai_settings() -> dict:
+    """Report whether an OpenAI key is configured + a masked hint + its source.
+
+    Never returns the full key (constitution §2). ``source`` is ``"db"`` when the
+    UI-saved key is in effect, ``"env"`` when only the env key is set, else ``None``."""
+    db_key = (await get_store().get_config("openai_api_key") or "").strip()
+    env_key = get_settings().openai_api_key.strip()
+    effective = db_key or env_key
+    source = "db" if db_key else ("env" if env_key else None)
+    return {
+        "has_key": bool(effective),
+        "masked": _mask_key(effective) or None,
+        "source": source,
+    }
+
+
+@app.put("/api/settings/openai")
+async def set_openai_settings(body: OpenAISettings) -> dict:
+    """Save (or clear, when blank) the OpenAI key and test the connection.
+
+    Persists to ``app_config`` (DB precedes env). On a non-blank key, a cheap
+    ``/v1/models`` call validates it; the result rides the response so the UI can
+    show connected/failed without a second round-trip."""
+    key = body.api_key.strip()
+    await get_store().set_config("openai_api_key", key)
+    if not key:
+        return {"ok": True, "has_key": has_effective_openai_key(), "masked": None, "tested": False}
+    result = await asyncio.to_thread(_list_openai_chat_models, key)
+    return {
+        "ok": bool(result.get("reachable")),
+        "has_key": True,
+        "masked": _mask_key(key),
+        "tested": True,
+        "model_count": len(result.get("models", [])),
+        "error": result.get("error"),
+    }
+
+
+@app.get("/api/openai/models")
+async def list_openai_models() -> dict:
+    """List the account's chat models live (effective key). No key / failure →
+    structured ``{reachable: false, models: []}`` so the FE falls back to curated."""
+    key = effective_openai_key()
+    if not key:
+        return {"reachable": False, "error": "no key configured", "models": []}
+    return await asyncio.to_thread(_list_openai_chat_models, key)
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     settings = get_settings()
@@ -402,18 +496,11 @@ async def chat(req: ChatRequest):
         effective_agent_description = agent.get("description")
     resolved_model = effective_model or settings.llm_model
     resolved_provider = effective_provider or "openai"
-    # 074-ollama-provider: the curated model allowlist is OpenAI-scoped. Validate
-    # the resolved model only when running against OpenAI; Ollama accepts any
-    # model installed on the local server.
-    if resolved_provider == "openai" and resolved_model not in model_ids():
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": "model not in allowlist",
-                "model": resolved_model,
-                "allowed": sorted(model_ids()),
-            },
-        )
+    # 076-openai-key-ui: the curated allowlist is no longer a hard gate — OpenAI
+    # models are listed live from the account now, so any non-empty model id is
+    # accepted (mirrors Ollama, 074). A blank `req.model` was already rejected
+    # above; `resolved_model` falls back to the configured default, so it's never
+    # empty here. The curated list survives only as the FE's offline prefill.
     # The local server URL the backend connects to for an Ollama run: the
     # persisted instance config, else the env default. (No-op for OpenAI.)
     ollama_base_url = (await store.get_config("ollama_base_url")) or settings.ollama_base_url
@@ -931,23 +1018,11 @@ async def patch_agent(agent_id: str, body: AgentPatch):
                 "allowed": sorted(provider_ids()),
             },
         )
-    # Validate `model` against the curated allowlist (same as /api/chat) — but only
-    # when the resulting provider is OpenAI. For Ollama any installed model is valid.
-    # The effective provider is the patch's value, else the agent's current row.
-    if "model" in patch:
-        effective_provider = patch.get("provider")
-        if effective_provider is None:
-            existing = await get_store().get_agent(agent_id)
-            effective_provider = existing["provider"] if existing else "openai"
-        if effective_provider == "openai" and patch["model"] not in model_ids():
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": "model not in allowlist",
-                    "model": patch["model"],
-                    "allowed": sorted(model_ids()),
-                },
-            )
+    # 076-openai-key-ui: the curated allowlist is no longer a hard gate (models are
+    # listed live now). Any non-empty model id is accepted for either provider; a
+    # blank one is rejected so a PATCH can't wipe the required column.
+    if "model" in patch and isinstance(patch["model"], str) and not patch["model"].strip():
+        raise HTTPException(status_code=422, detail="model cannot be blank")
     # Normalize name (strip), reject post-strip emptiness explicitly so 1..60
     # actually means "1..60 visible characters".
     if "name" in patch and isinstance(patch["name"], str):

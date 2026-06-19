@@ -19,7 +19,7 @@ import { isFlowSettled, type PendingBubble, replayBubble } from "../lib/chatStat
 import { formatTokens, formatUsd } from "../lib/cost";
 import { DEMO_QUESTIONS, isDemo } from "../lib/demo";
 import { deriveView } from "../lib/derive";
-import { useHealth } from "../lib/health";
+import { useActiveModel } from "../lib/activeModel";
 import { activePhase, type TimelinePhase } from "../lib/phases";
 import { formatClock, formatRelative } from "../lib/time";
 import { estimateInputCostUsd, estimateTokens } from "../lib/tokenize";
@@ -1041,7 +1041,8 @@ function DemoComposer({ t }: { t: Strings }) {
 // an ESTIMATE — the real, billed prompt is assembled server-side and reported in
 // the trace; the tokenizer in play is surfaced on hover.
 function PreSendHint({ text, t }: { text: string; t: Strings }) {
-  const model = useHealth((s) => s.llmModel);
+  // 074 follow-up: price at the SELECTED agent's model, not the server default.
+  const { model } = useActiveModel();
   const [tokens, setTokens] = useState(0);
 
   useEffect(() => {

@@ -43,21 +43,17 @@ def test_default_model_is_gpt_4_1_mini_and_listed():
     assert default in model_ids()
 
 
-def test_chat_rejects_removed_model_and_accepts_new_one():
-    """AC3 — gpt-4o-mini (removed) is now a 422; gpt-5.5 passes the allowlist
-    guard (i.e. is NOT rejected as an unlisted id)."""
+def test_chat_no_longer_hard_gates_on_curated_allowlist():
+    """076-openai-key-ui — the curated list stopped being a hard gate (OpenAI
+    models are listed live now). Any non-empty model id is accepted (no 422 from
+    an allowlist guard); the curated payload survives only as the FE prefill."""
     with TestClient(app) as client:
-        removed = client.post("/api/chat", json={"message": "hi", "model": "gpt-4o-mini"})
-        assert removed.status_code == 422
-        assert removed.json()["detail"]["model"] == "gpt-4o-mini"
-
-        # gpt-5.5 must not be rejected by the allowlist guard. Without a key the
-        # run fails later (not a 422 allowlist error), so we only assert the
-        # guard did not reject it.
-        accepted = client.post("/api/chat", json={"message": "hi", "model": "gpt-5.5"})
-        if accepted.status_code == 422:
-            detail = accepted.json().get("detail", {})
-            assert detail.get("error") != "model not in allowlist"
+        for model in ("gpt-4o-mini", "gpt-5.5", "gpt-4.1-some-future-tier"):
+            resp = client.post("/api/chat", json={"message": "hi", "model": model})
+            # Never a 422 from the (now-removed) allowlist guard.
+            if resp.status_code == 422:
+                detail = resp.json().get("detail", {})
+                assert detail != {} and detail.get("error") != "model not in allowlist"
 
 
 def test_demo_fixture_models_match_backend():
