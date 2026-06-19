@@ -11,10 +11,16 @@ import pytest
 
 from app.config import get_settings
 from app.rag.chunking import (
+    AGENTIC_MAX_SEGMENTS,
+    CHUNK_OVERLAP,
+    CHUNK_PARAM_BOUNDS,
     CHUNK_SIZE,
+    SEMANTIC_THRESHOLD,
+    ChunkParams,
     ChunkStrategy,
     chunk,
     chunk_texts,
+    clamp_params,
 )
 
 
@@ -125,3 +131,76 @@ def test_agentic_returns_nonempty_segments():
     chunks = chunk_texts(text, ChunkStrategy.AGENTIC)
     assert len(chunks) >= 1
     assert all(c.strip() for c in chunks)
+
+
+# --- 081-chunking-config: per-strategy configurable parameters ---------------
+
+
+def test_default_params_equal_constants():
+    # AC2 — the default ChunkParams must equal the module constants exactly, so the
+    # default chunking path is byte-for-byte unchanged.
+    p = ChunkParams()
+    assert p.chunk_size == CHUNK_SIZE
+    assert p.chunk_overlap == CHUNK_OVERLAP
+    assert p.semantic_threshold == SEMANTIC_THRESHOLD
+    assert p.max_segments == AGENTIC_MAX_SEGMENTS
+
+
+def test_params_none_matches_default_recursive():
+    # AC2 — omitting params reproduces today's output exactly.
+    text = _corpus_texts()[0]
+    assert chunk_texts(text, ChunkStrategy.RECURSIVE) == chunk_texts(
+        text, ChunkStrategy.RECURSIVE, params=ChunkParams()
+    )
+
+
+def test_fixed_smaller_size_yields_more_chunks():
+    # AC3 — a smaller window strictly increases the chunk count for fixed.
+    text = _corpus_texts()[0]
+    big = chunk_texts(text, ChunkStrategy.FIXED, params=ChunkParams(chunk_size=900, chunk_overlap=0))
+    small = chunk_texts(
+        text, ChunkStrategy.FIXED, params=ChunkParams(chunk_size=300, chunk_overlap=0)
+    )
+    assert len(small) > len(big)
+
+
+def test_recursive_size_honored():
+    # AC3 — recursive packs paragraphs up to chunk_size; a tiny size makes more chunks.
+    text = _corpus_texts()[0]
+    big = chunk_texts(text, ChunkStrategy.RECURSIVE, params=ChunkParams(chunk_size=2000))
+    small = chunk_texts(text, ChunkStrategy.RECURSIVE, params=ChunkParams(chunk_size=400))
+    assert len(small) >= len(big)
+
+
+def test_clamp_params_enforces_bounds():
+    # AC3/AC8 — values outside the configured bounds are clamped, never crash.
+    lo = CHUNK_PARAM_BOUNDS[ChunkStrategy.FIXED]["chunk_size"][1]
+    hi = CHUNK_PARAM_BOUNDS[ChunkStrategy.FIXED]["chunk_size"][2]
+    assert clamp_params(ChunkStrategy.FIXED, {"chunk_size": 1}).chunk_size == lo
+    assert clamp_params(ChunkStrategy.FIXED, {"chunk_size": 10_000_000}).chunk_size == hi
+
+
+def test_clamp_params_ignores_irrelevant_keys():
+    # AC1 — only a strategy's relevant params apply; unrelated keys fall back to defaults.
+    p = clamp_params(ChunkStrategy.AGENTIC, {"chunk_size": 123, "max_segments": 5})
+    assert p.max_segments == 5
+    assert p.chunk_size == CHUNK_SIZE  # not a relevant param for agentic → default
+
+
+@pytest.mark.openai
+def test_semantic_higher_threshold_more_chunks():
+    # AC4 — a higher similarity threshold splits on smaller topic shifts ⇒ ≥ as many chunks.
+    cats = "Cats are small domesticated felines. They purr and chase mice. A kitten is a young cat."
+    nets = "TCP guarantees ordered delivery over IP. Packets are routed across networks."
+    text = f"{cats}\n\n{nets}"
+    low = chunk_texts(text, ChunkStrategy.SEMANTIC, params=ChunkParams(semantic_threshold=0.1))
+    high = chunk_texts(text, ChunkStrategy.SEMANTIC, params=ChunkParams(semantic_threshold=0.9))
+    assert len(high) >= len(low)
+
+
+@pytest.mark.openai
+def test_agentic_caps_at_max_segments():
+    # AC5 — agentic never returns more than the supplied max_segments.
+    text = _corpus_texts()[0]
+    chunks = chunk_texts(text, ChunkStrategy.AGENTIC, params=ChunkParams(max_segments=3))
+    assert 1 <= len(chunks) <= 3

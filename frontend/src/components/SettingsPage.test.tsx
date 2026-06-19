@@ -26,6 +26,9 @@ vi.mock("../lib/chatApi", () => ({
   createSkill: vi.fn(),
   updateSkill: vi.fn(),
   deleteSkill: vi.fn(),
+  getEmbeddingSettings: vi.fn().mockResolvedValue({ provider: "openai", model: "" }),
+  setEmbeddingSettings: vi.fn().mockResolvedValue({ provider: "openai", model: "" }),
+  getOllamaModels: vi.fn().mockResolvedValue({ reachable: false, base_url: "", models: [] }),
   getConfig: vi.fn().mockResolvedValue({
     default_system_prompt: "",
     default_top_k: 3,

@@ -32,10 +32,7 @@ export function SettingsExperiment() {
 
   const topK = exp.topK ?? config?.default_top_k ?? 4;
   const rerankThreshold = exp.rerankThreshold ?? config?.default_rerank_threshold ?? 0;
-  const failureModes = config?.failure_modes ?? ["none"];
-  const simulateFailure = exp.simulateFailure ?? "none";
-  const dirty =
-    exp.topK !== null || simulateFailure !== "none" || (exp.rerankThreshold ?? 0) > 0;
+  const dirty = exp.topK !== null || (exp.rerankThreshold ?? 0) > 0;
 
   return (
     <section>
@@ -109,34 +106,9 @@ export function SettingsExperiment() {
       {/* 061-scenario-builder — RAGLESS moved to the header "Build" palette (it's an
           architecture component now, not a per-run knob). */}
 
-      {/* Simulate failure (017). */}
-      <div className="mt-3 mb-1 text-[11px] font-semibold text-[var(--color-ink)]">
-        {ex.failure.label}
-      </div>
-      <p className="mb-1.5 text-[10.5px] leading-snug text-[var(--color-muted)]">
-        {ex.failure.hint}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {failureModes.map((m) => {
-          const active = simulateFailure === m;
-          return (
-            <button
-              key={m}
-              onClick={() => exp_.setSimulateFailure(conv, m)}
-              aria-pressed={active}
-              disabled={!config}
-              className="rounded-lg border px-2.5 py-1.5 font-mono text-[11px] transition"
-              style={{
-                borderColor: active ? "var(--color-accent)" : "var(--color-line)",
-                background: active ? "var(--color-panel-2)" : "transparent",
-                color: active ? "var(--color-indigo-soft)" : "var(--color-ink)",
-              }}
-            >
-              {ex.failure.modes[m] ?? m}
-            </button>
-          );
-        })}
-      </div>
+      {/* The "Simulate failure" selector (017) was removed from the UI — the
+          failure-injection machinery (state, backend, treatments) stays in
+          place, just no longer exposed as a per-run knob here. */}
     </section>
   );
 }

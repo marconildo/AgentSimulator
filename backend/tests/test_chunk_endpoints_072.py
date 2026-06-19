@@ -104,8 +104,11 @@ async def test_reingest_streams_stages_and_updates_active():
             e.stage for e in events if e.phase == "end" and str(e.stage).startswith("rag.ingest.")
         ]
         assert ingest_ends == ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"]
-        # The store stage delegates to the proven build_index with the chosen strategy.
-        mock_build.assert_called_once_with(ChunkStrategy.FIXED)
+        # The store stage delegates to the proven build_index with the chosen strategy
+        # and the applied params (081 defaults when none supplied).
+        from app.rag.chunking import ChunkParams
+
+        mock_build.assert_called_once_with(ChunkStrategy.FIXED, ChunkParams())
         # The chunk stage tagged the corpus with the chosen strategy and counted files.
         chunk_end = next(e for e in events if e.stage == "rag.ingest.chunk" and e.phase == "end")
         assert chunk_end.data["strategy"] == "fixed"

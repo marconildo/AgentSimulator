@@ -18,7 +18,14 @@ from langchain_core.documents import Document
 from ..config import get_settings
 from ..schemas import Stage
 from ..trace import TraceEmitter
-from .chunking import CHUNK_OVERLAP, CHUNK_SIZE, ChunkStrategy, chunk, chunk_text
+from .chunking import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    ChunkParams,
+    ChunkStrategy,
+    chunk,
+    chunk_text,
+)
 from .embeddings import embedding_model_name, get_embeddings
 from .store import COLLECTION_NAME, get_vectorstore
 
@@ -66,7 +73,9 @@ def _section_for(offset: int, headings: list[tuple[int, str]]) -> str:
     return section
 
 
-def load_corpus(strategy: ChunkStrategy | None = None) -> list[Document]:
+def load_corpus(
+    strategy: ChunkStrategy | None = None, params: ChunkParams | None = None
+) -> list[Document]:
     settings = get_settings()
     strategy = ChunkStrategy(strategy or settings.chunk_strategy)
     corpus_dir = settings.corpus_path
@@ -77,7 +86,9 @@ def load_corpus(strategy: ChunkStrategy | None = None) -> list[Document]:
         # 073-metadata-first-class: chunk WITH offsets so each chunk's nearest preceding
         # heading becomes its `section`. `chunk(...)` wraps the same texts chunk_texts
         # produces (byte-for-byte page_content), plus best-effort char spans.
-        chunks = chunk(text, strategy)
+        # 081-chunking-config: `params` carries the per-strategy tunables (size/overlap/
+        # threshold/segments); None ⇒ defaults ⇒ byte-for-byte 072 behavior.
+        chunks = chunk(text, strategy, params)
         headings = _headings(text)
         total = len(chunks)
         for c in chunks:
@@ -105,7 +116,7 @@ def load_corpus(strategy: ChunkStrategy | None = None) -> list[Document]:
     return docs
 
 
-def build_index(strategy: ChunkStrategy | None = None) -> int:
+def build_index(strategy: ChunkStrategy | None = None, params: ChunkParams | None = None) -> int:
     """(Re)build the corpus vectors with ``strategy``. Returns the number of corpus chunks.
 
     Deletes only ``where={"corpus": True}`` and re-adds the corpus, so rebuilding
@@ -125,7 +136,7 @@ def build_index(strategy: ChunkStrategy | None = None) -> int:
         pass
 
     resolved = ChunkStrategy(strategy or settings.chunk_strategy)
-    docs = load_corpus(resolved)
+    docs = load_corpus(resolved, params)
     if not docs:
         print(f"No .md files found in {settings.corpus_path}")
         return 0
@@ -146,7 +157,9 @@ def build_index(strategy: ChunkStrategy | None = None) -> int:
 
 
 async def reingest_corpus(
-    strategy: ChunkStrategy | None, emitter: TraceEmitter
+    strategy: ChunkStrategy | None,
+    emitter: TraceEmitter,
+    params: ChunkParams | None = None,
 ) -> dict[str, object]:
     """Rebuild the corpus index with ``strategy``, emitting the ingestion stages.
 
@@ -154,21 +167,28 @@ async def reingest_corpus(
     so the canvas animates Chunking -> Embedding -> Storing once for the rebuild. Real:
     it clears the corpus vectors and re-adds them with the chosen chunker (uploads, tagged
     with a session_id, are untouched). Sets the active strategy on success.
+
+    081-chunking-config: ``params`` carries the per-strategy tunables; the Chunking stage
+    reports the values actually applied so the Vector DB ingestion detail is honest. None
+    ⇒ defaults ⇒ byte-for-byte 072 behavior.
     """
     settings = get_settings()
     resolved = ChunkStrategy(strategy or settings.chunk_strategy)
+    applied = params or ChunkParams()
     store = get_vectorstore()
 
     async with emitter.stage(Stage.RAG_INGEST_CHUNK, "Chunking the corpus") as rec:
-        docs = await asyncio.to_thread(load_corpus, resolved)
+        docs = await asyncio.to_thread(load_corpus, resolved, applied)
         texts = [d.page_content for d in docs]
         sources = {str(d.metadata.get("source", "")) for d in docs}
         rec.data = {
             "strategy": str(resolved),
             "num_chunks": len(texts),
             "num_files": len(sources),
-            "chunk_size": CHUNK_SIZE,
-            "chunk_overlap": CHUNK_OVERLAP,
+            "chunk_size": applied.chunk_size,
+            "chunk_overlap": applied.chunk_overlap,
+            "semantic_threshold": applied.semantic_threshold,
+            "max_segments": applied.max_segments,
             "previews": [t[:160] for t in texts[:4]],
         }
         rec.metrics = {"num_chunks": float(len(texts)), "num_files": float(len(sources))}
@@ -192,7 +212,7 @@ async def reingest_corpus(
         # actual mutation — it preserves user uploads and keeps the HNSW index
         # consistent. (We re-embed inside add_documents; the corpus is tiny, so the
         # extra embed of ~dozen chunks is negligible and keeps the write path safe.)
-        count = await asyncio.to_thread(build_index, resolved)
+        count = await asyncio.to_thread(build_index, resolved, applied)
         total = await asyncio.to_thread(store._collection.count)
         rec.data = {
             "collection": COLLECTION_NAME,

@@ -305,6 +305,15 @@ export interface AppConfig {
   // available strategies the Settings picker / re-ingest can choose from.
   chunk_strategy?: string;
   chunk_strategies?: string[];
+  // 081-chunking-config: per-strategy tunable parameters + their default/min/max,
+  // so the Settings picker renders exactly the relevant controls without hardcoding bounds.
+  chunk_params?: Record<string, Record<string, ChunkParamSpec>>;
+}
+
+export interface ChunkParamSpec {
+  default: number;
+  min: number;
+  max: number;
 }
 
 let _configPromise: Promise<AppConfig> | null = null;
@@ -466,13 +475,14 @@ export interface ChunkPreviewResult {
 export async function chunkPreview(
   strategy = "all",
   text?: string,
+  params?: Record<string, number>,
 ): Promise<ChunkPreviewResult> {
   // 058-online-demo-mode: replay the captured preview, no backend round-trip.
   if (isDemo()) return demoChunkPreview();
   const resp = await fetch(`${API_BASE}/api/rag/chunk-preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ strategy, ...(text ? { text } : {}) }),
+    body: JSON.stringify({ strategy, ...(text ? { text } : {}), ...(params ? { params } : {}) }),
   });
   if (!resp.ok) throw new Error(`chunk-preview failed: ${resp.status}`);
   return (await resp.json()) as ChunkPreviewResult;
@@ -489,11 +499,12 @@ export async function reindexCorpus(
   strategy: string,
   handlers: { onTrace: (e: TraceEvent) => void; onDone: (d: ReindexDone) => void },
   signal?: AbortSignal,
+  params?: Record<string, number>,
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/api/rag/reindex`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ strategy }),
+    body: JSON.stringify({ strategy, ...(params ? { params } : {}) }),
     signal,
   });
   await consumeEventStream(resp, (type, payload) => {

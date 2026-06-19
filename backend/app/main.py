@@ -47,7 +47,7 @@ from .llm.models import (
     providers_payload,
 )
 from .mcp.client import get_registry
-from .rag.chunking import ChunkStrategy
+from .rag.chunking import CHUNK_PARAM_BOUNDS, ChunkStrategy
 from .rag.ingest import active_chunk_strategy, build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
 from .rag.metrics import benchmark_queries
@@ -250,6 +250,17 @@ async def config() -> dict:
         # are i18n on the frontend; the backend only ships the ids.
         "chunk_strategy": active_chunk_strategy(),
         "chunk_strategies": [s.value for s in ChunkStrategy],
+        # 081-chunking-config — per-strategy tunable parameters + their default/min/max,
+        # so the Settings → Knowledge base picker renders exactly the relevant controls
+        # (fixed/recursive: size+overlap; semantic: threshold+size; agentic: max_segments)
+        # without hardcoding bounds. Single source of truth: CHUNK_PARAM_BOUNDS.
+        "chunk_params": {
+            strat.value: {
+                key: {"default": default, "min": lo, "max": hi}
+                for key, (default, lo, hi) in bounds.items()
+            }
+            for strat, bounds in CHUNK_PARAM_BOUNDS.items()
+        },
         # The full tool list the agent sees — knowledge-base retrieval plus the
         # MCP tools (026-agent-tool-autonomy) — so the experiment panel lists every
         # tool the agent can choose, not just the MCP ones.
@@ -801,6 +812,28 @@ class ChunkPreviewRequest(BaseModel):
     # sample corpus file so the contrast (fixed cuts mid-sentence) is always demonstrable.
     strategy: str = "all"
     text: str | None = Field(default=None, max_length=20000)
+    # 081-chunking-config: per-strategy tunables (chunk_size/chunk_overlap/
+    # semantic_threshold/max_segments). Only the keys relevant to a strategy apply;
+    # omitting it reproduces 072 behavior. Out-of-bounds values are rejected (422).
+    params: dict[str, float] | None = None
+
+
+def _resolve_chunk_params(strategy: ChunkStrategy, overrides: dict[str, float] | None):
+    """Validate ``overrides`` against ``strategy``'s bounds (422 on violation) and build a
+    ``ChunkParams``. Irrelevant keys are ignored; omitting overrides ⇒ defaults (081)."""
+    from .rag.chunking import CHUNK_PARAM_BOUNDS, clamp_params, param_in_bounds
+
+    overrides = overrides or {}
+    bounds = CHUNK_PARAM_BOUNDS.get(strategy, {})
+    for key, value in overrides.items():
+        if value is None or key not in bounds:
+            continue
+        if not param_in_bounds(strategy, key, float(value)):
+            _default, lo, hi = bounds[key]
+            raise HTTPException(
+                status_code=422, detail=f"{key} for {strategy} must be within [{lo}, {hi}]"
+            )
+    return clamp_params(strategy, overrides)
 
 
 @app.post("/api/rag/chunk-preview")
@@ -828,10 +861,14 @@ async def chunk_preview(req: ChunkPreviewRequest) -> dict:
         except ValueError:
             return {"error": f"unknown strategy {req.strategy!r}", "previews": []}
 
+    # Validate params up front (per strategy) so an out-of-bounds value is a clean 422,
+    # not swallowed by the per-strategy error-marker fallback below.
+    params_by_strategy = {strat: _resolve_chunk_params(strat, req.params) for strat in strategies}
+
     previews: list[dict[str, Any]] = []
     for strat in strategies:
         try:
-            chunks = await asyncio.to_thread(chunk, sample, strat)
+            chunks = await asyncio.to_thread(chunk, sample, strat, params_by_strategy[strat])
             previews.append(
                 {
                     "strategy": str(strat),
@@ -859,6 +896,10 @@ async def reindex_corpus(req: ChunkPreviewRequest):
     except ValueError:
         raise HTTPException(status_code=422, detail=f"unknown strategy {req.strategy!r}") from None
 
+    # 081-chunking-config: validate the per-strategy params synchronously (422 on
+    # out-of-bounds) BEFORE opening the SSE stream, so the client gets a clean error.
+    params = _resolve_chunk_params(strategy, req.params)
+
     trace_id = uuid.uuid4().hex
     emitter = TraceEmitter(trace_id, f"reindex:{strategy}")
     result: dict[str, Any] = {"num_chunks": -1, "strategy": str(strategy)}
@@ -868,7 +909,7 @@ async def reindex_corpus(req: ChunkPreviewRequest):
             await emitter.emit(
                 Stage.BACKEND, Phase.END, "Re-ingesting corpus", {"strategy": str(strategy)}
             )
-            out = await reingest_corpus(strategy, emitter)
+            out = await reingest_corpus(strategy, emitter, params)
             result.update(out)
         except Exception as exc:  # noqa: BLE001 - report to the client, don't hang
             await emitter.emit(Stage.BACKEND, Phase.END, "error", {"error": str(exc)})
