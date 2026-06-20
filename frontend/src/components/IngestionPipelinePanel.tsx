@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { useT } from "../i18n";
 import { selectIngestion } from "../lib/stationDetail";
 import { useSimulator } from "../store/useSimulator";
 import type { TraceEvent } from "../types/events";
-import { Caption, DetailShell, KeyVal, Mono, Section } from "./DetailShell";
+import { Caption, DetailShell, KeyVal, Mono, Scroll, Section } from "./DetailShell";
 
 // 080-ingestion-pipeline-merge — the "Open ingestion pipeline" drill-in. Walks the
 // six write-path phases of an upload in order (object store → chunk → tokenize →
@@ -68,11 +68,12 @@ export function IngestionPipelinePanel({ onClose }: { onClose: () => void }) {
           {typeof ing.chunking.totalChars === "number" && (
             <KeyVal k={d.totalChars} v={ing.chunking.totalChars.toLocaleString()} />
           )}
-          {ing.chunking.previews.length > 0 && (
-            <>
-              <Caption>{d.previews}</Caption>
-              <Mono>{ing.chunking.previews.map((p, i) => `[${i}] ${p}`).join("\n")}</Mono>
-            </>
+          {ing.chunking.chunks.length > 0 && (
+            <ChunkTable
+              chunks={ing.chunking.chunks}
+              tokenCounts={ing.tokenization?.tokenCounts ?? []}
+              labels={d}
+            />
           )}
         </Section>
       )}
@@ -141,5 +142,91 @@ export function IngestionPipelinePanel({ onClose }: { onClose: () => void }) {
         </Section>
       )}
     </DetailShell>
+  );
+}
+
+// 083 — every chunk as a selectable row; clicking one opens its full text below.
+// Tokens are joined positionally from the tokenize phase when present. Pure
+// presentation over the already-projected chunk list (legacy traces with only
+// previews still render — the rows just show the truncated text).
+// A one-line, real truncation for the row snippet (the full text lives only in
+// the selected-chunk panel below — so the table stays a preview, honestly).
+const SNIPPET_CHARS = 80;
+function snippet(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > SNIPPET_CHARS ? `${flat.slice(0, SNIPPET_CHARS)}…` : flat;
+}
+
+type ChunkLabels = {
+  chunkTableCaption: string;
+  colNum: string;
+  colChars: string;
+  colTokens: string;
+  colSnippet: string;
+  selectChunkHint: string;
+  fullChunkText: string;
+};
+
+function ChunkTable({
+  chunks,
+  tokenCounts,
+  labels,
+}: {
+  chunks: string[];
+  tokenCounts: number[];
+  labels: ChunkLabels;
+}) {
+  const [selected, setSelected] = useState<number | null>(null);
+  const hasTokens = tokenCounts.length === chunks.length;
+
+  return (
+    <>
+      <Caption>{labels.chunkTableCaption}</Caption>
+      <div className="overflow-hidden rounded-lg border border-[var(--color-line)]">
+        <div
+          className="grid items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]"
+          style={{ gridTemplateColumns: "2rem 3.5rem 3.5rem 1fr" }}
+        >
+          <span>{labels.colNum}</span>
+          <span className="text-right">{labels.colChars}</span>
+          <span className="text-right">{labels.colTokens}</span>
+          <span>{labels.colSnippet}</span>
+        </div>
+        {chunks.map((c, i) => {
+          const active = selected === i;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setSelected(active ? null : i)}
+              aria-pressed={active}
+              className={`grid w-full items-center gap-2 border-b border-[var(--color-line)] px-2 py-1 text-left text-[12px] transition last:border-b-0 ${
+                active
+                  ? "bg-[color-mix(in_srgb,var(--color-ok)_14%,transparent)]"
+                  : "hover:bg-[var(--color-panel-2)]"
+              }`}
+              style={{ gridTemplateColumns: "2rem 3.5rem 3.5rem 1fr" }}
+            >
+              <span className="font-mono text-[var(--color-muted)]">{i}</span>
+              <span className="text-right font-mono text-[var(--color-ink)]">{c.length}</span>
+              <span className="text-right font-mono text-[var(--color-muted)]">
+                {hasTokens ? tokenCounts[i] : "—"}
+              </span>
+              <span className="truncate text-[var(--color-text-soft)]">{snippet(c)}</span>
+            </button>
+          );
+        })}
+      </div>
+      {selected === null ? (
+        <div className="mt-2 text-[11px] italic text-[var(--color-muted)]">
+          {labels.selectChunkHint}
+        </div>
+      ) : (
+        <>
+          <Caption>{`${labels.fullChunkText} · [${selected}]`}</Caption>
+          <Scroll>{chunks[selected]}</Scroll>
+        </>
+      )}
+    </>
   );
 }

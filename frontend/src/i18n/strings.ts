@@ -282,6 +282,19 @@ export interface Strings {
       reingesting: string;
       done: (n: number) => string;
       active: string;
+      // Shown when the chosen strategy differs from the one the index is built with:
+      // the selection is pending until a re-ingest (and only then do new uploads use it).
+      applyHint: string;
+      // 082-chunking-explainers — per-strategy "how it works" + live-example labels.
+      explain: {
+        title: string;
+        fixed: string;
+        recursive: string;
+        semantic: string;
+        agentic: string;
+        example: string;
+        loading: string;
+      };
       // 081-chunking-config — per-strategy parameter controls.
       params: {
         title: string;
@@ -691,6 +704,14 @@ export interface Strings {
     overlap: string;
     totalChars: string;
     previews: string;
+    // 083 — chunk table + full-text inspector
+    chunkTableCaption: string;
+    colNum: string;
+    colChars: string;
+    colTokens: string;
+    colSnippet: string;
+    selectChunkHint: string;
+    fullChunkText: string;
     encoding: string;
     totalTokens: string;
     perChunkTokens: string;
@@ -1272,6 +1293,21 @@ const en: Strings = {
       reingesting: "Re-ingesting…",
       done: (n) => `Re-indexed ${n} chunks`,
       active: "active",
+      applyHint:
+        "Selected, not applied yet. Re-ingest the corpus to rebuild it with this strategy — only then do newly uploaded files use it too.",
+      explain: {
+        title: "How it works",
+        fixed:
+          "Cuts the text into fixed-length character windows (with overlap), ignoring sentence and paragraph boundaries — fast, but it happily splits a sentence in half.",
+        recursive:
+          "Packs whole paragraphs into overlapping windows, never starting a chunk mid-word — keeps each thought intact. The default.",
+        semantic:
+          "Embeds each sentence and opens a new chunk where adjacent-sentence similarity drops (a topic shift) — boundaries follow meaning, not length. Uses OpenAI embeddings.",
+        agentic:
+          "Asks the LLM to read the document and segment it into coherent topical units — the model decides the boundaries. Uses OpenAI; falls back to Recursive on a bad response.",
+        example: "Live example — real chunks on a sample",
+        loading: "Chunking the sample…",
+      },
       params: {
         title: "Parameters",
         chunkSize: "Chunk size (chars)",
@@ -1909,6 +1945,13 @@ const en: Strings = {
     overlap: "overlap",
     totalChars: "total chars",
     previews: "chunk previews",
+    chunkTableCaption: "chunks",
+    colNum: "#",
+    colChars: "chars",
+    colTokens: "tokens",
+    colSnippet: "preview",
+    selectChunkHint: "Select a chunk above to read its full text.",
+    fullChunkText: "full chunk text",
     encoding: "encoding",
     totalTokens: "total tokens",
     perChunkTokens: "tokens per chunk",
@@ -2343,6 +2386,21 @@ const pt: Strings = {
       reingesting: "Reindexando…",
       done: (n) => `${n} trechos reindexados`,
       active: "ativa",
+      applyHint:
+        "Selecionada, ainda não aplicada. Reindexe o corpus para reconstruí-lo com esta estratégia — só então os arquivos enviados depois passam a usá-la.",
+      explain: {
+        title: "Como funciona",
+        fixed:
+          "Corta o texto em janelas de tamanho fixo (com sobreposição), ignorando limites de frase e parágrafo — rápido, mas corta frases ao meio.",
+        recursive:
+          "Empacota parágrafos inteiros em janelas com sobreposição, sem começar um chunk no meio de uma palavra — mantém cada ideia inteira. O padrão.",
+        semantic:
+          "Gera o embedding de cada frase e abre um novo chunk onde a similaridade entre frases vizinhas cai (mudança de tópico) — os limites seguem o significado, não o tamanho. Usa embeddings da OpenAI.",
+        agentic:
+          "Pede à LLM para ler o documento e segmentá-lo em unidades temáticas coerentes — o modelo decide os limites. Usa OpenAI; recai em Recursive se a resposta falhar.",
+        example: "Exemplo ao vivo — chunks reais numa amostra",
+        loading: "Dividindo a amostra…",
+      },
       params: {
         title: "Parâmetros",
         chunkSize: "Tamanho do bloco (caracteres)",
@@ -2985,6 +3043,13 @@ const pt: Strings = {
     overlap: "sobreposição",
     totalChars: "total de caracteres",
     previews: "prévias dos chunks",
+    chunkTableCaption: "chunks",
+    colNum: "#",
+    colChars: "caracteres",
+    colTokens: "tokens",
+    colSnippet: "prévia",
+    selectChunkHint: "Selecione um chunk acima para ler seu texto completo.",
+    fullChunkText: "texto completo do chunk",
     encoding: "encoding",
     totalTokens: "total de tokens",
     perChunkTokens: "tokens por chunk",

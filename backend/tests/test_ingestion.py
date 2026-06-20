@@ -120,6 +120,15 @@ async def test_ingest_pdf_emits_stages_in_order_with_detail():
     assert {"strategy", "chunk_size", "chunk_overlap", "num_chunks", "total_chars"} <= set(chunk)
     assert chunk["num_chunks"] == n
 
+    # 083 AC1/AC3 — the chunk stage carries the FULL text of EVERY chunk (not just
+    # the first-four 160-char previews), so the ingestion drill-in can list each
+    # chunk as a row and open any one in full.
+    assert len(chunk["chunk_texts"]) == n
+    assert all(isinstance(c, str) and c for c in chunk["chunk_texts"])
+    # The reported full texts are exactly what was chunked (and the previews are a
+    # truncation of them — same data, not a separate fabrication).
+    assert chunk["chunk_texts"][0].startswith(chunk["previews"][0][:40])
+
     # AC2 — tokenization is its own phase: per-chunk counts + a total that is their sum.
     tok = by_stage["rag.ingest.tokenize"].data
     assert len(tok["token_counts"]) == n

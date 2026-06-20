@@ -157,7 +157,9 @@ def test_params_none_matches_default_recursive():
 def test_fixed_smaller_size_yields_more_chunks():
     # AC3 — a smaller window strictly increases the chunk count for fixed.
     text = _corpus_texts()[0]
-    big = chunk_texts(text, ChunkStrategy.FIXED, params=ChunkParams(chunk_size=900, chunk_overlap=0))
+    big = chunk_texts(
+        text, ChunkStrategy.FIXED, params=ChunkParams(chunk_size=900, chunk_overlap=0)
+    )
     small = chunk_texts(
         text, ChunkStrategy.FIXED, params=ChunkParams(chunk_size=300, chunk_overlap=0)
     )

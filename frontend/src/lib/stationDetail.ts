@@ -260,6 +260,9 @@ export interface IngestionPhases {
     chunkOverlap?: number;
     totalChars?: number;
     previews: string[];
+    /** 083 — full text of every chunk (the unit that gets embedded). Falls back
+     * to the truncated `previews` for legacy/demo traces that predate it. */
+    chunks: string[];
   };
   tokenization?: { encoding?: string; tokenCounts: number[]; totalTokens?: number };
   embedding?: { model?: string; dim?: number; numVectors?: number; preview: number[] };
@@ -296,6 +299,10 @@ export function selectIngestion(events: TraceEvent[]): IngestionPhases {
       chunkOverlap: chunk.data.chunk_overlap as number | undefined,
       totalChars: chunk.data.total_chars as number | undefined,
       previews: (chunk.data.previews as string[] | undefined) ?? [],
+      chunks:
+        (chunk.data.chunk_texts as string[] | undefined) ??
+        (chunk.data.previews as string[] | undefined) ??
+        [],
     },
     tokenization: tok && {
       encoding: tok.data.encoding as string | undefined,

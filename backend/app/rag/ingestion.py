@@ -175,6 +175,9 @@ async def ingest_pdf(
             "num_chunks": len(chunks),
             "total_chars": len(text),
             "previews": [c[:160] for c in chunks[:4]],
+            # 083 — full text of EVERY chunk so the ingestion drill-in can list each
+            # chunk as a selectable row and open any one in full (real, not faked).
+            "chunk_texts": chunks,
         }
         rec.metrics = {"num_chunks": float(len(chunks))}
 

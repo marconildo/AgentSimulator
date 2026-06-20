@@ -24,6 +24,9 @@ export default defineConfig({
   // run fully offline (the no-hardcoded-colors guard just reads source files).
   test: {
     environment: "jsdom",
+    // src/test/setup.ts installs an in-memory localStorage polyfill: Node ≥22's
+    // disabled native global otherwise shadows jsdom's storage (see the file).
+    setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

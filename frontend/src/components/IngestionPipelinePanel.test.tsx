@@ -4,7 +4,7 @@
 // from the captured trace (no extra request). Object storage is the first phase
 // (folded in from the old standalone node).
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IngestionPipelinePanel } from "./IngestionPipelinePanel";
@@ -16,6 +16,14 @@ let seq = 0;
 function ev(stage: Stage, phase: Phase, data: Record<string, unknown> = {}): TraceEvent {
   return { trace_id: "t", seq: seq++, ts: 0, stage, phase, label: "", data, metrics: {} };
 }
+
+// Full chunk texts > 80 chars so the row snippet truncates — the distinctive
+// trailing phrase then appears ONLY in the selected-chunk full-text panel.
+const CHUNK_TEXTS = [
+  "Vectors capture meaning in a high-dimensional space where similar ideas sit close, the first chunk marker.",
+  "Cosine similarity ranks the stored vectors by their closeness to the query, the second chunk marker.",
+  "Small overlapping chunks preserve the surrounding context so no idea is lost, the third chunk marker.",
+];
 
 function uploadTurn(): TraceEvent[] {
   seq = 0;
@@ -33,6 +41,7 @@ function uploadTurn(): TraceEvent[] {
       chunk_overlap: 150,
       total_chars: 2400,
       previews: ["Vectors capture meaning", "Cosine ranks them"],
+      chunk_texts: CHUNK_TEXTS,
     }),
     ev("rag.ingest.tokenize", "end", {
       encoding: "cl100k_base",
@@ -78,6 +87,16 @@ describe("selectIngestion (080 AC7)", () => {
     expect(ing.embedding?.dim).toBe(1536);
     expect(ing.metadata?.numRecords).toBe(3);
     expect(ing.store?.chunksStored).toBe(3);
+    // 083 — full chunk texts projected for the table.
+    expect(ing.chunking?.chunks).toEqual(CHUNK_TEXTS);
+  });
+
+  it("falls back to previews when chunk_texts is absent (083 AC4)", () => {
+    seq = 0;
+    const ing = selectIngestion([
+      ev("rag.ingest.chunk", "end", { num_chunks: 2, previews: ["aaa", "bbb"] }),
+    ]);
+    expect(ing.chunking?.chunks).toEqual(["aaa", "bbb"]);
   });
 
   it("is empty for a non-upload log", () => {
@@ -111,6 +130,30 @@ describe("IngestionPipelinePanel — phase walk (080 AC7)", () => {
     expect(screen.getByText("text-embedding-3-small")).toBeTruthy();
     expect(screen.getByText("ai_engineering")).toBeTruthy();
     expect(screen.getByText(/120 · 98 · 75/)).toBeTruthy();
+  });
+
+  it("lists every chunk as a row and opens one in full on click (083)", () => {
+    seed(uploadTurn());
+    render(<IngestionPipelinePanel onClose={vi.fn()} />);
+
+    // One row per chunk: each chunk's char count is shown (AC1).
+    for (const c of CHUNK_TEXTS) {
+      expect(screen.getAllByText(String(c.length)).length).toBeGreaterThan(0);
+    }
+
+    // Before selecting: the hint is shown; the distinctive trailing phrase (past
+    // the snippet truncation) is NOT in the DOM yet (AC2).
+    expect(screen.getByText(/select a chunk/i)).toBeTruthy();
+    expect(screen.queryByText(/third chunk marker/)).toBeNull();
+
+    // Clicking the third chunk's row reveals its full text (AC2).
+    fireEvent.click(screen.getByText(/Small overlapping chunks preserve/));
+    expect(screen.getByText(/third chunk marker/)).toBeTruthy();
+
+    // Selecting another row swaps the full text (AC2).
+    fireEvent.click(screen.getByText(/Cosine similarity ranks the stored/));
+    expect(screen.getByText(/second chunk marker/)).toBeTruthy();
+    expect(screen.queryByText(/third chunk marker/)).toBeNull();
   });
 
   it("shows the empty-state when no ingestion has happened", () => {

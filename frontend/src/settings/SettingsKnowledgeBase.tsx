@@ -6,8 +6,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { ChunkColumn } from "../components/RagStageDetail";
 import { useT } from "../i18n";
-import { getConfig, reindexCorpus, type AppConfig, type ChunkParamSpec } from "../lib/chatApi";
+import {
+  chunkPreview,
+  getConfig,
+  reindexCorpus,
+  type AppConfig,
+  type ChunkParamSpec,
+  type ChunkPreviewItem,
+} from "../lib/chatApi";
 import { useSimulator } from "../store/useSimulator";
 
 const STRATEGIES = ["recursive", "fixed", "semantic", "agentic"];
@@ -30,7 +38,9 @@ function seedParams(specs: AppConfig["chunk_params"]): ParamState {
 }
 
 export function SettingsKnowledgeBase() {
-  const kb = useT().settings.kb;
+  const t = useT();
+  const kb = t.settings.kb;
+  const ragStrings = t.ragDetail; // 082 — for the reused ChunkColumn render
 
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [active, setActive] = useState<string>("recursive");
@@ -38,6 +48,34 @@ export function SettingsKnowledgeBase() {
   const [params, setParams] = useState<ParamState>({});
   const [busy, setBusy] = useState(false);
   const [doneCount, setDoneCount] = useState<number | null>(null);
+  // 082-chunking-explainers — a real live example of the SELECTED strategy.
+  const [example, setExample] = useState<ChunkPreviewItem | null>(null);
+  const [exampleLoading, setExampleLoading] = useState(false);
+
+  // Re-fetch the live example whenever the chosen strategy changes (alive-guarded,
+  // single-strategy — cheaper than the playground's "all"). Real endpoint; semantic/
+  // agentic return an honest per-strategy error without a key (rendered by ChunkColumn).
+  useEffect(() => {
+    let alive = true;
+    setExampleLoading(true);
+    setExample(null);
+    chunkPreview(chosen)
+      .then((res) => {
+        if (alive) setExample(res.previews.find((p) => p.strategy === chosen) ?? null);
+      })
+      .catch(() => alive && setExample(null))
+      .finally(() => alive && setExampleLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [chosen]);
+
+  const explainText: Record<string, string> = {
+    fixed: kb.explain.fixed,
+    recursive: kb.explain.recursive,
+    semantic: kb.explain.semantic,
+    agentic: kb.explain.agentic,
+  };
 
   useEffect(() => {
     getConfig()
@@ -139,6 +177,19 @@ export function SettingsKnowledgeBase() {
         })}
       </div>
 
+      {/* When the chosen strategy differs from the one the index is actually built
+          with, the selection is pending: it only takes effect (for the corpus AND for
+          new uploads, which use the active strategy) after a re-ingest. */}
+      {chosen !== active && (
+        <p
+          data-testid="kb-apply-hint"
+          className="mb-3 flex items-start gap-1 rounded-md border border-dashed border-[var(--color-warn)] px-2 py-1.5 text-[10px] leading-snug text-[var(--color-muted)]"
+        >
+          <span aria-hidden>⚠️</span>
+          <span>{kb.applyHint}</span>
+        </p>
+      )}
+
       {fields.length > 0 && (
         <div className="mb-3">
           <div className="mb-1.5 text-[11px] font-semibold text-[var(--color-ink)]">
@@ -175,6 +226,34 @@ export function SettingsKnowledgeBase() {
           </div>
         </div>
       )}
+
+      {/* 082-chunking-explainers — per-strategy "how it works" + a real live example
+          of the selected strategy, with a link to the full Vector DB playground. */}
+      <div className="mb-3 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-2)] p-2">
+        <div className="mb-1 text-[11px] font-semibold text-[var(--color-ink)]">
+          {kb.explain.title}
+        </div>
+        <p
+          data-testid="kb-explain-text"
+          className="mb-2 text-[10px] leading-snug text-[var(--color-muted)]"
+        >
+          {explainText[chosen] ?? ""}
+        </p>
+        <div className="mb-1 text-[10px] font-medium text-[var(--color-ink)]">
+          {kb.explain.example}
+        </div>
+        {exampleLoading && (
+          <p className="text-[9.5px] text-[var(--color-faint)]">{kb.explain.loading}</p>
+        )}
+        {example && (
+          <div data-testid="kb-explain-example" className="mt-1 max-w-[20rem]">
+            {/* flagCuts on for every strategy: clean boundaries (recursive/semantic/
+                agentic) stay unflagged, fixed's mid-word cuts get the warning — so the
+                difference from fixed is visible, not just the char count. */}
+            <ChunkColumn item={example} title={label(chosen)} flagCuts r={ragStrings} />
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center gap-2">
         <button

@@ -142,7 +142,10 @@ export function ChunkCompare({
   );
 }
 
-function ChunkColumn({
+// Exported (082-chunking-explainers) so the Settings Knowledge-base explainer can
+// reuse the exact chunk render — one column of real chunks, char counts, and the
+// honest per-strategy `error` case — instead of duplicating it.
+export function ChunkColumn({
   item,
   title,
   flagCuts,
@@ -180,9 +183,18 @@ function ChunkColumn({
                   <span className="font-mono text-[var(--color-faint)]">#{i + 1} · {c.chars}c</span>
                   {cut && <span className="text-[var(--color-warn)]">{r.chunkMidSentence}</span>}
                 </div>
-                <p className="mt-0.5 line-clamp-3 text-[9.5px] leading-snug text-[var(--color-muted)]">
+                <p className="mt-0.5 line-clamp-2 text-[9.5px] leading-snug text-[var(--color-muted)]">
                   {c.text}
                 </p>
+                {/* 082 — show the chunk's REAL ending so the `line-clamp` ellipsis isn't
+                    mistaken for the boundary: recursive/semantic end on a clean word/
+                    sentence; fixed ends mid-word. Only when the text is clipped. */}
+                {c.text.trimEnd().length > 110 && (
+                  <p className="mt-0.5 font-mono text-[8px] leading-snug text-[var(--color-faint)]">
+                    <span className="text-[var(--color-label)]">…ends: </span>
+                    {c.text.trimEnd().slice(-44)}
+                  </p>
+                )}
               </div>
             );
           })}
