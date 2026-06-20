@@ -284,3 +284,71 @@ def test_deepagents_state_block_reflects_todos_and_files():
     assert "research.md" in block
     # Empty state renders nothing (the first round just reads the mandate).
     assert deepagents_state_block([], {}) == ""
+
+
+# --- Final-answer prompt: the plan must not leak into the user's answer ----------
+# Regression: a weaker model echoed the DeepAgents scaffolding ("Plan:", "PLAN
+# FIRST", "Work the plan", the todo list) into the final answer because the loop
+# mandate + the live todo block were still in the system prompt at answer time.
+# The final-answer prompt must drop the planning mandate AND the re-injected state.
+
+
+def _deepagents_state(**over):
+    state = {
+        "runtime": "deepagents",
+        "plan": [{"content": "Calculate 12 * (3 + 1)", "status": "completed"}],
+        "vfs": {"scratch.md": "notes"},
+        "skills_catalog": [],
+    }
+    state.update(over)
+    return state
+
+
+def test_deepagents_block_final_variant_swaps_mandate_for_synthesis():
+    from app.agent.prompts import deepagents_block
+
+    loop = deepagents_block("deepagents")
+    final = deepagents_block("deepagents", final=True)
+    # The loop block carries the planning mandate; the final block must not.
+    assert "Always start with" in loop
+    assert "Always start with" not in final
+    # The `write_todos` tool call is mandated in the loop, never in the final block.
+    assert "write_todos" in loop
+    assert "write_todos" not in final
+    # The final block tells the model to reply with only the answer.
+    assert "only the answer" in final.lower()
+    # Off the DeepAgents runtime both variants stay empty (ReAct byte-for-byte).
+    assert deepagents_block("react") == ""
+    assert deepagents_block("react", final=True) == ""
+
+
+def test_final_answer_system_drops_planning_scaffolding():
+    from app.agent.graph import _effective_system
+
+    state = _deepagents_state()
+    final = _effective_system(state, final=True)
+    # The planning mandate ("Always start with `write_todos`") must be gone.
+    assert "Always start with" not in final
+    # The live todo block (re-injected during the loop) must be gone at answer time.
+    assert "Calculate 12 * (3 + 1)" not in final
+    assert "DeepAgent working state" not in final
+    # And it instructs an answer-only synthesis instead.
+    assert "only the answer" in final.lower()
+
+
+def test_loop_system_still_carries_the_planning_mandate():
+    from app.agent.graph import _effective_system
+
+    state = _deepagents_state()
+    loop = _effective_system(state)  # final defaults to False
+    assert "PLAN FIRST" in loop
+    # And it still re-injects the live plan so the agent maintains it.
+    assert "Calculate 12 * (3 + 1)" in loop
+
+
+def test_react_runtime_final_equals_loop_byte_for_byte():
+    from app.agent.graph import _effective_system
+
+    state = _deepagents_state(runtime="react", plan=[], vfs={})
+    # On the ReAct runtime the `final` flag is inert — Simple stays byte-for-byte.
+    assert _effective_system(state, final=True) == _effective_system(state)

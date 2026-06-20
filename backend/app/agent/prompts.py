@@ -101,6 +101,22 @@ Always start with `write_todos`. A response that skips planning is a failure of 
 """
 
 
+# 057-deepagents-runtime: the **final-answer** addendum, used in place of DEEPAGENTS_PROMPT
+# when the loop is over and the model is writing the user-facing reply. The planning mandate
+# is what a weaker model echoes ("Plan:", "PLAN FIRST", "Work the plan", the todo list) into
+# the answer — so at answer time we drop it and instead instruct an answer-only synthesis.
+# The plan, files and tool results already live in the message thread, so the model has
+# everything it needs to answer without seeing the scaffolding again.
+DEEPAGENTS_FINAL_PROMPT = """You have finished working through your plan. Write the final \
+answer for the user now.
+
+Reply with ONLY the answer itself — direct, clear prose (or the requested format) that \
+addresses the request. Do NOT restate your plan, your todo list, your scratchpad files, \
+or the step-by-step workflow, and never use scaffolding phrases like "Plan:", "PLAN \
+FIRST", "Write todos", "Work the plan" or "Execute the step". Those are your internal \
+process; the user must see only the result."""
+
+
 def deepagents_state_block(plan: list[dict[str, str]], vfs: dict[str, str]) -> str:
     """Render the live DeepAgents working state for re-injection into the prompt.
 
@@ -126,15 +142,22 @@ def deepagents_state_block(plan: list[dict[str, str]], vfs: dict[str, str]) -> s
     return "\n".join(lines)
 
 
-def deepagents_block(runtime: str) -> str:
+def deepagents_block(runtime: str, *, final: bool = False) -> str:
     """The DeepAgents role addendum — non-empty only under the ``deepagents`` runtime.
 
     057-deepagents-runtime: kept as its own helper so ``graph._system_parts`` can append
     it to the role layer (and 036's budget attribute it to the ``system`` slice) without
     forking the assembly. 061-scenario-builder swapped the gate from the Intermediate
     rung to the explicit ``runtime`` input. Empty under other runtimes (ReAct unchanged).
+
+    ``final=True`` returns the answer-only :data:`DEEPAGENTS_FINAL_PROMPT` instead of the
+    looping :data:`DEEPAGENTS_PROMPT`, so the user-facing answer is not polluted with the
+    planning mandate the model would otherwise echo (the plan/files/results stay in the
+    message thread). Off the DeepAgents runtime both variants are empty.
     """
-    return DEEPAGENTS_PROMPT if runtime == "deepagents" else ""
+    if runtime != "deepagents":
+        return ""
+    return DEEPAGENTS_FINAL_PROMPT if final else DEEPAGENTS_PROMPT
 
 
 def identity_block(name: str | None, description: str | None) -> str:

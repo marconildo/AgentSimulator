@@ -128,7 +128,7 @@ def _identity_part(state: AgentState) -> str:
     return identity_block(state.get("agent_name"), state.get("agent_description"))
 
 
-def _system_parts(state: AgentState) -> tuple[str, str, str]:
+def _system_parts(state: AgentState, *, final: bool = False) -> tuple[str, str, str]:
     """The three composition-time layers of the assembled system message.
 
     042-agent-anatomy split the prior single prompt into two independently
@@ -156,7 +156,11 @@ def _system_parts(state: AgentState) -> tuple[str, str, str]:
     # role layer so the model knows it has the planning / file-system / delegation tools
     # (and to skip them for trivial requests). Empty under other runtimes (Simple/ReAct
     # byte-for-byte). Part of the role ⇒ 036's budget attributes it to the system slice.
-    block = deepagents_block(state.get("runtime", "react")) if _with_deepagents(state) else ""
+    block = (
+        deepagents_block(state.get("runtime", "react"), final=final)
+        if _with_deepagents(state)
+        else ""
+    )
     if block:
         role = f"{role}\n\n{block}"
     catalog = state.get("skills_catalog") or []
@@ -164,23 +168,32 @@ def _system_parts(state: AgentState) -> tuple[str, str, str]:
     return guardrails, role, skills
 
 
-def _effective_system(state: AgentState) -> str:
+def _effective_system(state: AgentState, *, final: bool = False) -> str:
     """The system message actually sent to the model.
 
     Layout: ``[identity + "\\n\\n" +] guardrails + "\\n\\n" + role [+ "\\n\\n"
     + skills]``. Without an agent row (identity blank) it falls back to
     today's 042-anatomy composition exactly.
+
+    ``final=True`` is the **answer-time** variant used by ``generate_node``:
+    under the DeepAgents runtime it swaps the planning mandate for the
+    answer-only :data:`DEEPAGENTS_FINAL_PROMPT` and skips re-injecting the live
+    plan/scratchpad, so a weaker model writes a clean answer instead of echoing
+    its todos and workflow back to the user. Off the DeepAgents runtime ``final``
+    is inert (ReAct/Simple byte-for-byte).
     """
-    guardrails, role, skills = _system_parts(state)
+    guardrails, role, skills = _system_parts(state, final=final)
     # Recompose via the canonical helper so this and ``compose_system`` can never
     # drift on the join separator. An empty catalog yields just the two layers.
     catalog = state.get("skills_catalog") or []
     catalog_for_block = catalog if skills else []
     composed = compose_system(guardrails, role, catalog_for_block, identity=_identity_part(state))
-    # 057-deepagents-runtime: re-inject the live plan + scratchpad on the Intermediate
-    # rung so the agent SEES its todos/files every round (the TodoListMiddleware feedback
-    # loop) — this is what makes it maintain a plan rather than ignore the planning tool.
-    if _with_deepagents(state):
+    # 057-deepagents-runtime: re-inject the live plan + scratchpad **during the loop** so the
+    # agent SEES its todos/files every round (the TodoListMiddleware feedback loop) — this is
+    # what makes it maintain a plan. At final-answer time (`final`) we omit it: the results
+    # already live in the thread as ToolMessages, and re-showing the plan only tempts a weak
+    # model to copy the scaffolding into the user's answer.
+    if _with_deepagents(state) and not final:
         block = deepagents_state_block(state.get("plan") or [], state.get("vfs") or {})
         if block:
             composed = f"{composed}\n\n{block}"
@@ -548,7 +561,9 @@ async def generate_node(state: AgentState, config: RunnableConfig) -> dict[str, 
         t0 = perf_counter()
         t_first: float | None = None
         async for token in provider.stream_answer(
-            system=_effective_system(state),
+            # final=True: the answer-only DeepAgents prompt (no planning mandate, no
+            # re-injected todo list) so the plan/scaffolding never leaks into the reply.
+            system=_effective_system(state, final=True),
             thread=state["messages"],
             history=state["history"],
         ):
