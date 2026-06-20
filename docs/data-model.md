@@ -30,7 +30,7 @@ erDiagram
         TEXT agent_prompt
         TEXT model
         TEXT provider "openai|ollama"
-        TEXT enabled_tools "JSON list[str]"
+        TEXT enabled_tools "JSON: null=all, []=none"
         INTEGER is_default "0|1"
         REAL created_at
         REAL updated_at
@@ -151,7 +151,7 @@ sessions** — editing an agent propagates to every conversation using it.
 | `agent_prompt` | TEXT | NO | The "role" layer (composed below `system_prompt`). |
 | `model` | TEXT | NO | Model id. For `provider = 'openai'` it is validated against the curated allowlist in `llm/models.py`; for `'ollama'` it is any model installed on the local server (no allowlist). |
 | `provider` | TEXT | NO | LLM provider this agent runs against: `'openai'` (default) or `'ollama'` (074). Defaults to `'openai'` so every pre-074 row reads back unchanged. |
-| `enabled_tools` | TEXT | NO | JSON list of MCP tool names. `[]` = no tools (tools are CODE in `mcp/server.py`; this is just a name-filter). |
+| `enabled_tools` | TEXT | NO | JSON tool-name filter (tools are CODE in `mcp/server.py`; this is just a name-filter). The literal `null` = all tools (unset, the default), `[]` = no tools, `[...]` = exactly those. The null/`[]` distinction is what lets a user build a no-tools agent. |
 | `is_default` | INTEGER | NO | `0` or `1`, enforced by `CHECK (is_default IN (0, 1))` (047). Exactly one row has `1`. |
 | `created_at` | REAL | NO | Unix epoch seconds. |
 | `updated_at` | REAL | NO | Bumped on every `update_agent`. |

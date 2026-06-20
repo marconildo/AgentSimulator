@@ -33,7 +33,10 @@ export interface AgentMeta {
   // 074-ollama-provider: which LLM provider this agent runs against
   // ("openai" | "ollama"). Defaults to "openai" server-side.
   provider: string;
-  enabled_tools: string[];
+  // Tool gating: `null` = all tools (unset, the default) · `[]` = no tools
+  // (explicit) · `[...]` = exactly those. The null/[] distinction is what lets
+  // a user build a no-tools agent — an empty list used to collapse into "all".
+  enabled_tools: string[] | null;
   is_default: boolean;
   created_at: number;
   updated_at: number;

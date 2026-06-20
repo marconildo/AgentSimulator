@@ -395,3 +395,25 @@ async def test_clear_all_reseeds_default_under_check(tmp_path):
     assert len(rows) == 1
     assert rows[0]["id"] == DEFAULT_AGENT_ID
     assert rows[0]["is_default"] == 1
+
+
+async def test_tool_semantics_migration_converts_legacy_empty_list(tmp_path):
+    """tool-semantics fix — a legacy `enabled_tools = '[]'` row (which used to
+    mean "all tools") is rewritten to the JSON literal `null` so that `[]` is
+    freed up to honestly mean "no tools". Lossless: the row's effective meaning
+    ("all tools") is preserved.
+    """
+    path = tmp_path / "legacy_tools.sqlite3"
+    ConversationStore(path)  # fresh DB, fully migrated to head
+    # Simulate a pre-fix row and roll the schema version back one step so the
+    # tool-semantics migration re-runs on the next open.
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE agents SET enabled_tools = '[]' WHERE is_default = 1")
+        conn.execute(f"PRAGMA user_version = {ConversationStore._SCHEMA_VERSION_OLLAMA_PROVIDER}")
+    store = ConversationStore(path)  # re-open → migration converts '[]' → 'null'
+    with sqlite3.connect(path) as conn:
+        raw = conn.execute("SELECT enabled_tools FROM agents WHERE is_default = 1").fetchone()[0]
+    assert raw == "null"
+    # And the API-facing row reads it back as None (= "all tools").
+    agent = await store.get_agent(DEFAULT_AGENT_ID)
+    assert agent is not None and agent["enabled_tools"] is None

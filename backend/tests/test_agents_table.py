@@ -91,6 +91,35 @@ def test_clear_data_reports_agents_and_reseeds():
         assert n_default == 1
 
 
+@pytest.mark.asyncio
+async def test_enabled_tools_distinguishes_all_from_none():
+    """Regression — an agent must be able to persist BOTH 'all tools' (``None``,
+    unset) and 'no tools' (``[]``, explicit) as *distinct* stored values.
+
+    Bug: ``[]`` was overloaded to mean 'all', so a user who unchecked every tool
+    in the dialog was silently run with all tools back. Semantics:
+    ``None`` = all (unset) · ``[]`` = none (explicit) · ``[...]`` = exactly those.
+    """
+    store = get_store()
+    agent = await store.create_agent(name="ToolSemantics")
+    aid = agent["id"]
+
+    # Explicit "no tools" must round-trip as an empty list, not None.
+    updated = await store.update_agent(aid, {"enabled_tools": []})
+    assert updated["enabled_tools"] == []
+    assert (await store.get_agent(aid))["enabled_tools"] == []
+
+    # Explicit "all tools" (unset) must round-trip as None, not [].
+    updated = await store.update_agent(aid, {"enabled_tools": None})
+    assert updated["enabled_tools"] is None
+    assert (await store.get_agent(aid))["enabled_tools"] is None
+
+    # A concrete subset is preserved verbatim.
+    updated = await store.update_agent(aid, {"enabled_tools": ["calculator"]})
+    assert updated["enabled_tools"] == ["calculator"]
+    assert (await store.get_agent(aid))["enabled_tools"] == ["calculator"]
+
+
 def test_default_agent_has_required_fields():
     """AC3 — the default row always exists with non-empty required fields.
 

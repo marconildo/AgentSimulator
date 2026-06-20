@@ -551,11 +551,11 @@ async def chat(req: ChatRequest):
             effective_system_prompt = agent["system_prompt"]
         if effective_agent_prompt is None:
             effective_agent_prompt = agent["agent_prompt"]
-        if effective_enabled_tools is None and agent["enabled_tools"]:
-            # The agent stores `enabled_tools` as a concrete list (the FE writes
-            # exactly the tools the user kept on). An empty list means "no tools
-            # disabled" from the FE's perspective today — match that semantic by
-            # leaving the override at None (fall through to "all tools").
+        if effective_enabled_tools is None and agent["enabled_tools"] is not None:
+            # The agent stores `enabled_tools` honestly now: None = all tools
+            # (unset), [] = no tools (explicit), [...] = exactly those. Only
+            # override when the agent actually pins a list — an explicit empty
+            # list is respected (no tools), while None falls through to "all".
             effective_enabled_tools = list(agent["enabled_tools"])
         if effective_model is None:
             effective_model = agent["model"]

@@ -1,8 +1,9 @@
 // 042-agent-anatomy · 🛠️ Tools.
-// 043-persisted-agent: writes `agents.enabled_tools` (a concrete list of tool
-// names) directly. The agent row's empty list = "no tools"; the full list =
-// "all tools". The dialog never persists a `null` (the FE store's prior
-// "null = all on" sentinel is gone).
+// 043-persisted-agent: writes `agents.enabled_tools` directly. tool-semantics
+// fix: the value is honest now — `null` (unset) = all tools, `[]` = no tools,
+// `[...]` = exactly those. Turning every tool off persists `[]` (a real
+// no-tools agent); turning them all back on collapses to `null`. The empty
+// list no longer means "all" (that overload made a no-tools agent unreachable).
 
 import { useEffect, useState } from "react";
 
@@ -22,14 +23,15 @@ export function ToolsSection() {
   }, []);
 
   const allTools = config?.tools.map((tool) => tool.name) ?? [];
-  // The persisted `enabled_tools` is the source of truth. An empty list (newly
-  // cloned default carries `[]`) means "all tools" by convention — the FE
-  // initializes the row to `allTools` the first time the user toggles one off.
-  // This matches the 006 semantic without needing a null sentinel.
-  const persisted = agent?.enabled_tools ?? [];
-  const allOn = persisted.length === 0;
+  // The persisted `enabled_tools` is the source of truth, with an honest
+  // null/[] distinction: `null` (unset) = all tools, `[]` = no tools, `[...]` =
+  // exactly those. "All" must be `null`, NOT an empty list — otherwise turning
+  // every tool off (which yields `[]`) would be indistinguishable from "all"
+  // and silently re-enable everything (the bug this replaced).
+  const persisted = agent?.enabled_tools ?? null;
+  const allOn = persisted === null;
   const enabled = allOn ? allTools : persisted;
-  const enabledCount = allOn ? allTools.length : enabled.length;
+  const enabledCount = enabled.length;
   const totalCount = allTools.length;
   const count = allOn ? t.countAll : t.countSome(enabledCount, totalCount);
 
@@ -38,11 +40,11 @@ export function ToolsSection() {
     const current = allOn ? new Set(allTools) : new Set(persisted);
     if (current.has(name)) current.delete(name);
     else current.add(name);
-    // Persist the canonical order (matches allTools).
+    // Persist the canonical order (matches allTools). Everything on collapses
+    // back to `null` (the "all/unset" sentinel); anything less — including the
+    // empty set — is persisted as an explicit list, so "no tools" is reachable.
     const ordered = allTools.filter((n) => current.has(n));
-    // If the user toggled everything back on, persist `[]` to preserve the
-    // "all enabled = empty list" convention.
-    const next = ordered.length === allTools.length ? [] : ordered;
+    const next = ordered.length === allTools.length ? null : ordered;
     updateAgent({ enabled_tools: next });
   }
 

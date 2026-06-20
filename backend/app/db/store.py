@@ -112,7 +112,8 @@ def _seed_default_agent_sync(conn: sqlite3.Connection) -> bool:
     conn.execute(
         "INSERT INTO agents (id, name, description, system_prompt, agent_prompt, "
         "model, enabled_tools, is_default, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, '[]', 1, ?, ?)",
+        # 'null' (the JSON null literal) = "all tools" (unset); see _agent_row.
+        "VALUES (?, ?, ?, ?, ?, ?, 'null', 1, ?, ?)",
         (
             DEFAULT_AGENT_ID,
             DEFAULT_AGENT_NAME,
@@ -139,7 +140,11 @@ def _agent_row(row: sqlite3.Row) -> dict[str, Any]:
         "agent_prompt": row["agent_prompt"],
         "model": row["model"],
         "provider": (row["provider"] if "provider" in row.keys() else "openai"),
-        "enabled_tools": json.loads(row["enabled_tools"] or "[]"),
+        # `enabled_tools` is stored as a JSON value: the literal `null` = "all
+        # tools" (unset), `[]` = "no tools" (explicit), `[...]` = exactly those.
+        # `json.loads` maps these to None / [] / list respectively. The `or
+        # "null"` guard treats an empty/NULL column as "all" (the safe default).
+        "enabled_tools": json.loads(row["enabled_tools"] or "null"),
         "is_default": bool(row["is_default"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -177,7 +182,7 @@ CREATE TABLE IF NOT EXISTS agents (
     -- 074-ollama-provider: which LLM provider this agent runs against. Defaults
     -- to 'openai' so every pre-074 row reads back as the prior behavior.
     provider      TEXT NOT NULL DEFAULT 'openai',
-    enabled_tools TEXT NOT NULL DEFAULT '[]', -- JSON list[str]; [] = no tools
+    enabled_tools TEXT NOT NULL DEFAULT 'null', -- JSON: null = all (unset), [] = none, [...] = subset
     is_default    INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
     created_at    REAL NOT NULL,
     updated_at    REAL NOT NULL
@@ -333,6 +338,11 @@ class ConversationStore:
         # `app_config` table). Runs AFTER the 047 rebuild, which would otherwise
         # drop a freshly-created `provider` column. Gated by `PRAGMA user_version`.
         ConversationStore._migrate_to_ollama_provider(self.path)
+        # tool-semantics fix: disambiguate `enabled_tools` — historically `[]`
+        # meant "all tools" (overloaded), making a no-tools agent unreachable.
+        # Convert legacy `'[]'` rows to the JSON literal `null` (the new "all"),
+        # freeing `[]` to honestly mean "no tools". Gated by `PRAGMA user_version`.
+        ConversationStore._migrate_to_tool_semantics(self.path)
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection) -> None:
@@ -386,6 +396,30 @@ class ConversationStore:
     # added (and `app_config` ensured). Pure `ALTER TABLE ADD COLUMN` + `CREATE
     # TABLE IF NOT EXISTS` — no table rebuild needed.
     _SCHEMA_VERSION_OLLAMA_PROVIDER = 4
+    # tool-semantics fix: bumped after legacy `enabled_tools = '[]'` rows (which
+    # historically meant "all tools") are converted to the JSON literal `null`,
+    # so `[]` can honestly mean "no tools". Pure `UPDATE` — no table rebuild.
+    _SCHEMA_VERSION_TOOL_SEMANTICS = 5
+
+    @staticmethod
+    def _migrate_to_tool_semantics(path: Path) -> None:
+        """Disambiguate `agents.enabled_tools` (was: `[]` overloaded as "all").
+
+        Before this fix the empty list meant "all tools", so an agent the user
+        configured with *no* tools was indistinguishable from the default and
+        silently ran with every tool. New semantics: the JSON literal ``null`` =
+        all (unset), ``[]`` = none (explicit), ``[...]`` = exactly those. Every
+        pre-existing ``'[]'`` row meant "all" (none was unreachable), so convert
+        it to ``'null'`` — lossless. Gated by ``PRAGMA user_version`` so it runs
+        exactly once per database.
+        """
+        target = ConversationStore._SCHEMA_VERSION_TOOL_SEMANTICS
+        with sqlite3.connect(path) as conn:
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+            if current >= target:
+                return
+            conn.execute("UPDATE agents SET enabled_tools = 'null' WHERE enabled_tools = '[]'")
+            conn.execute(f"PRAGMA user_version = {target}")
 
     @staticmethod
     def _migrate_to_shared_catalog(conn: sqlite3.Connection) -> None:
@@ -498,7 +532,7 @@ class ConversationStore:
                     system_prompt TEXT NOT NULL,
                     agent_prompt  TEXT NOT NULL,
                     model         TEXT NOT NULL,
-                    enabled_tools TEXT NOT NULL DEFAULT '[]',
+                    enabled_tools TEXT NOT NULL DEFAULT 'null',
                     is_default    INTEGER NOT NULL DEFAULT 0
                                   CHECK (is_default IN (0, 1)),
                     created_at    REAL NOT NULL,
@@ -794,7 +828,11 @@ class ConversationStore:
                 continue
             value = patch[key]
             if key == "enabled_tools":
-                value = json.dumps(list(value or []))
+                # None = "all tools" (unset) → stored as the JSON literal `null`;
+                # [] = "no tools" (explicit); [...] = exactly those. Preserving
+                # the None/[] distinction is what lets a user build a no-tools
+                # agent (the empty-list intent used to collapse into "all").
+                value = json.dumps(None if value is None else list(value))
             fields.append(f"{key} = ?")
             values.append(value)
         if not fields:

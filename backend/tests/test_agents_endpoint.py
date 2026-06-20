@@ -233,3 +233,25 @@ def test_patch_session_unknown_session_is_404():
         valid = client.get("/api/agents").json()[0]["id"]
         resp = client.patch("/api/sessions/does-not-exist", json={"agent_id": valid})
     assert resp.status_code == 404
+
+
+def test_patch_enabled_tools_can_express_none_and_all():
+    """tool-semantics fix — over the HTTP PATCH contract, an agent can be set
+    to BOTH 'no tools' (``[]``) and 'all tools' (``null``) and they read back
+    distinctly. Regression: ``[]`` used to collapse into 'all', making a
+    no-tools agent impossible to build from the dialog."""
+    with TestClient(app) as client:
+        created = client.post("/api/agents", json={"name": "ToolHTTP"}).json()
+        aid = created["id"]
+
+        # Explicit "no tools".
+        r = client.patch(f"/api/agents/{aid}", json={"enabled_tools": []})
+        assert r.status_code == 200
+        assert r.json()["enabled_tools"] == []
+        assert client.get(f"/api/agents/{aid}").json()["enabled_tools"] == []
+
+        # Explicit "all tools" (unset) — the FE sends null.
+        r = client.patch(f"/api/agents/{aid}", json={"enabled_tools": None})
+        assert r.status_code == 200
+        assert r.json()["enabled_tools"] is None
+        assert client.get(f"/api/agents/{aid}").json()["enabled_tools"] is None

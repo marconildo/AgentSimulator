@@ -150,16 +150,17 @@ def test_user_version_bumps_to_3_idempotently(tmp_path):
     """AC3 — a v2 DB migrates forward once and the 048 `trace_events` table
     appears; subsequent opens are no-ops.
 
-    074-ollama-provider added a further additive migration, so the schema head
-    is now 4 (was 3 at 048). The 048 invariant under test — the migration runs
-    and creates `trace_events` — is unchanged; we assert the head version.
+    Later additive migrations (074-ollama-provider, then the tool-semantics
+    `enabled_tools` disambiguation) advanced the schema head further. The 048
+    invariant under test — the migration runs and creates `trace_events` — is
+    unchanged; we assert the current head version.
     """
     path = tmp_path / "v3.sqlite3"
     _make_pre_048_db(path)
     with sqlite3.connect(path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
 
-    head = ConversationStore._SCHEMA_VERSION_OLLAMA_PROVIDER
+    head = ConversationStore._SCHEMA_VERSION_TOOL_SEMANTICS
     ConversationStore(path)
     with sqlite3.connect(path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == head
