@@ -42,6 +42,9 @@ const HAS_DETAIL: Partial<Record<StationId, boolean>> = {
   database: true,
   backend: true,
   frontend: true,
+  // 080-ingestion-pipeline-merge — the merged ingestion node opens a phase-walk
+  // drill-in (object store → chunk → tokenize → embed → metadata → vector DB).
+  ingestion: true,
 };
 
 export function StationNode(props: NodeProps) {
@@ -232,7 +235,9 @@ export function StationNode(props: NodeProps) {
               ? t.node.openPipeline
               : meta.id === "pageindex"
                 ? t.node.openRagless
-                : t.node.openFull}{" "}
+                : meta.id === "ingestion"
+                  ? t.node.openIngestion
+                  : t.node.openFull}{" "}
             {detailOpen ? "▾" : "▸"}
           </button>
         )}
@@ -337,20 +342,14 @@ function innerRows(
         ...(typeof top === "number" ? [{ k: t.readout.score, v: top.toFixed(2) }] : []),
       ];
     }
-    case "storage": {
-      // 034-storage-ingestion-flow — the stored object's at-a-glance facts.
-      const up = lastWith(events, (e) => e.stage === "storage.upload" && e.phase === "end");
-      if (!up) return [];
-      const size = up.data.size_bytes as number | undefined;
-      const rows: Row[] = [{ k: i.contentType, v: String(up.data.content_type ?? "—") }];
-      if (typeof size === "number") rows.push({ k: i.size, v: `${size.toLocaleString()} B` });
-      return rows;
-    }
     case "ingestion": {
-      // 033-ingestion-node — the offline indexer's at-a-glance counts.
+      // 033-ingestion-node + 080 — the offline indexer's at-a-glance counts, including
+      // the durable object write (storage.upload) that is now its first phase.
+      const up = lastWith(events, (e) => e.stage === "storage.upload" && e.phase === "end");
       const store = lastWith(events, (e) => e.stage === "rag.ingest.store" && e.phase === "end");
       const chunk = lastWith(events, (e) => e.stage === "rag.ingest.chunk" && e.phase === "end");
       const rows: Row[] = [];
+      if (up) rows.push({ k: i.contentType, v: String(up.data.content_type ?? "—") });
       if (chunk) rows.push({ k: i.chunkStrategy, v: String(chunk.data.strategy ?? "—") });
       if (store) rows.push({ k: i.vectorsStored, v: String(store.data.chunks_stored ?? 0) });
       return rows;

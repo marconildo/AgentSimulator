@@ -89,7 +89,8 @@ def test_chunk_and_token_counts_are_deterministic():
 
 @pytest.mark.openai
 async def test_ingest_pdf_emits_stages_in_order_with_detail():
-    # AC9 — chunk -> embed -> store, in order, each carrying its detail payload.
+    # 080 AC1/AC2/AC3 — the six-phase pipeline fires in order, each carrying its
+    # real detail payload (storage.upload fires upstream in main.py, not here).
     sid = f"sess-{uuid.uuid4().hex}"
     did = uuid.uuid4().hex
     emitter = TraceEmitter("t", "upload")
@@ -105,30 +106,83 @@ async def test_ingest_pdf_emits_stages_in_order_with_detail():
 
     ends = [e for e in emitter.events if e.phase == "end"]
     order = [e.stage for e in ends if str(e.stage).startswith("rag.ingest")]
-    assert order == ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"]
+    assert order == [
+        "rag.ingest.chunk",
+        "rag.ingest.tokenize",
+        "rag.ingest.embed",
+        "rag.ingest.metadata",
+        "rag.ingest.store",
+    ]
+    n = result["chunk_count"]
 
     by_stage = {e.stage: e for e in ends}
     chunk = by_stage["rag.ingest.chunk"].data
-    assert {
-        "strategy",
-        "chunk_size",
-        "chunk_overlap",
-        "num_chunks",
-        "total_chars",
-        "token_counts",
-    } <= set(chunk)
-    assert len(chunk["token_counts"]) == chunk["num_chunks"]
+    assert {"strategy", "chunk_size", "chunk_overlap", "num_chunks", "total_chars"} <= set(chunk)
+    assert chunk["num_chunks"] == n
+
+    # AC2 — tokenization is its own phase: per-chunk counts + a total that is their sum.
+    tok = by_stage["rag.ingest.tokenize"].data
+    assert len(tok["token_counts"]) == n
+    assert tok["total_tokens"] == sum(tok["token_counts"])
+    assert by_stage["rag.ingest.tokenize"].metrics["total_tokens"] == float(tok["total_tokens"])
 
     embed = by_stage["rag.ingest.embed"].data
     assert embed["model"] and embed["dim"] > 0 and embed["num_vectors"] >= 1
     assert len(embed["preview"]) == 8
 
+    # AC3 — metadata extraction is its own phase: one record per chunk, and the
+    # records persisted to Chroma match exactly what this phase reported.
+    meta = by_stage["rag.ingest.metadata"].data
+    assert meta["num_records"] == n
+    persisted = get_vectorstore().get(where={"document_id": did})["metadatas"]
+    assert len(persisted) == n
+    for md in persisted:
+        assert md["session_id"] == sid and md["document_id"] == did
+        assert md["doc_type"] == "pdf" and md["position"]
+
     store = by_stage["rag.ingest.store"].data
     assert store["document_id"] == did
-    assert store["chunks_stored"] == result["chunk_count"]
+    assert store["chunks_stored"] == n
     assert "session_id" in store["metadata_keys"] and "document_id" in store["metadata_keys"]
 
     delete_document_vectors(did)  # cleanup
+
+
+@pytest.mark.openai
+async def test_upload_honors_active_chunking_strategy():
+    # 080 AC10 — ingest_pdf chunks with the ACTIVE strategy (not a hardcoded
+    # recursive splitter): fixed vs recursive yield different boundaries for the
+    # same document, and the chunk stage reports the strategy it actually used.
+    from app.rag import ingest as ingest_mod
+    from app.rag.chunking import ChunkStrategy
+
+    # A document long enough that fixed (mid-sentence char windows) and recursive
+    # (paragraph-packed) disagree on chunk count.
+    paras = [f"Paragraph number {i} about retrieval augmented generation. " * 6 for i in range(8)]
+
+    async def chunk_stage_for(strategy: str):
+        original = ingest_mod._active_strategy
+        ingest_mod._active_strategy = strategy
+        try:
+            did = uuid.uuid4().hex
+            sid = f"sess-{uuid.uuid4().hex}"
+            emitter = TraceEmitter("t", "u")
+            await ingest_pdf(make_pdf(paras), "doc.pdf", sid, did, emitter)
+            end = next(
+                e for e in emitter.events if e.stage == "rag.ingest.chunk" and e.phase == "end"
+            )
+            delete_document_vectors(did)
+            return end.data
+        finally:
+            ingest_mod._active_strategy = original
+
+    fixed = await chunk_stage_for(ChunkStrategy.FIXED.value)
+    recursive = await chunk_stage_for(ChunkStrategy.RECURSIVE.value)
+
+    assert fixed["strategy"] == "fixed"
+    assert recursive["strategy"] == "recursive"
+    # The whole point of AC10: the active strategy actually changes the chunking.
+    assert fixed["num_chunks"] != recursive["num_chunks"]
 
 
 @pytest.mark.openai

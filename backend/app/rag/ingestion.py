@@ -24,8 +24,9 @@ from pypdf import PdfReader
 from ..schemas import Stage
 from ..storage.object_store import get_object
 from ..trace import TraceEmitter
+from .chunking import CHUNK_OVERLAP, CHUNK_SIZE, ChunkStrategy, chunk_texts
 from .embeddings import embedding_model_name, get_embeddings
-from .ingest import CHUNK_OVERLAP, CHUNK_SIZE, chunk_text
+from .ingest import active_chunk_strategy
 from .store import COLLECTION_NAME, get_vectorstore
 
 # cl100k_base is the encoding shared by the text-embedding-3-* and gpt-4o-*
@@ -33,9 +34,44 @@ from .store import COLLECTION_NAME, get_vectorstore
 # we never fetch an encoding file at request time.
 _ENCODING = "cl100k_base"
 
-# Metadata attached to every uploaded chunk; keep this in one place so the store
-# stage can advertise the keys and retrieval/deletion can rely on them.
-_METADATA_KEYS = ["corpus", "session_id", "document_id", "filename", "chunk"]
+# Metadata attached to every uploaded chunk; keep this in one place so the
+# `rag.ingest.metadata` stage and the store stage advertise the SAME keys and
+# retrieval/deletion can rely on them. 080 adds `doc_type`/`total_chunks`/`position`
+# so the Metadata-extraction phase has real per-chunk records to show.
+_METADATA_KEYS = [
+    "corpus",
+    "session_id",
+    "document_id",
+    "filename",
+    "chunk",
+    "doc_type",
+    "total_chunks",
+    "position",
+]
+
+
+def _chunk_metadata(
+    session_id: str, document_id: str, filename: str, n: int
+) -> list[dict[str, Any]]:
+    """The per-chunk metadata records attached to an uploaded document (080).
+
+    Built once in the ``rag.ingest.metadata`` stage and handed to the store stage,
+    so what the Metadata-extraction phase reports is exactly what is persisted to
+    Chroma (real, not decorative). All values are Chroma-safe scalars.
+    """
+    return [
+        {
+            "corpus": False,
+            "session_id": session_id,
+            "document_id": document_id,
+            "filename": filename,
+            "chunk": i,
+            "doc_type": "pdf",
+            "total_chunks": n,
+            "position": f"{i + 1} of {n}",
+        }
+        for i in range(n)
+    ]
 
 
 @lru_cache
@@ -116,27 +152,44 @@ async def ingest_pdf(
     document_id: str,
     emitter: TraceEmitter,
 ) -> dict[str, Any]:
-    """Ingest one PDF into the vector store, emitting chunk -> embed -> store."""
+    """Ingest one PDF into the vector store, emitting the 080 ingestion pipeline:
+    ``chunk -> tokenize -> embed -> metadata -> store``.
 
-    # 1) Extract + chunk + tokenize -------------------------------------------
+    (``storage.upload`` fires upstream in ``main.py``, before this — it is the first
+    phase of the same ``ingestion`` station, the durable object write.)
+    """
+
+    # 1) Extract + chunk -------------------------------------------------------
+    # 080 AC10: chunk with the *active* strategy (the one the live index uses),
+    # not a hardcoded recursive splitter — so the upload honors the 072 picker.
     async with emitter.stage(
         Stage.RAG_INGEST_CHUNK, "Chunking the document", {"filename": filename}
     ) as rec:
         text = extract_pdf_text(data)
-        chunks = chunk_text(text)
-        token_counts = [count_tokens(c) for c in chunks]
+        strategy = ChunkStrategy(active_chunk_strategy())
+        chunks = chunk_texts(text, strategy)
         rec.data = {
-            "strategy": "paragraph-packed, char-windowed with overlap",
+            "strategy": str(strategy),
             "chunk_size": CHUNK_SIZE,
             "chunk_overlap": CHUNK_OVERLAP,
             "num_chunks": len(chunks),
             "total_chars": len(text),
             "previews": [c[:160] for c in chunks[:4]],
-            "token_counts": token_counts,
         }
-        rec.metrics = {"num_chunks": float(len(chunks)), "total_tokens": float(sum(token_counts))}
+        rec.metrics = {"num_chunks": float(len(chunks))}
 
-    # 2) Embed every chunk -----------------------------------------------------
+    # 2) Tokenize every chunk (cl100k) — its own phase (080) -------------------
+    async with emitter.stage(Stage.RAG_INGEST_TOKENIZE, "Tokenizing the chunks") as rec:
+        token_counts = [count_tokens(c) for c in chunks]
+        rec.data = {
+            "encoding": _ENCODING,
+            "num_chunks": len(chunks),
+            "token_counts": token_counts,
+            "total_tokens": sum(token_counts),
+        }
+        rec.metrics = {"total_tokens": float(sum(token_counts))}
+
+    # 3) Embed every chunk -----------------------------------------------------
     async with emitter.stage(Stage.RAG_INGEST_EMBED, "Embedding the chunks") as rec:
         embeddings_fn = get_embeddings()
         vectors: list[list[float]] = (
@@ -151,22 +204,27 @@ async def ingest_pdf(
         }
         rec.metrics = {"dim": float(dim), "num_vectors": float(len(vectors))}
 
-    # 3) Store vectors with scoping metadata -----------------------------------
+    # 4) Extract per-chunk metadata — its own phase (080) ----------------------
+    # The SAME records are handed to the store step below, so what this phase
+    # reports is exactly what is persisted (AC3 — real, not decorative).
+    async with emitter.stage(
+        Stage.RAG_INGEST_METADATA, "Extracting metadata", {"filename": filename}
+    ) as rec:
+        metadatas = _chunk_metadata(session_id, document_id, filename, len(chunks))
+        rec.data = {
+            "doc_type": "pdf",
+            "metadata_keys": _METADATA_KEYS,
+            "num_records": len(metadatas),
+            "records": metadatas[:8],
+        }
+        rec.metrics = {"num_records": float(len(metadatas))}
+
+    # 5) Store vectors with the metadata from the previous step ----------------
     async with emitter.stage(
         Stage.RAG_INGEST_STORE, "Storing vectors", {"filename": filename}
     ) as rec:
         store = get_vectorstore()
         ids = [f"{document_id}:{i}" for i in range(len(chunks))]
-        metadatas = [
-            {
-                "corpus": False,
-                "session_id": session_id,
-                "document_id": document_id,
-                "filename": filename,
-                "chunk": i,
-            }
-            for i in range(len(chunks))
-        ]
         if chunks:
             # We already computed the embeddings above — add them directly via the
             # underlying collection so we don't re-embed.

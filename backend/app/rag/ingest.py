@@ -193,6 +193,19 @@ async def reingest_corpus(
         }
         rec.metrics = {"num_chunks": float(len(texts)), "num_files": float(len(sources))}
 
+    # 080: tokenization is its own phase, mirroring the per-PDF upload pipeline.
+    async with emitter.stage(Stage.RAG_INGEST_TOKENIZE, "Tokenizing the chunks") as rec:
+        from .ingestion import count_tokens  # lazy: ingestion imports from this module
+
+        token_counts = [count_tokens(t) for t in texts]
+        rec.data = {
+            "encoding": "cl100k_base",
+            "num_chunks": len(texts),
+            "token_counts": token_counts,
+            "total_tokens": sum(token_counts),
+        }
+        rec.metrics = {"total_tokens": float(sum(token_counts))}
+
     async with emitter.stage(Stage.RAG_INGEST_EMBED, "Embedding the chunks") as rec:
         embeddings_fn = get_embeddings()
         vectors: list[list[float]] = (
@@ -206,6 +219,19 @@ async def reingest_corpus(
             "preview": [round(float(x), 4) for x in (vectors[0][:8] if vectors else [])],
         }
         rec.metrics = {"dim": float(dim), "num_vectors": float(len(vectors))}
+
+    # 080: metadata extraction is its own phase. The corpus chunks already carry
+    # rich per-chunk metadata (073: section / doc_type / total_chunks) — surface it.
+    async with emitter.stage(Stage.RAG_INGEST_METADATA, "Extracting metadata") as rec:
+        records = [dict(d.metadata) for d in docs]
+        keys = sorted({k for r in records for k in r})
+        rec.data = {
+            "doc_type": "markdown",
+            "metadata_keys": keys,
+            "num_records": len(records),
+            "records": records[:8],
+        }
+        rec.metrics = {"num_records": float(len(records))}
 
     async with emitter.stage(Stage.RAG_INGEST_STORE, "Storing vectors") as rec:
         # Use the proven build_index path (delete-by-`corpus` + add_documents) for the

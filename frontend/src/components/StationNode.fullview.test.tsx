@@ -53,7 +53,7 @@ describe("StationNode — full-view button (076)", () => {
   );
 
   it("renders no full-view button for a non-detail station", () => {
-    renderNode("storage");
+    renderNode("gateway");
     expect(screen.queryByText(/Open full view/i)).toBeNull();
   });
 

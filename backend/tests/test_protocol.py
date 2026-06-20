@@ -28,11 +28,21 @@ def test_all_stages_have_dotted_or_simple_ids():
 
 
 def test_ingestion_stages_serialize_as_dotted_strings():
-    # 002-interactive-chat — PDF ingestion adds three stages on the rag station.
+    # 002-interactive-chat + 080-ingestion-pipeline-merge — the offline indexer
+    # write-path is five dotted stages on the `ingestion` station, in order:
+    # chunk -> tokenize -> embed -> metadata -> store.
     assert Stage.RAG_INGEST_CHUNK == "rag.ingest.chunk"
+    assert Stage.RAG_INGEST_TOKENIZE == "rag.ingest.tokenize"
     assert Stage.RAG_INGEST_EMBED == "rag.ingest.embed"
+    assert Stage.RAG_INGEST_METADATA == "rag.ingest.metadata"
     assert Stage.RAG_INGEST_STORE == "rag.ingest.store"
-    for stage in (Stage.RAG_INGEST_CHUNK, Stage.RAG_INGEST_EMBED, Stage.RAG_INGEST_STORE):
+    for stage in (
+        Stage.RAG_INGEST_CHUNK,
+        Stage.RAG_INGEST_TOKENIZE,
+        Stage.RAG_INGEST_EMBED,
+        Stage.RAG_INGEST_METADATA,
+        Stage.RAG_INGEST_STORE,
+    ):
         payload = TraceEvent(trace_id="t", seq=1, stage=stage).model_dump_json()
         assert f'"stage":"{stage.value}"' in payload
 

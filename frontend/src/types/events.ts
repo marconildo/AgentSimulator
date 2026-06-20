@@ -33,8 +33,13 @@ export type Stage =
   | "pageindex.tree"
   | "pageindex.navigate"
   | "pageindex.select"
+  // 080-ingestion-pipeline-merge: the offline indexer write-path, five stages on the
+  // `ingestion` station (storage.upload is its first phase). tokenize + metadata are
+  // their own phases now: chunk → tokenize → embed → metadata → store.
   | "rag.ingest.chunk"
+  | "rag.ingest.tokenize"
   | "rag.ingest.embed"
+  | "rag.ingest.metadata"
   | "rag.ingest.store"
   | "storage.upload"
   | "mcp.discover"

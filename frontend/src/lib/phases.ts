@@ -56,7 +56,10 @@ export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   "pageindex.navigate": "retrieve",
   "pageindex.select": "retrieve",
   "rag.ingest.chunk": "retrieve",
+  // 080 — tokenize + metadata are part of the same indexer write-path phase.
+  "rag.ingest.tokenize": "retrieve",
   "rag.ingest.embed": "retrieve",
+  "rag.ingest.metadata": "retrieve",
   "rag.ingest.store": "retrieve",
   // 034-storage-ingestion-flow — persisting the uploaded file to durable object
   // storage is a write; "persist" is the truthful label (it sorts after retrieve

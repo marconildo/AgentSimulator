@@ -1,7 +1,8 @@
-// 034-storage-ingestion-flow — the upload write-path (Frontend → Backend →
-// Storage → Ingestion → Vector DB). The new `storage.upload` stage is owned by
-// the `storage` station and flows through the pure projection: it lights storage
-// then continues to ingestion. A normal chat never emits it, so storage stays idle.
+// 034-storage-ingestion-flow + 080-ingestion-pipeline-merge — the upload write-path
+// (Frontend → Backend → Ingestion → Vector DB). 080 folded the old standalone Object
+// Storage node into the `ingestion` station: `storage.upload` is now its first phase
+// (the durable object write), so it maps to `ingestion` and lights that single node.
+// A normal chat never emits it, so ingestion stays idle.
 
 import { describe, expect, it } from "vitest";
 
@@ -20,36 +21,57 @@ function uploadRun(): TraceEvent[] {
     ev("frontend", "end", { filename: "a.pdf" }),
     ev("backend", "start"),
     ev("storage.upload", "start", { filename: "a.pdf" }),
-    ev("storage.upload", "end", { key: "s/d/a.pdf", size_bytes: 1234, content_type: "application/pdf" }),
-    ev("rag.ingest.chunk", "end", { num_chunks: 2 }),
+    ev("storage.upload", "end", {
+      key: "s/d/a.pdf",
+      size_bytes: 1234,
+      content_type: "application/pdf",
+    }),
+    ev("rag.ingest.chunk", "end", { num_chunks: 2, strategy: "recursive" }),
+    ev("rag.ingest.tokenize", "end", { token_counts: [10, 12], total_tokens: 22 }),
     ev("rag.ingest.embed", "end", { num_vectors: 2 }),
+    ev("rag.ingest.metadata", "end", { num_records: 2 }),
     ev("rag.ingest.store", "end", { chunks_stored: 2 }),
     ev("backend", "end", {}),
   ];
 }
 
-describe("storage.upload projection (034-storage-ingestion-flow)", () => {
-  it("maps storage.upload to the storage station (AC2)", () => {
-    expect(STAGE_TO_STATION["storage.upload"]).toBe("storage");
+describe("storage.upload projection (080-ingestion-pipeline-merge)", () => {
+  it("maps storage.upload to the merged ingestion station (AC5/AC6)", () => {
+    expect(STAGE_TO_STATION["storage.upload"]).toBe("ingestion");
   });
 
-  it("lights storage when the upload reaches it (AC5)", () => {
+  it("every ingest stage maps to the ingestion station (AC5)", () => {
+    for (const s of [
+      "rag.ingest.chunk",
+      "rag.ingest.tokenize",
+      "rag.ingest.embed",
+      "rag.ingest.metadata",
+      "rag.ingest.store",
+    ] as const) {
+      expect(STAGE_TO_STATION[s]).toBe("ingestion");
+    }
+  });
+
+  it("lights the ingestion node when the object write reaches it (AC6)", () => {
     const events = uploadRun();
     const at = events.findIndex((e) => e.stage === "storage.upload" && e.phase === "end");
     const view = deriveView(events, at);
-    expect(view.stations.storage.status).toBe("done");
-    expect(view.activeStation).toBe("storage");
+    expect(view.stations.ingestion.status).toBe("done");
+    expect(view.activeStation).toBe("ingestion");
   });
 
-  it("continues to the ingestion node, both done at the end (AC5)", () => {
+  it("the single ingestion node is done at the end, carrying every phase (AC6)", () => {
     const events = uploadRun();
     const view = deriveView(events, events.length - 1);
-    expect(view.stations.storage.status).toBe("done");
     expect(view.stations.ingestion.status).toBe("done");
-    expect(view.stations.storage.events).toHaveLength(2); // the start/end pair
+    // storage.upload (start+end) + the five rag.ingest.* ends all land on one node.
+    const stages = view.stations.ingestion.events.map((e) => e.stage);
+    expect(stages).toContain("storage.upload");
+    expect(stages).toContain("rag.ingest.tokenize");
+    expect(stages).toContain("rag.ingest.metadata");
   });
 
-  it("leaves storage idle on a normal chat (AC10 regression guard)", () => {
+  it("leaves ingestion idle on a normal chat (AC4 regression guard)", () => {
     seq = 0;
     const chat: TraceEvent[] = [
       ev("frontend", "end", { message: "hi" }),
@@ -63,8 +85,8 @@ describe("storage.upload projection (034-storage-ingestion-flow)", () => {
       ev("backend", "end", {}),
     ];
     const view = deriveView(chat, chat.length - 1);
-    expect(view.stations.storage.status).toBe("idle");
-    expect(view.stations.storage.events).toHaveLength(0);
+    expect(view.stations.ingestion.status).toBe("idle");
+    expect(view.stations.ingestion.events).toHaveLength(0);
     expect(chat.some((e) => e.stage === "storage.upload")).toBe(false);
   });
 });

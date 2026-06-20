@@ -77,10 +77,18 @@ describe("ingestion station (033-ingestion-node)", () => {
     expect(visibleStationIdsFor(DEFAULT_SELECTION, true)).toContain("ingestion");
   });
 
-  // AC2 — owns the three ingest stages and is a real (non-preview) station.
+  // AC2 + 080 — owns the whole write-path (storage.upload + the five ingest stages)
+  // and is a real (non-preview) station.
   it("owns the ingest stages and is not a comingSoon preview", () => {
     const ing = stationsFor("en").find((s) => s.id === "ingestion")!;
-    expect(ing.stages).toEqual(["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"]);
+    expect(ing.stages).toEqual([
+      "storage.upload",
+      "rag.ingest.chunk",
+      "rag.ingest.tokenize",
+      "rag.ingest.embed",
+      "rag.ingest.metadata",
+      "rag.ingest.store",
+    ]);
     expect(ing.comingSoon ?? false).toBe(false);
   });
 
@@ -106,40 +114,45 @@ describe("ingestion station (033-ingestion-node)", () => {
   });
 });
 
-describe("storage station + write-path (034-storage-ingestion-flow)", () => {
-  // AC1/AC11 — a real station with bilingual prose + a filled cloud map.
-  it("exists with bilingual prose and a full cloud map", () => {
+describe("merged ingestion station + write-path (080-ingestion-pipeline-merge)", () => {
+  // AC6 — the standalone Object Storage station is gone (folded into ingestion).
+  it("no longer exposes a standalone storage station", () => {
+    expect(stationsFor("en").some((s) => (s.id as string) === "storage")).toBe(false);
+  });
+
+  // AC1/AC5 — the ingestion station owns the whole write-path in order, with bilingual
+  // prose + a full cloud map, and is a real (non-preview) station.
+  it("owns the six ingest stages in order and is not a comingSoon preview", () => {
+    const st = stationsFor("en").find((s) => s.id === "ingestion")!;
+    expect(st.stages).toEqual([
+      "storage.upload",
+      "rag.ingest.chunk",
+      "rag.ingest.tokenize",
+      "rag.ingest.embed",
+      "rag.ingest.metadata",
+      "rag.ingest.store",
+    ]);
+    expect(st.comingSoon ?? false).toBe(false);
     for (const lang of ["en", "pt"] as const) {
-      const st = stationsFor(lang).find((s) => s.id === "storage");
-      expect(st, `storage (${lang})`).toBeDefined();
-      expect(st!.title.trim()).toBeTruthy();
-      expect(st!.subtitle.trim()).toBeTruthy();
-      expect(st!.blurb.trim()).toBeTruthy();
-      expect(st!.clouds.azure && st!.clouds.aws && st!.clouds.gcp).toBeTruthy();
+      const s = stationsFor(lang).find((x) => x.id === "ingestion")!;
+      expect(s.title.trim() && s.subtitle.trim() && s.blurb.trim()).toBeTruthy();
+      expect(s.clouds.azure && s.clouds.aws && s.clouds.gcp).toBeTruthy();
     }
   });
 
-  // AC1 — revealed by upload activity regardless of selection (035: real
-  // everywhere but rendered only during an upload).
+  // AC6 — revealed by upload activity regardless of selection (035: real everywhere
+  // but rendered only during an upload).
   it("is visible during an upload", () => {
-    expect(visibleStationIdsFor(DEFAULT_SELECTION, true)).toContain("storage");
+    expect(visibleStationIdsFor(DEFAULT_SELECTION, true)).toContain("ingestion");
   });
 
-  // AC2 — owns the storage.upload stage and is a real (non-preview) station.
-  it("owns storage.upload and is not a comingSoon preview", () => {
-    const st = stationsFor("en").find((s) => s.id === "storage")!;
-    expect(st.stages).toEqual(["storage.upload"]);
-    expect(st.comingSoon ?? false).toBe(false);
-  });
-
-  // AC6 — the write-path hops exist, bilingual, private. The Backend orchestrates:
-  // it persists the file to storage, then calls the indexer (backend→ingestion),
-  // which upserts into the vector DB (ingestion→rag).
-  it("wires backend→storage, backend→ingestion and ingestion→rag with bilingual private hops", () => {
+  // AC8 — exactly two write-path hops remain (no backend→storage): backend→ingestion
+  // and ingestion→rag, both bilingual + private.
+  it("wires backend→ingestion and ingestion→rag with bilingual private hops, and no backend→storage", () => {
     for (const lang of ["en", "pt"] as const) {
       const hops = hopsFor(lang);
+      expect(hops.some((h) => (h.target as string) === "storage")).toBe(false);
       for (const [source, target] of [
-        ["backend", "storage"],
         ["backend", "ingestion"],
         ["ingestion", "rag"],
       ] as const) {
@@ -154,7 +167,7 @@ describe("storage station + write-path (034-storage-ingestion-flow)", () => {
     }
   });
 
-  // AC6 — the ingestion node is no longer hop-less (≥1 incoming, ≥1 outgoing).
+  // AC8 — the ingestion node has a real incoming and outgoing edge.
   it("gives the ingestion node a real incoming and outgoing edge", () => {
     expect(HOP_PAIRS.some((p) => p.target === "ingestion")).toBe(true);
     expect(HOP_PAIRS.some((p) => p.source === "ingestion")).toBe(true);

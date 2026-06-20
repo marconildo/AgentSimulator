@@ -242,3 +242,83 @@ export function selectFrontend(events: TraceEvent[]): FrontendDetailData {
     answer: respond?.data.answer as string | undefined,
   };
 }
+
+// --- Ingestion (080-ingestion-pipeline-merge) --------------------------------
+//
+// The offline indexer write-path, projected as six ordered phases for the
+// "Open ingestion pipeline" drill-in (mirrors the RAG pipeline overlay). The
+// Object Storage node was folded in (080), so its durable write is the first
+// phase here. Each phase reads only the visible cursor slice (step/replay safe);
+// a phase is `present` iff its END event has fired by the cursor.
+
+export interface IngestionPhases {
+  objectStore?: { filename?: string; key?: string; sizeBytes?: number; contentType?: string };
+  chunking?: {
+    strategy?: string;
+    numChunks?: number;
+    chunkSize?: number;
+    chunkOverlap?: number;
+    totalChars?: number;
+    previews: string[];
+  };
+  tokenization?: { encoding?: string; tokenCounts: number[]; totalTokens?: number };
+  embedding?: { model?: string; dim?: number; numVectors?: number; preview: number[] };
+  metadata?: {
+    docType?: string;
+    metadataKeys: string[];
+    numRecords?: number;
+    records: Record<string, unknown>[];
+  };
+  store?: { collection?: string; chunksStored?: number; totalInCollection?: number };
+  /** True iff at least one phase has data — drives the overlay's empty state. */
+  any: boolean;
+}
+
+export function selectIngestion(events: TraceEvent[]): IngestionPhases {
+  const up = pickLast(events, "storage.upload", "end");
+  const chunk = pickLast(events, "rag.ingest.chunk", "end");
+  const tok = pickLast(events, "rag.ingest.tokenize", "end");
+  const embed = pickLast(events, "rag.ingest.embed", "end");
+  const meta = pickLast(events, "rag.ingest.metadata", "end");
+  const store = pickLast(events, "rag.ingest.store", "end");
+
+  return {
+    objectStore: up && {
+      filename: up.data.filename as string | undefined,
+      key: up.data.key as string | undefined,
+      sizeBytes: up.data.size_bytes as number | undefined,
+      contentType: up.data.content_type as string | undefined,
+    },
+    chunking: chunk && {
+      strategy: chunk.data.strategy as string | undefined,
+      numChunks: chunk.data.num_chunks as number | undefined,
+      chunkSize: chunk.data.chunk_size as number | undefined,
+      chunkOverlap: chunk.data.chunk_overlap as number | undefined,
+      totalChars: chunk.data.total_chars as number | undefined,
+      previews: (chunk.data.previews as string[] | undefined) ?? [],
+    },
+    tokenization: tok && {
+      encoding: tok.data.encoding as string | undefined,
+      tokenCounts: (tok.data.token_counts as number[] | undefined) ?? [],
+      totalTokens: tok.data.total_tokens as number | undefined,
+    },
+    embedding: embed && {
+      model: embed.data.model as string | undefined,
+      dim: embed.data.dim as number | undefined,
+      numVectors: embed.data.num_vectors as number | undefined,
+      preview: (embed.data.preview as number[] | undefined) ?? [],
+    },
+    metadata: meta && {
+      docType: meta.data.doc_type as string | undefined,
+      metadataKeys: (meta.data.metadata_keys as string[] | undefined) ?? [],
+      numRecords: meta.data.num_records as number | undefined,
+      records: (meta.data.records as Record<string, unknown>[] | undefined) ?? [],
+    },
+    store: store && {
+      collection: store.data.collection as string | undefined,
+      chunksStored: store.data.chunks_stored as number | undefined,
+      totalInCollection: store.data.total_in_collection as number | undefined,
+    },
+    any: Boolean(up || chunk || tok || embed || meta || store),
+  };
+}

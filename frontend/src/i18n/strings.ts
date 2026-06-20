@@ -482,6 +482,7 @@ export interface Strings {
     openFull: string;
     openPipeline: string; // 054 — the rag node's button label (opens the RAG pipeline panel)
     openRagless: string; // 056 — the pageindex node's button (opens the RAGLESS pipeline panel)
+    openIngestion: string; // 080 — the ingestion node's button (opens the ingestion pipeline panel)
     memory: string;
     latency: string;
     tip: string;
@@ -665,6 +666,44 @@ export interface Strings {
     subtitle: string;
     back: string;
     empty: string;
+  };
+  // 080-ingestion-pipeline-merge — the "Open ingestion pipeline" drill-in walks the
+  // six write-path phases (object store → chunk → tokenize → embed → metadata → store).
+  ingestionDetail: {
+    title: string;
+    subtitle: string;
+    back: string;
+    empty: string;
+    objectStore: string;
+    chunking: string;
+    tokenization: string;
+    embedding: string;
+    metadata: string;
+    store: string;
+    // field labels
+    filename: string;
+    objectKey: string;
+    size: string;
+    contentType: string;
+    strategy: string;
+    chunks: string;
+    chunkSize: string;
+    overlap: string;
+    totalChars: string;
+    previews: string;
+    encoding: string;
+    totalTokens: string;
+    perChunkTokens: string;
+    model: string;
+    dimension: string;
+    vectors: string;
+    vectorPreview: string;
+    docType: string;
+    keys: string;
+    records: string;
+    collection: string;
+    stored: string;
+    totalInCollection: string;
   };
   dbDetail: {
     title: string;
@@ -1517,6 +1556,7 @@ const en: Strings = {
     openFull: "Open full view",
     openPipeline: "Open RAG pipeline",
     openRagless: "Open RAGLESS pipeline",
+    openIngestion: "Open ingestion pipeline",
     memory: "memory",
     latency: "latency",
     tip: "Click a station to inspect · ⊕ to expand",
@@ -1847,6 +1887,41 @@ const en: Strings = {
     subtitle: "JSON-RPC over the MCP transport",
     back: "Canvas",
     empty: "No tool activity in this turn yet.",
+  },
+  ingestionDetail: {
+    title: "Ingestion pipeline — this upload",
+    subtitle: "Object store → chunk → tokenize → embed → metadata → vector DB",
+    back: "Canvas",
+    empty: "No ingestion activity yet — upload a document to see the pipeline.",
+    objectStore: "Object store",
+    chunking: "Chunking",
+    tokenization: "Tokenization",
+    embedding: "Embedding",
+    metadata: "Metadata extraction",
+    store: "Save to vector DB",
+    filename: "file",
+    objectKey: "object key",
+    size: "size",
+    contentType: "content type",
+    strategy: "strategy",
+    chunks: "chunks",
+    chunkSize: "chunk size",
+    overlap: "overlap",
+    totalChars: "total chars",
+    previews: "chunk previews",
+    encoding: "encoding",
+    totalTokens: "total tokens",
+    perChunkTokens: "tokens per chunk",
+    model: "model",
+    dimension: "dimension",
+    vectors: "vectors",
+    vectorPreview: "vector preview",
+    docType: "doc type",
+    keys: "metadata keys",
+    records: "records",
+    collection: "collection",
+    stored: "chunks stored",
+    totalInCollection: "total in collection",
   },
   dbDetail: {
     title: "App Database — operations this turn",
@@ -2553,6 +2628,7 @@ const pt: Strings = {
     openFull: "Abrir visão completa",
     openPipeline: "Abrir pipeline RAG",
     openRagless: "Abrir pipeline RAGLESS",
+    openIngestion: "Abrir pipeline de ingestão",
     memory: "memória",
     latency: "latência",
     tip: "Clique numa estação para inspecionar · ⊕ para expandir",
@@ -2887,6 +2963,41 @@ const pt: Strings = {
     subtitle: "JSON-RPC sobre o transporte MCP",
     back: "Diagrama",
     empty: "Nenhuma atividade de ferramenta neste turno ainda.",
+  },
+  ingestionDetail: {
+    title: "Pipeline de ingestão — este upload",
+    subtitle: "Armazenamento → dividir → tokenizar → embeddar → metadados → banco vetorial",
+    back: "Diagrama",
+    empty: "Nenhuma ingestão ainda — envie um documento para ver o pipeline.",
+    objectStore: "Armazenamento de objetos",
+    chunking: "Divisão em chunks",
+    tokenization: "Tokenização",
+    embedding: "Embedding",
+    metadata: "Extração de metadados",
+    store: "Salvar no banco vetorial",
+    filename: "arquivo",
+    objectKey: "chave do objeto",
+    size: "tamanho",
+    contentType: "tipo de conteúdo",
+    strategy: "estratégia",
+    chunks: "chunks",
+    chunkSize: "tamanho do chunk",
+    overlap: "sobreposição",
+    totalChars: "total de caracteres",
+    previews: "prévias dos chunks",
+    encoding: "encoding",
+    totalTokens: "total de tokens",
+    perChunkTokens: "tokens por chunk",
+    model: "modelo",
+    dimension: "dimensão",
+    vectors: "vetores",
+    vectorPreview: "prévia do vetor",
+    docType: "tipo de doc",
+    keys: "chaves de metadados",
+    records: "registros",
+    collection: "coleção",
+    stored: "chunks salvos",
+    totalInCollection: "total na coleção",
   },
   dbDetail: {
     title: "Banco da Aplicação — operações deste turno",

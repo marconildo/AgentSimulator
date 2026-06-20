@@ -271,23 +271,19 @@ export function readoutFor(
       if (plan) return ro.planned(((plan.data.steps as unknown[] | undefined) ?? []).length);
       return rt.status === "idle" ? "" : ro.routing;
     }
-    case "storage": {
-      // 034-storage-ingestion-flow — the object store's compact readout: the
-      // uploaded file name once it's persisted, else the in-progress state.
-      const up = lastWith(rt.events, (e) => e.stage === "storage.upload" && e.phase === "end");
-      if (up) return ro.storedObject(String(up.data.filename ?? up.data.key ?? ""));
-      return rt.status === "idle" ? "" : ro.storing;
-    }
     case "ingestion": {
-      // 033-ingestion-node — the offline indexer's compact readout: chunk →
-      // embed → store, as the ingestion runs.
+      // 033-ingestion-node + 080 — the offline indexer's compact readout. The object
+      // store is the first phase: surface the stored object until chunking starts,
+      // then chunk → embed → store as the ingestion runs.
       const iStore = lastWith(rt.events, (e) => e.stage === "rag.ingest.store" && e.phase === "end");
       if (iStore) return ro.ingestStored((iStore.data.chunks_stored as number | undefined) ?? 0);
       const iEmbed = lastWith(rt.events, (e) => e.stage === "rag.ingest.embed" && e.phase === "end");
       if (iEmbed) return ro.ingestEmbedding((iEmbed.data.num_vectors as number | undefined) ?? 0);
       const iChunk = lastWith(rt.events, (e) => e.stage === "rag.ingest.chunk");
       if (iChunk) return ro.ingestChunking((iChunk.data.num_chunks as number | undefined) ?? 0);
-      return rt.status === "idle" ? "" : ro.ingestChunking(0);
+      const up = lastWith(rt.events, (e) => e.stage === "storage.upload" && e.phase === "end");
+      if (up) return ro.storedObject(String(up.data.filename ?? up.data.key ?? ""));
+      return rt.status === "idle" ? "" : ro.storing;
     }
     case "rag": {
       // 054-rag-block-expansion: on the Intermediate rung the query-time rerank

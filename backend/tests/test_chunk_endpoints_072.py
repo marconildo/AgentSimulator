@@ -103,7 +103,14 @@ async def test_reingest_streams_stages_and_updates_active():
         ingest_ends = [
             e.stage for e in events if e.phase == "end" and str(e.stage).startswith("rag.ingest.")
         ]
-        assert ingest_ends == ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"]
+        # 080-ingestion-pipeline-merge: tokenize + metadata are now their own phases.
+        assert ingest_ends == [
+            "rag.ingest.chunk",
+            "rag.ingest.tokenize",
+            "rag.ingest.embed",
+            "rag.ingest.metadata",
+            "rag.ingest.store",
+        ]
         # The store stage delegates to the proven build_index with the chosen strategy
         # and the applied params (081 defaults when none supplied).
         from app.rag.chunking import ChunkParams

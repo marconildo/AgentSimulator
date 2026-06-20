@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 080-ingestion-pipeline-merge |
-| **Status** | clarified |
+| **Status** | done |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-06-19 |
 

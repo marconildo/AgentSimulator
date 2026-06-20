@@ -29,8 +29,11 @@ export type StationId =
   | "agent"
   | "rag"
   | "pageindex" // 056-ragless-pageindex — reasoning-based retrieval box (owns pageindex.*)
-  | "ingestion" // 033-ingestion-node — the offline RAG indexer (owns rag.ingest.*)
-  | "storage" // 034-storage-ingestion-flow — durable object storage for uploads
+  // 033-ingestion-node + 080-ingestion-pipeline-merge — the offline indexer. Owns the
+  // whole upload write-path: storage.upload (durable object write, its "Object store"
+  // phase, 034) → chunk → tokenize → embed → metadata → store. The standalone Object
+  // Storage node was folded in here (080); it is now a phase in the ingestion drill-in.
+  | "ingestion"
   | "mcp"
   | "llm"
   | "database"
@@ -443,41 +446,6 @@ const STATIONS_SRC: StationSrc[] = [
     position: { x: 980, y: 112 },
   },
   {
-    id: "storage",
-    tier: "services",
-    title: { en: "Object Storage", pt: "Armazenamento de objetos" },
-    subtitle: { en: "Uploaded documents", pt: "Documentos enviados" },
-    icon: "🪣",
-    accent: "var(--color-ok)",
-    tag: "BLOB",
-    blurb: {
-      en: "Durable object storage for uploaded files. On upload the API writes the document here first; the indexer then reads it back to chunk, embed and upsert. Storing the original decouples “received” from “indexed” and lets the file be re-chunked when the embedding model changes.",
-      pt: "Armazenamento de objetos durável para arquivos enviados. No upload, a API grava o documento aqui primeiro; o indexador então o lê de volta para chunkar, embeddar e fazer upsert. Guardar o original desacopla “recebido” de “indexado” e permite re-chunkar o arquivo quando o modelo de embedding muda.",
-    },
-    why: {
-      en: "Uploading the file to durable object storage first decouples “received” from “indexed”: the original is safely stored before (and independently of) chunking, can be re-indexed when the embedding model changes, and is reached over a private endpoint rather than the public internet.",
-      pt: "Enviar o arquivo primeiro para um armazenamento de objetos durável desacopla “recebido” de “indexado”: o original é guardado com segurança antes de (e independentemente de) ser chunkado, pode ser reindexado quando o modelo de embedding muda, e é acessado por um endpoint privado em vez da internet pública.",
-    },
-    whatBreaks: {
-      en: "Skip object storage and ingestion has only the in-flight request bytes: if indexing fails there is nothing to retry from, you can't re-chunk after a model change, and a large upload must be held in memory instead of streamed from a durable store.",
-      pt: "Pule o armazenamento de objetos e a ingestão só tem os bytes da requisição em trânsito: se a indexação falhar não há de onde repetir, você não consegue re-chunkar após uma troca de modelo, e um upload grande precisa ficar em memória em vez de ser lido de um store durável.",
-    },
-    generic: { en: "Object / blob storage", pt: "Armazenamento de objetos / blobs" },
-    clouds: {
-      azure: "Azure Blob Storage",
-      aws: "Amazon S3",
-      gcp: "Cloud Storage",
-    },
-    tech: [
-      { k: { en: "store", pt: "armazenamento" }, v: "filesystem (Blob/S3 stand-in)" },
-      { k: { en: "key", pt: "chave" }, v: "session / document / filename" },
-      { k: { en: "order", pt: "ordem" }, v: "write-before-index" },
-      { k: { en: "access", pt: "acesso" }, v: "private endpoint" },
-    ],
-    stages: ["storage.upload"],
-    position: { x: 980, y: 280 },
-  },
-  {
     id: "rag",
     tier: "services",
     // 054 amendment: the node represents the whole query-time RAG pipeline (embed →
@@ -575,8 +543,8 @@ const STATIONS_SRC: StationSrc[] = [
     accent: "var(--color-ok)",
     tag: "INDEX",
     blurb: {
-      en: "Builds the knowledge base offline: split documents into chunks, embed them, and upsert the vectors into the index. Runs on startup (if missing), on each PDF upload, and rebuilds when the embedding model/dimension changes.",
-      pt: "Constrói a base de conhecimento offline: divide documentos em chunks, gera embeddings e faz upsert dos vetores no índice. Roda na inicialização (se ausente), a cada upload de PDF e reconstrói quando o modelo/dimensão de embedding muda.",
+      en: "Builds the knowledge base offline. On upload it first writes the original to durable object storage, then reads it back and runs the pipeline: chunk → tokenize → embed → extract metadata → upsert the vectors into the index. Runs on startup (if missing), on each PDF upload, and rebuilds when the embedding model/dimension changes. Open the full pipeline to walk every phase.",
+      pt: "Constrói a base de conhecimento offline. No upload, primeiro grava o original em armazenamento de objetos durável, depois o lê de volta e roda o pipeline: dividir → tokenizar → embeddar → extrair metadados → fazer upsert dos vetores no índice. Roda na inicialização (se ausente), a cada upload de PDF e reconstrói quando o modelo/dimensão de embedding muda. Abra o pipeline completo para percorrer cada fase.",
     },
     why: {
       en: "Indexing is the offline half of RAG and a different job from query-time search: documents are chunked, embedded and upserted ahead of time so retrieval can be fast at request time. Chunking strategy and refresh policy live here, not on the query path.",
@@ -593,12 +561,26 @@ const STATIONS_SRC: StationSrc[] = [
       gcp: "Vertex AI Pipelines / Dataflow",
     },
     tech: [
-      { k: { en: "pipeline", pt: "pipeline" }, v: "docs → chunk → embed → upsert" },
-      { k: { en: "chunking", pt: "chunking" }, v: "900 chars / 150 overlap" },
+      { k: { en: "object store", pt: "armazenamento de objetos" }, v: "Blob / S3 (durable original)" },
+      {
+        k: { en: "pipeline", pt: "pipeline" },
+        v: "store → chunk → tokenize → embed → metadata → upsert",
+      },
+      { k: { en: "chunking", pt: "chunking" }, v: "active strategy · 900 chars / 150 overlap" },
       { k: { en: "embeddings", pt: "embeddings" }, v: "text-embedding-3-small" },
       { k: { en: "trigger", pt: "gatilho" }, v: "startup · PDF upload · dim drift" },
     ],
-    stages: ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"],
+    // 080-ingestion-pipeline-merge: storage.upload (the durable object write, the
+    // station's first "Object store" phase) was folded in here from the old standalone
+    // Object Storage node, and tokenize + metadata are now their own phases.
+    stages: [
+      "storage.upload",
+      "rag.ingest.chunk",
+      "rag.ingest.tokenize",
+      "rag.ingest.embed",
+      "rag.ingest.metadata",
+      "rag.ingest.store",
+    ],
     position: { x: 980, y: 400 },
   },
   {
@@ -1048,31 +1030,12 @@ const HOPS_SRC: HopSrc[] = [
     sourceHandle: "right",
     targetHandle: "left",
   },
-  // 034-storage-ingestion-flow — the upload write-path. The Backend orchestrates:
-  // it persists the file to storage (backend→storage), then calls the indexer
-  // (backend→ingestion), which reads the stored object and upserts the vectors
-  // (ingestion→rag). These animate only during a PDF upload; a normal chat leaves
-  // them idle. (storage↔ingestion isn't a direct edge — that leg routes through
-  // the backend hub, matching "backend calls the indexer after the write".)
-  {
-    source: "backend",
-    target: "storage",
-    label: { en: "object PUT", pt: "PUT de objeto" },
-    protocol: {
-      en: "HTTPS / TLS — object PUT to managed storage",
-      pt: "HTTPS / TLS — PUT de objeto ao armazenamento gerenciado",
-    },
-    detail: {
-      en: "The API uploads the received file to object storage over a private endpoint",
-      pt: "A API envia o arquivo recebido ao armazenamento de objetos por um endpoint privado",
-    },
-    comm: "sync", // the API awaits the durable write before indexing
-    secure: true,
-    zone: "private",
-    controls: { en: "Private Endpoint · TLS · IAM", pt: "Private Endpoint · TLS · IAM" },
-    sourceHandle: "right",
-    targetHandle: "left",
-  },
+  // 034-storage-ingestion-flow + 080-ingestion-pipeline-merge — the upload write-path.
+  // The Backend calls the indexer (backend→ingestion); the indexer persists the original
+  // to durable object storage (its first "Object store" phase), reads it back, and upserts
+  // the vectors (ingestion→rag). These animate only during a PDF upload; a normal chat
+  // leaves them idle. (080 folded the standalone Object Storage node into the indexer, so
+  // the old backend→storage hop is gone — durable storage is now an internal phase.)
   {
     source: "backend",
     target: "ingestion",
@@ -1082,8 +1045,8 @@ const HOPS_SRC: HopSrc[] = [
       pt: "Rede privada · invoca o indexador (em processo / mTLS)",
     },
     detail: {
-      en: "Having persisted the file, the API calls the indexer with the object key; the indexer reads the stored object and builds the index",
-      pt: "Após persistir o arquivo, a API chama o indexador com a chave do objeto; o indexador lê o objeto armazenado e constrói o índice",
+      en: "The API hands the received file to the indexer, which persists it to durable object storage, reads it back, and builds the index",
+      pt: "A API entrega o arquivo recebido ao indexador, que o persiste em armazenamento de objetos durável, lê de volta e constrói o índice",
     },
     comm: "sync", // the API awaits the indexing before responding
     secure: true,
@@ -1288,7 +1251,9 @@ function relabelAgentForRuntime(s: StationMeta, lang: Lang, runtime: Runtime): S
 // upload, so they (and any hop touching them) are hidden unless the current trace
 // shows an upload (`showUpload`, derived from the event log by `hasUploadActivity`).
 // They stay **real** stations (not `comingSoon`); this is render-gating only.
-export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["storage", "ingestion"]);
+// 080-ingestion-pipeline-merge: object storage folded into the indexer, so the
+// only upload-revealed station is `ingestion` (its drill-in walks the phases).
+export const UPLOAD_ONLY_STATIONS: ReadonlySet<StationId> = new Set(["ingestion"]);
 
 // Per-station glossary key for the dense, jargon-y compact readout each node
 // shows ("decision: answer", "top-4 · score 0.50"). `StationNode` appends the

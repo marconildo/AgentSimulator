@@ -256,8 +256,9 @@ def test_chat_lazy_creates_session_when_absent():
 
 @pytest.mark.openai
 def test_upload_document_streams_ingestion_stages_and_lists_it():
-    # AC9 + AC2 (over HTTP) — the upload endpoint streams chunk -> embed -> store
-    # and the PDF then appears in the conversation's document list.
+    # AC9 + AC2 (over HTTP) + 080 — the upload endpoint streams the full pipeline
+    # (chunk -> tokenize -> embed -> metadata -> store) and the PDF then appears in
+    # the conversation's document list.
     from tests.test_ingestion import make_pdf
 
     with TestClient(app) as client:
@@ -282,10 +283,18 @@ def test_upload_document_streams_ingestion_stages_and_lists_it():
                     elif current == "done":
                         done = payload
 
-        # The three ingest stages fire, in order (each appears as START + END).
-        ingest_ends = [s for s in stages if s.startswith("rag.ingest")]
-        first_seen = list(dict.fromkeys(ingest_ends))
-        assert first_seen == ["rag.ingest.chunk", "rag.ingest.embed", "rag.ingest.store"]
+        # The five ingest stages fire, in order (each appears as START + END), and
+        # storage.upload precedes them (its first "Object store" phase, 080).
+        ingest_seen = list(dict.fromkeys(s for s in stages if s.startswith("rag.ingest")))
+        assert ingest_seen == [
+            "rag.ingest.chunk",
+            "rag.ingest.tokenize",
+            "rag.ingest.embed",
+            "rag.ingest.metadata",
+            "rag.ingest.store",
+        ]
+        assert "storage.upload" in stages
+        assert stages.index("storage.upload") < stages.index("rag.ingest.chunk")
         assert done and done["document_id"]
 
         docs = client.get(f"/api/sessions/{sid}/documents").json()

@@ -5,6 +5,7 @@ import { useLang, useT, type Lang } from "../i18n";
 import type { Strings } from "../i18n/strings";
 import { CancelButton } from "./CancelButton";
 import { ConversationHud } from "./ConversationHud";
+import { Markdown } from "./Markdown";
 import {
   isAgentLockedError,
   listAgents,
@@ -558,7 +559,7 @@ function Exchange({
             t={t}
           />
         ) : (
-          message.answer
+          <Markdown text={message.answer} />
         )}
       </AgentMessage>
     </div>
@@ -573,7 +574,7 @@ function BubbleBody({ bubble, t }: { bubble: PendingBubble; t: Strings }) {
   if (bubble.kind === "answer") {
     return (
       <>
-        {bubble.text}
+        <Markdown text={bubble.text} />
         {bubble.streaming && <span className="caret">▍</span>}
       </>
     );

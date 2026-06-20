@@ -25,11 +25,10 @@ const SELECTIONS: { name: string; sel: ResolvedSelection }[] = [
   },
 ];
 
-describe("upload nodes hidden by default (035-conditional-upload-nodes AC5)", () => {
+describe("upload node hidden by default (035 + 080 AC6)", () => {
   for (const { name, sel } of SELECTIONS) {
-    it(`omits storage + ingestion from the layout in ${name} with no upload`, () => {
+    it(`omits ingestion from the layout in ${name} with no upload`, () => {
       const layout = computeLayout(new Set(), sel);
-      expect(layout.positions.storage).toBeUndefined();
       expect(layout.positions.ingestion).toBeUndefined();
       // the query-path data nodes are still laid out
       expect(layout.positions.rag).toBeDefined();
@@ -38,30 +37,26 @@ describe("upload nodes hidden by default (035-conditional-upload-nodes AC5)", ()
   }
 });
 
-describe("storage write-path placement (034 AC7 · shown with showUpload)", () => {
+describe("ingestion write-path placement (080 AC8 · shown with showUpload)", () => {
   for (const { name, sel } of SELECTIONS) {
-    it(`stacks storage → ingestion → rag downward inside the services tier in ${name}`, () => {
+    it(`stacks ingestion → rag downward inside the services tier in ${name}`, () => {
       const layout = computeLayout(new Set(), sel, true);
       const { positions, heights, tierBoxes } = layout;
 
-      // All three present and stacked in write-path order so the upload edges
-      // flow downward (source-bottom → target-top).
-      expect(positions.storage).toBeDefined();
-      expect(positions.storage.y).toBeLessThan(positions.ingestion.y);
+      // 080: object storage folded into ingestion, so the single ingestion node
+      // sits above rag and the upload edge flows downward (source-bottom → target-top).
+      expect(positions.ingestion).toBeDefined();
       expect(positions.ingestion.y).toBeLessThan(positions.rag.y);
 
-      // Stacked, never overlapping its upper neighbour (database) or the next node.
-      expect(positions.storage.y).toBeGreaterThanOrEqual(
+      // Stacked, never overlapping its upper neighbour (database).
+      expect(positions.ingestion.y).toBeGreaterThanOrEqual(
         positions.database.y + heights.database,
       );
-      expect(positions.ingestion.y).toBeGreaterThanOrEqual(
-        positions.storage.y + heights.storage,
-      );
 
-      // The services tier box wraps storage (a member of that tier).
+      // The services tier box wraps ingestion (a member of that tier).
       const box = tierBoxes.services;
-      expect(positions.storage.x).toBeGreaterThanOrEqual(box.x);
-      expect(positions.storage.y + heights.storage).toBeLessThanOrEqual(box.y + box.h);
+      expect(positions.ingestion.x).toBeGreaterThanOrEqual(box.x);
+      expect(positions.ingestion.y + heights.ingestion).toBeLessThanOrEqual(box.y + box.h);
     });
   }
 });

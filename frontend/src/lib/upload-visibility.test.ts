@@ -1,6 +1,8 @@
-// 035-conditional-upload-nodes — Storage + Ingestion (and their hops) are hidden
-// by default and revealed only when the current trace shows an upload. Visibility
-// is a pure projection of the event log via hasUploadActivity.
+// 035-conditional-upload-nodes + 080-ingestion-pipeline-merge — the Ingestion node
+// (and its hops) is hidden by default and revealed only when the current trace shows
+// an upload. 080 folded Object Storage into Ingestion, so `ingestion` is the only
+// upload-revealed station and there are two write-path hops (backend→ingestion,
+// ingestion→rag). Visibility is a pure projection of the log via hasUploadActivity.
 
 import { describe, expect, it } from "vitest";
 
@@ -9,9 +11,8 @@ import { hasUploadActivity } from "./derive";
 import { DEFAULT_SELECTION } from "./selection";
 import { visibleHopsFor, visibleStationIdsFor } from "./stations";
 
-const UPLOAD_STATIONS = ["storage", "ingestion"] as const;
+const UPLOAD_STATIONS = ["ingestion"] as const;
 const UPLOAD_HOPS = [
-  ["backend", "storage"],
   ["backend", "ingestion"],
   ["ingestion", "rag"],
 ] as const;
@@ -36,7 +37,7 @@ describe("hasUploadActivity (AC4)", () => {
 });
 
 describe("station visibility gated by showUpload (AC1, AC2)", () => {
-  it("hides storage + ingestion by default", () => {
+  it("hides the ingestion node by default", () => {
     const ids = new Set(visibleStationIdsFor(DEFAULT_SELECTION));
     for (const id of UPLOAD_STATIONS) expect(ids.has(id)).toBe(false);
     // the query-path nodes are unaffected
@@ -45,14 +46,14 @@ describe("station visibility gated by showUpload (AC1, AC2)", () => {
     }
   });
 
-  it("reveals storage + ingestion when showUpload is set", () => {
+  it("reveals the ingestion node when showUpload is set", () => {
     const ids = new Set(visibleStationIdsFor(DEFAULT_SELECTION, true));
     for (const id of UPLOAD_STATIONS) expect(ids.has(id)).toBe(true);
   });
 });
 
 describe("hop visibility gated by showUpload (AC3)", () => {
-  it("hides the three write-path hops by default", () => {
+  it("hides the two write-path hops by default", () => {
     const hops = visibleHopsFor("en", DEFAULT_SELECTION);
     for (const [s, t] of UPLOAD_HOPS) {
       expect(hops.some((h) => h.source === s && h.target === t)).toBe(false);
@@ -61,7 +62,7 @@ describe("hop visibility gated by showUpload (AC3)", () => {
     expect(hops.some((h) => h.source === "agent" && h.target === "rag")).toBe(true);
   });
 
-  it("shows the three write-path hops when showUpload is set", () => {
+  it("shows the two write-path hops when showUpload is set", () => {
     const hops = visibleHopsFor("en", DEFAULT_SELECTION, true);
     for (const [s, t] of UPLOAD_HOPS) {
       expect(hops.some((h) => h.source === s && h.target === t)).toBe(true);

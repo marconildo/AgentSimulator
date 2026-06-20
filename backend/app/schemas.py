@@ -61,14 +61,24 @@ class Stage(StrEnum):
     PAGEINDEX_TREE = "pageindex.tree"
     PAGEINDEX_NAVIGATE = "pageindex.navigate"
     PAGEINDEX_SELECT = "pageindex.select"
-    # PDF ingestion (002-interactive-chat): chunk -> embed -> store. These animate
-    # the same `rag` station as retrieval, but for *writing* user documents.
+    # PDF ingestion (002-interactive-chat): the offline indexer write-path. These all
+    # animate the single `ingestion` station (080-ingestion-pipeline-merge folded the
+    # old standalone Object Storage node in as the first phase). 080 also split two
+    # real steps out of the original chunk/store into their own stages so the canvas
+    # walks them like RAG's query-time sub-stages:
+    #   storage.upload -> chunk -> tokenize -> embed -> metadata -> store
+    # `rag.ingest.tokenize` (080) counts the cl100k tokens of each chunk; `rag.ingest.metadata`
+    # (080) builds the per-chunk metadata records (position / doc_type / scoping keys) handed
+    # to the store step — so what the metadata stage reports is exactly what is persisted.
     RAG_INGEST_CHUNK = "rag.ingest.chunk"
+    RAG_INGEST_TOKENIZE = "rag.ingest.tokenize"
     RAG_INGEST_EMBED = "rag.ingest.embed"
+    RAG_INGEST_METADATA = "rag.ingest.metadata"
     RAG_INGEST_STORE = "rag.ingest.store"
     # Object-storage upload (034-storage-ingestion-flow): the API persists the
     # uploaded document to durable object storage *before* the indexer reads it
-    # back to chunk/embed/store. Fires between BACKEND and the rag.ingest.* stages.
+    # back. 080 maps this to the `ingestion` station too (its "Object store" phase);
+    # it stays the first ingest stage, firing between BACKEND and rag.ingest.chunk.
     STORAGE_UPLOAD = "storage.upload"
     MCP_DISCOVER = "mcp.discover"
     MCP_CALL = "mcp.call"

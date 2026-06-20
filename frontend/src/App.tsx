@@ -12,6 +12,7 @@ import { ConfigToggle } from "./components/ConfigToggle";
 import { DemoBanner } from "./components/DemoBanner";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { FrontendDetail } from "./components/FrontendDetail";
+import { IngestionPipelinePanel } from "./components/IngestionPipelinePanel";
 import { McpDetail } from "./components/McpDetail";
 import { PageIndexPipelinePanel } from "./components/PageIndexPipelinePanel";
 import { RagPipelinePanel } from "./components/RagPipelinePanel";
@@ -223,6 +224,8 @@ export default function App() {
       {detail === "database" && <DatabaseDetail onClose={closeDetail} />}
       {detail === "backend" && <BackendDetail onClose={closeDetail} />}
       {detail === "frontend" && <FrontendDetail onClose={closeDetail} />}
+      {/* 080-ingestion-pipeline-merge — the merged ingestion node's phase walk. */}
+      {detail === "ingestion" && <IngestionPipelinePanel onClose={closeDetail} />}
     </>
   );
 

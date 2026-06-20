@@ -331,38 +331,29 @@ function renderDetail(
         </>
       );
     }
-    case "storage": {
-      // 034-storage-ingestion-flow — durable object storage. Shows the real
-      // stored object (key / size / type) when an upload is in scope, plus a
-      // bilingual note on why the upload write-path goes through storage first.
-      const up = pick(events, "storage.upload", "end");
-      const size = up?.data.size_bytes as number | undefined;
-      return (
-        <>
-          {up && (
-            <Section title={i.storedObject}>
-              <KeyVal k={i.objectKey} v={String(up.data.key ?? "—")} />
-              <KeyVal k={i.size} v={typeof size === "number" ? `${size.toLocaleString()} B` : "—"} />
-              <KeyVal k={i.contentType} v={String(up.data.content_type ?? "—")} />
-            </Section>
-          )}
-          <Section title={i.whyStorage}>
-            <p className="text-[11px] leading-relaxed text-[var(--color-text-soft)]">
-              {i.whyStorageValue}
-            </p>
-          </Section>
-        </>
-      );
-    }
     case "ingestion": {
-      // 033-ingestion-node — the offline RAG indexer. Shows the real
-      // chunk → embed → store detail when an ingestion is in scope, plus the
-      // production concepts (chunking params, trigger/timing, refresh/staleness).
+      // 033-ingestion-node + 080-ingestion-pipeline-merge — the offline RAG indexer,
+      // now owning the whole write-path. Shows the durable object write (storage.upload,
+      // its first "Object store" phase) and the chunk → embed → store detail when an
+      // ingestion is in scope, plus the production concepts (chunking params, trigger,
+      // refresh/staleness). The full phase walk lives in the ingestion drill-in.
+      const up = pick(events, "storage.upload", "end");
+      const upSize = up?.data.size_bytes as number | undefined;
       const ingChunk = pick(events, "rag.ingest.chunk", "end");
       const ingEmbed = pick(events, "rag.ingest.embed", "end");
       const ingStore = pick(events, "rag.ingest.store", "end");
       return (
         <>
+          {up && (
+            <Section title={i.storedObject}>
+              <KeyVal k={i.objectKey} v={String(up.data.key ?? "—")} />
+              <KeyVal
+                k={i.size}
+                v={typeof upSize === "number" ? `${upSize.toLocaleString()} B` : "—"}
+              />
+              <KeyVal k={i.contentType} v={String(up.data.content_type ?? "—")} />
+            </Section>
+          )}
           {(ingChunk || ingEmbed || ingStore) && (
             <IngestionDetail chunk={ingChunk} embed={ingEmbed} store={ingStore} i={i} />
           )}
