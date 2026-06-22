@@ -108,9 +108,12 @@ export function Caption({ children }: { children: ReactNode }) {
   );
 }
 
-export function Scroll({ children }: { children: ReactNode }) {
+export function Scroll({ children, testid }: { children: ReactNode; testid?: string }) {
   return (
-    <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-panel-2)] p-2 font-mono text-[11px] leading-snug text-[var(--color-text-soft)]">
+    <pre
+      data-testid={testid}
+      className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-panel-2)] p-2 font-mono text-[11px] leading-snug text-[var(--color-text-soft)]"
+    >
       {children}
     </pre>
   );

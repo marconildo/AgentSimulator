@@ -163,7 +163,7 @@ async def test_upload_honors_active_chunking_strategy():
     # recursive splitter): fixed vs recursive yield different boundaries for the
     # same document, and the chunk stage reports the strategy it actually used.
     from app.rag import ingest as ingest_mod
-    from app.rag.chunking import ChunkStrategy
+    from app.rag.chunking import CHUNK_OVERLAP, CHUNK_SIZE, ChunkStrategy
 
     # A document long enough that fixed (mid-sentence char windows) and recursive
     # (paragraph-packed) disagree on chunk count.
@@ -191,7 +191,12 @@ async def test_upload_honors_active_chunking_strategy():
     assert fixed["strategy"] == "fixed"
     assert recursive["strategy"] == "recursive"
     # The whole point of AC10: the active strategy actually changes the chunking.
-    assert fixed["num_chunks"] != recursive["num_chunks"]
+    # Compare the produced chunk texts (boundaries), not the counts: counts can
+    # coincide (recursive now correctly sub-splits oversized blocks under chunk_size,
+    # so it may match fixed's count) — what must differ is *where* the cuts land.
+    assert fixed["chunk_texts"] != recursive["chunk_texts"]
+    # And recursive must honor the cap now (no single oversized chunk).
+    assert all(len(c) <= CHUNK_SIZE + CHUNK_OVERLAP + 2 for c in recursive["chunk_texts"])
 
 
 @pytest.mark.openai

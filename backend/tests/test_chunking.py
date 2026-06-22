@@ -174,6 +174,31 @@ def test_recursive_size_honored():
     assert len(small) >= len(big)
 
 
+def test_recursive_splits_oversized_paragraph():
+    # Regression: a single paragraph much larger than chunk_size must be sub-split
+    # (real recursive splitting via a separator ladder), not emitted whole. Before
+    # the fix this produced ONE oversized chunk ~ the full paragraph length.
+    params = ChunkParams(chunk_size=300, chunk_overlap=0)
+    big_para = " ".join(
+        f"Sentence number {i} about retrieval augmented generation." for i in range(60)
+    )
+    assert "\n\n" not in big_para and len(big_para) > 3000  # one giant paragraph
+    chunks = chunk_texts(big_para, ChunkStrategy.RECURSIVE, params=params)
+    assert len(chunks) > 1
+    assert all(len(c) <= params.chunk_size for c in chunks)
+
+
+def test_recursive_oversized_paragraph_bounded_with_overlap():
+    # Even with an overlap tail carried across boundaries, no chunk balloons to a
+    # multiple of chunk_size — it stays within chunk_size + the carried overlap.
+    params = ChunkParams(chunk_size=300, chunk_overlap=50)
+    big_para = " ".join(f"word{i}" for i in range(800))  # ~4500 chars, no sentences
+    chunks = chunk_texts(big_para, ChunkStrategy.RECURSIVE, params=params)
+    assert len(chunks) > 1
+    cap = params.chunk_size + params.chunk_overlap + len("\n\n")
+    assert all(len(c) <= cap for c in chunks)
+
+
 def test_clamp_params_enforces_bounds():
     # AC3/AC8 — values outside the configured bounds are clamped, never crash.
     lo = CHUNK_PARAM_BOUNDS[ChunkStrategy.FIXED]["chunk_size"][1]

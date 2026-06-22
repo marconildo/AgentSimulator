@@ -42,6 +42,12 @@ AGENTIC_MAX_SEGMENTS = 12
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 
+# Separator ladder for sub-splitting a paragraph that is itself larger than
+# chunk_size (real recursive splitting): try the largest structural break first,
+# fall through to ever-smaller ones, and finally a hard character cut so the cap
+# is always honored. "\n\n" is consumed by _recursive_texts before this runs.
+_RECURSIVE_SEPARATORS = ["\n", ". ", " "]
+
 
 class ChunkStrategy(StrEnum):
     FIXED = "fixed"
@@ -139,9 +145,53 @@ class Chunk:
 # --- the four strategies (text-only cores) -----------------------------------
 
 
+def _split_oversized(segment: str, limit: int, separators: list[str]) -> list[str]:
+    """Recursively break a segment longer than ``limit`` into <= ``limit`` pieces,
+    walking the separator ladder and falling back to a hard character cut so the
+    cap is always honored. Segments already within ``limit`` are returned as-is."""
+    if len(segment) <= limit:
+        return [segment]
+    for i, sep in enumerate(separators):
+        if sep not in segment:
+            continue
+        pieces: list[str] = []
+        buffer = ""
+        for part in segment.split(sep):
+            candidate = f"{buffer}{sep}{part}" if buffer else part
+            if len(candidate) <= limit:
+                buffer = candidate
+                continue
+            if buffer:
+                pieces.append(buffer)
+            if len(part) > limit:
+                pieces.extend(_split_oversized(part, limit, separators[i + 1 :]))
+                buffer = ""
+            else:
+                buffer = part
+        if buffer:
+            pieces.append(buffer)
+        return pieces
+    # No separator present — hard character cut (last resort, never exceeds limit).
+    return [segment[j : j + limit] for j in range(0, len(segment), limit)]
+
+
 def _recursive_texts(text: str, params: ChunkParams = DEFAULT_PARAMS) -> list[str]:
-    """Pack paragraphs into overlapping windows. The canonical default (== old chunk_text)."""
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    """Pack paragraphs into overlapping windows. The canonical default (== old chunk_text).
+
+    A single paragraph larger than ``chunk_size`` is first sub-split via the separator
+    ladder (``_split_oversized``) so it can never become one oversized chunk — real
+    recursive splitting. Paragraphs that already fit are untouched, so on a corpus where
+    no paragraph exceeds ``chunk_size`` the output is byte-for-byte the original.
+    """
+    paragraphs: list[str] = []
+    for raw in text.split("\n\n"):
+        para = raw.strip()
+        if not para:
+            continue
+        if len(para) > params.chunk_size:
+            paragraphs.extend(_split_oversized(para, params.chunk_size, _RECURSIVE_SEPARATORS))
+        else:
+            paragraphs.append(para)
     chunks: list[str] = []
     buffer = ""
     for para in paragraphs:

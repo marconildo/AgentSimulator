@@ -734,6 +734,7 @@ export interface Strings {
     colSnippet: string;
     selectChunkHint: string;
     fullChunkText: string;
+    overlapLegend: string;
     encoding: string;
     totalTokens: string;
     perChunkTokens: string;
@@ -1993,6 +1994,7 @@ const en: Strings = {
     colSnippet: "preview",
     selectChunkHint: "Select a chunk above to read its full text.",
     fullChunkText: "full chunk text",
+    overlapLegend: "overlap with previous chunk",
     encoding: "encoding",
     totalTokens: "total tokens",
     perChunkTokens: "tokens per chunk",
@@ -3110,6 +3112,7 @@ const pt: Strings = {
     colSnippet: "prévia",
     selectChunkHint: "Selecione um chunk acima para ler seu texto completo.",
     fullChunkText: "texto completo do chunk",
+    overlapLegend: "sobreposição com o chunk anterior",
     encoding: "encoding",
     totalTokens: "total de tokens",
     perChunkTokens: "tokens por chunk",

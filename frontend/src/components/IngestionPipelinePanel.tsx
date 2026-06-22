@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useT } from "../i18n";
+import { overlapPrefixLen } from "../lib/chunkOverlap";
 import { selectIngestion } from "../lib/stationDetail";
 import { useSimulator } from "../store/useSimulator";
 import type { TraceEvent } from "../types/events";
@@ -165,6 +166,7 @@ type ChunkLabels = {
   colSnippet: string;
   selectChunkHint: string;
   fullChunkText: string;
+  overlapLegend: string;
 };
 
 function ChunkTable({
@@ -222,11 +224,54 @@ function ChunkTable({
           {labels.selectChunkHint}
         </div>
       ) : (
-        <>
-          <Caption>{`${labels.fullChunkText} · [${selected}]`}</Caption>
-          <Scroll>{chunks[selected]}</Scroll>
-        </>
+        <ChunkFullText
+          text={chunks[selected]}
+          prev={chunks[selected - 1]}
+          index={selected}
+          labels={labels}
+        />
       )}
+    </>
+  );
+}
+
+// 087-chunk-overlap-highlight — the opened chunk's full text, with the leading region
+// it carries from the previous chunk (the overlap) highlighted. The overlap length is a
+// pure projection: the longest suffix of the previous chunk that prefixes this one. The
+// first chunk (no previous) and overlap-free strategies render plain (no highlight).
+function ChunkFullText({
+  text,
+  prev,
+  index,
+  labels,
+}: {
+  text: string;
+  prev: string | undefined;
+  index: number;
+  labels: ChunkLabels;
+}) {
+  const overlap = overlapPrefixLen(prev, text);
+  return (
+    <>
+      <Caption>{`${labels.fullChunkText} · [${index}]`}</Caption>
+      {overlap > 0 && (
+        <div className="mb-1 flex items-center gap-1.5 text-[10px] text-[var(--color-muted)]">
+          <span className="inline-block h-2.5 w-3.5 rounded-sm bg-[color-mix(in_srgb,var(--color-accent)_38%,transparent)]" />
+          {labels.overlapLegend}
+        </div>
+      )}
+      <Scroll testid="chunk-full-text">
+        {overlap > 0 ? (
+          <>
+            <mark className="rounded-sm bg-[color-mix(in_srgb,var(--color-accent)_38%,transparent)] text-[var(--color-ink)]">
+              {text.slice(0, overlap)}
+            </mark>
+            {text.slice(overlap)}
+          </>
+        ) : (
+          text
+        )}
+      </Scroll>
     </>
   );
 }

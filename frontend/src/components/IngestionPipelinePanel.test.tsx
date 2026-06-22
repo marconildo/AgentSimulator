@@ -163,3 +163,56 @@ describe("IngestionPipelinePanel — phase walk (080 AC7)", () => {
     expect(screen.getByText(/upload a document/i)).toBeTruthy();
   });
 });
+
+// 087-chunk-overlap-highlight — the leading text a chunk carries from the previous
+// one is highlighted in the opened full-text view (a pure projection of chunk_texts).
+const OVERLAP = "The shared boundary text segment.";
+const OVERLAP_CHUNKS = [
+  `Zero zero zero opening of the first chunk padding padding padding padding. ${OVERLAP}`,
+  `${OVERLAP} One one one body of the second chunk padding padding padding marker.`,
+];
+
+function overlapTurn(): TraceEvent[] {
+  seq = 0;
+  return [
+    ev("rag.ingest.chunk", "end", {
+      strategy: "recursive",
+      num_chunks: 2,
+      chunk_size: 900,
+      chunk_overlap: 150,
+      total_chars: 400,
+      chunk_texts: OVERLAP_CHUNKS,
+    }),
+  ];
+}
+
+describe("IngestionPipelinePanel — overlap highlight (087)", () => {
+  it("highlights the carried overlap prefix of the selected chunk (AC3)", () => {
+    seed(overlapTurn());
+    const { container } = render(<IngestionPipelinePanel onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText(/One one one body/));
+
+    const full = container.querySelector('[data-testid="chunk-full-text"]') as HTMLElement;
+    expect(full).toBeTruthy();
+    const mark = full.querySelector("mark") as HTMLElement;
+    expect(mark).toBeTruthy();
+    expect(mark.textContent).toBe(OVERLAP);
+    // No characters added or dropped: highlight + remainder == the full chunk text.
+    expect(full.textContent).toBe(OVERLAP_CHUNKS[1]);
+    // The bilingual legend (AC5) accompanies the highlight.
+    expect(screen.getByText(/overlap with previous chunk/i)).toBeTruthy();
+  });
+
+  it("shows no highlight for the first chunk (AC4)", () => {
+    seed(overlapTurn());
+    const { container } = render(<IngestionPipelinePanel onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText(/Zero zero zero opening/));
+
+    const full = container.querySelector('[data-testid="chunk-full-text"]') as HTMLElement;
+    expect(full).toBeTruthy();
+    expect(full.querySelector("mark")).toBeNull();
+    expect(full.textContent).toBe(OVERLAP_CHUNKS[0]);
+  });
+});
