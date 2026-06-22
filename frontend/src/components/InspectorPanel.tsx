@@ -6,6 +6,7 @@ import { CLOUDS, cloudValue, useCloud } from "../lib/cloud";
 import { formatTokens, formatTps, formatUsd } from "../lib/cost";
 import type { DerivedView, UsageTotals } from "../lib/derive";
 import { hasUploadActivity } from "../lib/derive";
+import { deriveHopData, type EdgeChainSeg } from "../lib/hopDetail";
 import { useActiveModel } from "../lib/activeModel";
 import { useResolvedSelection } from "../lib/selection";
 import { useSettings } from "../lib/settings";
@@ -43,9 +44,14 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
   const lang = useLang((s) => s.lang);
   const sel = useResolvedSelection();
   const events = useSimulator((s) => s.events);
+  const cursor = useSimulator((s) => s.cursor);
   const openTraces = useSimulator((s) => s.openTraces);
   const tracesOpen = useSimulator((s) => s.tracesOpen);
   const closeTraces = useSimulator((s) => s.closeTraces);
+  // 085-hop-communication-detail — the selected arrow (edge id), its detail shown
+  // in this panel body; clearing it returns to the Overview / station.
+  const selectedHop = useSimulator((s) => s.selectedHop);
+  const selectHop = useSimulator((s) => s.selectHop);
   const t = useT();
   const i = t.inspector;
   // 035 — the Overview catalog matches the canvas: list the upload nodes only
@@ -64,6 +70,19 @@ export function InspectorPanel({ selected, view, onSelect }: InspectorPanelProps
   // 038 — the run-level execution-trace tree shares the Inspector body with the
   // station details; it wins over the Overview / a station when open.
   if (tracesOpen) return <ExecutionTracesDetail onBack={closeTraces} />;
+
+  // 085 — a clicked arrow fills the body with its communication detail (theory +
+  // the real data that crossed it this run, cursor-bounded), like a station.
+  if (selectedHop)
+    return (
+      <HopDetail
+        hopId={selectedHop}
+        events={events.slice(0, cursor + 1)}
+        lang={lang}
+        i={i}
+        onBack={() => selectHop(null)}
+      />
+    );
 
   if (!selected)
     return (
@@ -1132,6 +1151,222 @@ function Overview({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// 085-hop-communication-detail — a clicked arrow's detail: the communication
+// theory (from the hop meta) + the REAL data that crossed it this run
+// (`deriveHopData`, cursor-bounded). Lives in the Inspector body, like a station.
+function HopDetail({
+  hopId,
+  events,
+  lang,
+  i,
+  onBack,
+}: {
+  hopId: string;
+  events: TraceEvent[];
+  lang: Lang;
+  i: I;
+  onBack: () => void;
+}) {
+  const [source, target] = hopId.split("-") as [StationId, StationId];
+  const stationById = stationByIdFor(lang);
+  const hop = hopsFor(lang).find((h) => h.source === source && h.target === target);
+  const data = deriveHopData(source, target, events);
+  const sourceTitle = stationById[source]?.title ?? source;
+  const targetTitle = stationById[target]?.title ?? target;
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
+      <button
+        onClick={onBack}
+        className="-mb-1 self-start rounded-md border border-[var(--color-line)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] transition hover:border-[color-mix(in_srgb,var(--color-sky)_55%,transparent)] hover:text-[var(--color-sky-soft)]"
+      >
+        {i.overviewBack}
+      </button>
+
+      <div className="text-base font-semibold" style={{ color: "var(--color-ink)" }}>
+        {sourceTitle} <span className="text-[var(--color-muted)]">→</span> {targetTitle}
+      </div>
+
+      {hop && (
+        <>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip>{hop.zone === "public" ? `🛡️ ${i.zonePublic}` : `🔒 ${i.zonePrivate}`}</Chip>
+            {hop.comm && <Chip>{hop.comm === "async" ? "⇅ async" : "⇄ sync"}</Chip>}
+          </div>
+          {hop.protocol && (
+            <div className="font-mono text-[12px] font-semibold text-[var(--color-sky-soft)]">
+              {hop.secure ? "🔒 " : ""}
+              {hop.protocol}
+            </div>
+          )}
+          {hop.detail && (
+            <p className="text-[13px] leading-relaxed text-[var(--color-text-soft)]">{hop.detail}</p>
+          )}
+          {hop.controls && (
+            <div className="font-mono text-[10.5px] text-[var(--color-muted)]">{hop.controls}</div>
+          )}
+          {hop.why && (
+            <div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                {i.hopWhy}
+              </div>
+              <p className="text-[12px] leading-relaxed text-[var(--color-text-soft)]">{hop.why}</p>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        {i.onThisRun}
+      </div>
+      <HopRunBlock data={data} i={i} />
+    </div>
+  );
+}
+
+function HopRunBlock({ data, i }: { data: ReturnType<typeof deriveHopData>; i: I }) {
+  switch (data.kind) {
+    case "edge":
+      return (
+        <>
+          {data.chain.length > 0 && (
+            <Section title={i.edgeChain}>
+              <EdgeChain chain={data.chain} i={i} />
+            </Section>
+          )}
+          {data.edge && (
+            <Section title={i.hopForwarded}>
+              <KeyVal k={i.edgeScheme} v={data.edge.scheme} />
+              <KeyVal k={i.edgeClient} v={data.edge.client_ip ?? "—"} />
+              <KeyVal k={i.edgeRequestId} v={data.edge.request_id ?? "—"} />
+              {!data.edge.proxied && (
+                <p className="text-[11px] text-[var(--color-label)]">{i.edgeDirectNote}</p>
+              )}
+            </Section>
+          )}
+          {data.requestBody && (
+            <Section title={i.hopRequest}>
+              <Scroll>{JSON.stringify(data.requestBody, null, 2)}</Scroll>
+            </Section>
+          )}
+          {data.answer !== undefined && (
+            <Section title={i.hopAnswer}>
+              <Mono>{data.answer}</Mono>
+            </Section>
+          )}
+          {!data.edge && data.chain.length === 0 && (
+            <p className="text-[12px] text-[var(--color-label)]">{i.noHopData}</p>
+          )}
+        </>
+      );
+    case "request":
+      return (
+        <>
+          {data.requestBody ? (
+            <Section title={i.hopRequest}>
+              <Scroll>{JSON.stringify(data.requestBody, null, 2)}</Scroll>
+            </Section>
+          ) : (
+            <p className="text-[12px] text-[var(--color-label)]">{i.noHopData}</p>
+          )}
+          {data.answer !== undefined && (
+            <Section title={i.hopAnswer}>
+              <Mono>{data.answer}</Mono>
+            </Section>
+          )}
+        </>
+      );
+    case "sql":
+      return (
+        <Section title={i.hopQueries}>
+          {data.queries.map((q, idx) => (
+            <Mono key={idx}>{`${q.operation} → ${q.rows} rows\n${q.sql}`}</Mono>
+          ))}
+        </Section>
+      );
+    case "rag":
+      return (
+        <Section title={i.hopChunks}>
+          <KeyVal k={i.hopChunks} v={String(data.chunks)} />
+          {typeof data.topScore === "number" && (
+            <KeyVal k={i.hopScore} v={data.topScore.toFixed(2)} />
+          )}
+        </Section>
+      );
+    case "mcp":
+      return (
+        <Section title={i.hopToolCalls}>
+          {data.toolCalls.map((c, idx) => (
+            <KeyVal key={idx} k={c.tool} v={c.result} />
+          ))}
+        </Section>
+      );
+    case "llm":
+      return (
+        <>
+          {data.prompt && (
+            <Section title={i.hopPrompt}>
+              {data.prompt.system && (
+                <Labeled label={i.system}>
+                  <Scroll>{data.prompt.system}</Scroll>
+                </Labeled>
+              )}
+              {Array.isArray(data.prompt.tools) && data.prompt.tools.length > 0 && (
+                <Labeled label={i.tools}>
+                  <div className="flex flex-wrap gap-1">
+                    {data.prompt.tools.map((tool) => (
+                      <Chip key={tool}>{tool}</Chip>
+                    ))}
+                  </div>
+                </Labeled>
+              )}
+            </Section>
+          )}
+          {data.usage.totalTokens > 0 && (
+            <Section title={i.usageCost}>
+              <KeyVal k={i.totalTokens} v={formatTokens(data.usage.totalTokens)} />
+              <KeyVal k={i.cost} v={formatUsd(data.usage.costUsd)} />
+            </Section>
+          )}
+          {!data.prompt && data.usage.totalTokens === 0 && (
+            <p className="text-[12px] text-[var(--color-label)]">{i.noHopData}</p>
+          )}
+        </>
+      );
+    case "none":
+    default:
+      return <p className="text-[12px] text-[var(--color-label)]">{i.noHopData}</p>;
+  }
+}
+
+function EdgeChain({ chain, i }: { chain: EdgeChainSeg[]; i: I }) {
+  return (
+    <div className="flex flex-col">
+      {chain.map((seg, idx) => (
+        <Fragment key={seg.id}>
+          <div
+            className={`flex items-center justify-between rounded-md border px-2 py-1 text-[12px] ${
+              seg.real
+                ? "border-[var(--color-sky)] bg-[color-mix(in_srgb,var(--color-sky)_10%,transparent)]"
+                : "border-dashed border-[var(--color-line)]"
+            }`}
+          >
+            <span className="font-medium text-[var(--color-ink)]">{seg.label}</span>
+            <span
+              className={`font-mono text-[11px] ${
+                seg.real ? "text-[var(--color-sky-soft)]" : "text-[var(--color-muted)]"
+              }`}
+            >
+              {seg.real ? (seg.value ?? "—") : i.edgePreview}
+            </span>
+          </div>
+          {idx < chain.length - 1 && <div className="mx-auto h-2 w-px bg-[var(--color-line)]" />}
+        </Fragment>
+      ))}
     </div>
   );
 }

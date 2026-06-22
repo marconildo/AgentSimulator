@@ -174,6 +174,31 @@ describe("merged ingestion station + write-path (080-ingestion-pipeline-merge)",
   });
 });
 
+describe("hop why enrichment (086-hop-detail-enrichment)", () => {
+  // AC1 — every network hop carries a non-empty bilingual `why` (role + reasoning).
+  it("every hop has a non-empty why in en and pt", () => {
+    for (const lang of ["en", "pt"] as const) {
+      for (const h of hopsFor(lang)) {
+        expect(h.why?.trim(), `${h.source}→${h.target}.why (${lang})`).toBeTruthy();
+      }
+    }
+  });
+
+  // AC2 — the public (edge) hop explains the reverse proxy role + extras.
+  it("the frontend→backend why explains the nginx reverse-proxy role + extras", () => {
+    for (const lang of ["en", "pt"] as const) {
+      const hop = hopsFor(lang).find((h) => h.source === "frontend" && h.target === "backend")!;
+      const why = hop.why!.toLowerCase();
+      expect(why).toMatch(/reverse proxy/);
+      expect(why).toMatch(/tls/);
+      // mentions load balancing…
+      expect(why).toMatch(/balanc/);
+      // …and that a reverse proxy can do more than proxy.
+      expect(why).toMatch(/cache|gzip|rate|static|rout/);
+    }
+  });
+});
+
 describe("public frontier (032-network-boundary)", () => {
   // AC5 — a bilingual, non-empty label.
   it("has a bilingual, non-empty label", () => {

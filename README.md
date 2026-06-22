@@ -499,6 +499,57 @@ Each feature above has a numbered spec — e.g. the [maturity ladder](specs/008-
 
 ---
 
+## 🧑‍🤝‍🧑 How to collaborate on this project
+
+This is an open-source learning resource, and the whole point is that **everyone changing it follows
+the same patterns** — the [constitution](.specify/constitution.md)'s non-negotiable principles
+(protocol-as-contract, everything-is-real, bilingual EN/PT, every Stage maps to a station, SDD + TDD).
+To make that easy — instead of memorizing the rules — the repo ships ready-made
+[**Claude Code**](https://claude.com/claude-code) helpers under [`.claude/`](.claude/) (see
+[`.claude/README.md`](.claude/README.md)). They're thin workflows that point at the canonical docs;
+they don't restate the law.
+
+> 💡 They load automatically when you open this repo in Claude Code. **Using OpenAI Codex instead?**
+> The same standards are mirrored in [`AGENTS.md`](AGENTS.md) (always-on, the twin of `CLAUDE.md`) and
+> [`.codex/prompts/`](.codex/prompts/) (the same workflows as `/slash` commands — see
+> [`.codex/README.md`](.codex/README.md)). Using neither? The `.claude/` and `.codex/` files double as a
+> plain Markdown checklist of what every change must satisfy.
+
+### 🛠️ Skills — run one to *do* a task the right way
+
+Type `/skill-name` in Claude Code (or just describe the task and it picks the skill).
+
+| Skill | Use it when | What it keeps you from breaking |
+|---|---|---|
+| **`new-spec`** | Starting a new feature, behavior change, new Stage, or new station/tier — **before any code** | The spec-first rule (§10). Scaffolds `specs/NNN-*/` from the template and walks WHAT/WHY → plan → TDD tasks |
+| **`add-stage`** | Adding or changing a pipeline `Stage`/`Phase`/`TraceEvent` | The ~7 load-bearing places a Stage touches (`schemas.py` ↔ `events.ts`, the emit, `STAGE_TO_STATION`, `STAGE_TO_PHASE`, `readoutFor`, `renderDetail`) — several `tsc` does **not** catch |
+| **`add-mcp-tool`** | Adding a new agent-callable MCP tool | The dual-registration gotcha (`mcp/server.py` `@mcp.tool` **and** the `_load_local` mirror in `client.py`) + the "no faking" honesty rule |
+| **`add-db-table`** | Any schema change to the relational SQLite store | Keeping `_SCHEMA`, [`docs/data-model.md`](docs/data-model.md), the schema-audit test, the clear-databases coverage, and the `user_version` migration in sync |
+| **`verify-gates`** | Before you call anything done / open a PR | Runs the local mirror of CI (`ruff` · `pytest` · `tsc` · Vitest) **plus** the cross-cutting constitution gates, and reports what's red |
+
+### 🔍 Agents — spawn one to *review* (read-only, they never edit)
+
+Ask Claude Code to "review with the `frontend-reviewer` agent" (or it'll delegate on its own).
+
+| Agent | What it audits |
+|---|---|
+| **`protocol-guardian`** | `schemas.py` ↔ `events.ts` parity, and that every `Stage` is wired through `STAGE_TO_STATION`, `STAGE_TO_PHASE`, `readoutFor` and `renderDetail` |
+| **`backend-reviewer`** | Async correctness, the trace-emitter pattern, dependency-injection-not-globals, MCP dual-registration, schema sync, structural tests |
+| **`frontend-reviewer`** | The pure-projection rule (live == replay), geometry/content separation, exhaustive `StationId`/`Stage` switches, cloud overlay, clean types |
+| **`ai-engineering-reviewer`** | Honesty (real vs preview, nothing faked), the bounded ReAct loop, honest tool-elected retrieval, prompt layering, RAG correctness |
+| **`i18n-auditor`** | EN/PT parity — flags any user-facing string that ships in only one language (§4) |
+
+### ✅ Recommended flow for a contribution
+
+1. **Plan** → run **`new-spec`** and resolve the open questions before writing code.
+2. **Build** → drive it red→green→refactor; reach for **`add-stage`** / **`add-mcp-tool`** / **`add-db-table`** for those specific changes.
+3. **Self-review** → spawn the domain reviewer for the area you touched, plus **`protocol-guardian`** and **`i18n-auditor`**.
+4. **Verify** → run **`verify-gates`**; open the PR only when it's all green.
+
+This mirrors exactly what CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) enforces, so a green local run means a green PR.
+
+---
+
 ## 🤝 Contributing & license
 
 PRs and issues welcome — this is a learning resource. Please follow the

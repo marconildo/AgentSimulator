@@ -509,6 +509,57 @@ as [fases da linha do tempo](specs/004-timeline-phases/) e [token + custo](specs
 
 ---
 
+## 🧑‍🤝‍🧑 Como colaborar com este projeto
+
+Isto é um recurso de aprendizado open-source, e a ideia toda é que **todo mundo que mexe aqui siga os
+mesmos padrões** — os princípios inegociáveis da [constituição](.specify/constitution.md)
+(protocolo-é-o-contrato, tudo-é-real, bilíngue EN/PT, todo Stage mapeia para uma estação, SDD + TDD).
+Para facilitar isso — em vez de decorar as regras — o repositório já vem com auxiliares prontos do
+[**Claude Code**](https://claude.com/claude-code) em [`.claude/`](.claude/) (veja
+[`.claude/README.md`](.claude/README.md)). São fluxos finos que apontam para a documentação canônica;
+não reescrevem a lei.
+
+> 💡 Eles carregam automaticamente quando você abre este repo no Claude Code. **Usa o OpenAI Codex?**
+> Os mesmos padrões estão espelhados em [`AGENTS.md`](AGENTS.md) (sempre-ativo, o gêmeo do `CLAUDE.md`)
+> e em [`.codex/prompts/`](.codex/prompts/) (os mesmos fluxos como comandos `/slash` — veja
+> [`.codex/README.md`](.codex/README.md)). Não usa nenhum dos dois? Os arquivos em `.claude/` e `.codex/`
+> também servem como um checklist puro em Markdown do que toda mudança precisa cumprir.
+
+### 🛠️ Skills — execute uma para *fazer* a tarefa do jeito certo
+
+Digite `/nome-da-skill` no Claude Code (ou só descreva a tarefa e ele escolhe a skill).
+
+| Skill | Use quando | O que ela impede você de quebrar |
+|---|---|---|
+| **`new-spec`** | Começar uma nova feature, mudança de comportamento, novo Stage ou nova estação/tier — **antes de qualquer código** | A regra spec-first (§10). Cria `specs/NNN-*/` a partir do template e conduz O QUE/POR QUÊ → plano → tarefas TDD |
+| **`add-stage`** | Adicionar ou alterar um `Stage`/`Phase`/`TraceEvent` do pipeline | Os ~7 lugares carga-pesada que um Stage toca (`schemas.py` ↔ `events.ts`, a emissão, `STAGE_TO_STATION`, `STAGE_TO_PHASE`, `readoutFor`, `renderDetail`) — vários que o `tsc` **não** pega |
+| **`add-mcp-tool`** | Adicionar uma nova ferramenta MCP que o agente pode chamar | O gotcha da dupla-registração (`mcp/server.py` `@mcp.tool` **e** o espelho `_load_local` em `client.py`) + a regra de honestidade "nada é falso" |
+| **`add-db-table`** | Qualquer mudança de schema no banco relacional SQLite | Manter `_SCHEMA`, [`docs/data-model.md`](docs/data-model.md), o teste de schema-audit, a cobertura do limpar-bancos e a migração `user_version` em sincronia |
+| **`verify-gates`** | Antes de dar algo como pronto / abrir um PR | Roda o espelho local do CI (`ruff` · `pytest` · `tsc` · Vitest) **mais** os gates transversais da constituição, e reporta o que está vermelho |
+
+### 🔍 Agents — invoque um para *revisar* (somente leitura, nunca editam)
+
+Peça ao Claude Code para "revisar com o agente `frontend-reviewer`" (ou ele delega sozinho).
+
+| Agent | O que ele audita |
+|---|---|
+| **`protocol-guardian`** | Paridade `schemas.py` ↔ `events.ts`, e que todo `Stage` está ligado via `STAGE_TO_STATION`, `STAGE_TO_PHASE`, `readoutFor` e `renderDetail` |
+| **`backend-reviewer`** | Correção do async, o padrão do trace-emitter, injeção-de-dependência-não-globais, dupla-registração MCP, sincronia de schema, testes estruturais |
+| **`frontend-reviewer`** | A regra de projeção-pura (live == replay), separação geometria/conteúdo, switches exaustivos de `StationId`/`Stage`, cloud overlay, tipos limpos |
+| **`ai-engineering-reviewer`** | Honestidade (real vs preview, nada falsificado), o loop ReAct limitado, retrieval honesto eleito por tool, camadas de prompt, correção do RAG |
+| **`i18n-auditor`** | Paridade EN/PT — sinaliza qualquer string visível ao usuário que veio em só um idioma (§4) |
+
+### ✅ Fluxo recomendado para uma contribuição
+
+1. **Planeje** → rode **`new-spec`** e resolva as perguntas em aberto antes de escrever código.
+2. **Construa** → conduza red→green→refactor; use **`add-stage`** / **`add-mcp-tool`** / **`add-db-table`** para essas mudanças específicas.
+3. **Auto-revise** → invoque o reviewer do domínio que você tocou, mais **`protocol-guardian`** e **`i18n-auditor`**.
+4. **Verifique** → rode **`verify-gates`**; abra o PR só quando estiver tudo verde.
+
+Isso espelha exatamente o que o CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) exige, então uma rodada local verde significa um PR verde.
+
+---
+
 ## 🤝 Contribuição & licença
 
 PRs e issues são bem-vindos — isto é um recurso de aprendizado. Por favor siga o

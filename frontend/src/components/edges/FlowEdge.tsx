@@ -1,8 +1,9 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useViewport, type EdgeProps } from "@xyflow/react";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 
 import { useT } from "../../i18n";
 import { returnStyleFor } from "../../lib/edgeStyle";
+import { useSimulator } from "../../store/useSimulator";
 
 interface FlowEdgeData {
   accent?: string;
@@ -17,6 +18,7 @@ interface FlowEdgeData {
   active?: boolean; // currently animating (gets a moving packet)
   reverse?: boolean; // packet travels target → source
   stream?: boolean; // SSE response flowing back to the client
+  selected?: boolean; // 085 — this hop's detail is open in the Inspector
   [key: string]: unknown;
 }
 
@@ -30,13 +32,19 @@ export function FlowEdge(props: EdgeProps) {
   const data = (props.data ?? {}) as FlowEdgeData;
   const t = useT();
   const i = t.inspector;
+  const selectHop = useSimulator((s) => s.selectHop);
+  const openHopDetail = (e: MouseEvent) => {
+    e.stopPropagation();
+    selectHop(props.id);
+  };
   const [hovered, setHovered] = useState(false);
   const { y: viewportY, zoom } = useViewport();
 
   const accent = data.accent ?? "var(--color-sky)";
   const active = Boolean(data.active);
   const stream = Boolean(data.stream);
-  const lit = active || stream; // currently animating; quiet once the packet passes
+  const selected = Boolean(data.selected); // 085 — hop detail open in the Inspector
+  const lit = active || stream || selected; // animating or selected; quiet otherwise
   const comm = data.comm;
   const commColor = comm === "async" ? STREAM_COLOR : SYNC_COLOR;
 
@@ -66,11 +74,11 @@ export function FlowEdge(props: EdgeProps) {
         path={path}
         markerEnd={markerEnd}
         style={{
-          stroke: strokeColor,
-          strokeWidth: lit ? 2.5 : 1.5,
+          stroke: selected ? accent : strokeColor,
+          strokeWidth: selected ? 3 : lit ? 2.5 : 1.5,
           strokeDasharray: stroke.dashed ? "5 5" : undefined,
           opacity: lit ? 1 : hovered ? 0.9 : 0.6,
-          filter: lit ? `drop-shadow(0 0 6px ${strokeColor})` : "none",
+          filter: lit ? `drop-shadow(0 0 6px ${selected ? accent : strokeColor})` : "none",
           transition: "stroke 0.2s ease, opacity 0.2s ease",
         }}
       />
@@ -81,7 +89,7 @@ export function FlowEdge(props: EdgeProps) {
         fill="none"
         stroke="transparent"
         strokeWidth={22}
-        style={{ pointerEvents: "stroke", cursor: "help" }}
+        style={{ pointerEvents: "stroke", cursor: "pointer" }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       />
@@ -95,9 +103,14 @@ export function FlowEdge(props: EdgeProps) {
             className="nodrag nopan absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
             style={{ left: labelX, top: labelY }}
           >
-            <div
-              className="rounded-md border px-1.5 py-px font-mono text-[9.5px] leading-none"
+            {/* The protocol label is itself clickable (opens the hop detail). */}
+            <button
+              onClick={openHopDetail}
+              title={i.hopExpandHint}
+              className="rounded-md border px-1.5 py-px font-mono text-[9.5px] leading-none transition hover:brightness-110"
               style={{
+                pointerEvents: "all",
+                cursor: "pointer",
                 borderColor: lit ? strokeColor : "var(--color-line)",
                 background: "color-mix(in srgb, var(--color-base) 88%, transparent)",
                 color: lit ? strokeColor : "var(--color-muted)",
@@ -105,7 +118,7 @@ export function FlowEdge(props: EdgeProps) {
             >
               {data.zone === "public" ? "🛡️ " : data.secure ? "🔒 " : ""}
               {stream ? "SSE stream ↩" : data.label}
-            </div>
+            </button>
             {comm && (
               <span
                 className="rounded-full px-1 font-mono text-[8px] uppercase leading-tight tracking-wide"
@@ -118,6 +131,24 @@ export function FlowEdge(props: EdgeProps) {
                 {comm}
               </span>
             )}
+            {/* 086 — a prominent, always-visible affordance so the user knows the
+                arrow is clickable and carries network detail. Accent-coloured pill. */}
+            <button
+              onClick={openHopDetail}
+              title={i.hopExpandHint}
+              aria-label={i.hopExpandHint}
+              className="flex items-center gap-0.5 rounded-full border px-1.5 py-px text-[8px] font-semibold uppercase leading-none tracking-wide shadow-sm transition hover:scale-105"
+              style={{
+                pointerEvents: "all",
+                cursor: "pointer",
+                borderColor: accent,
+                color: accent,
+                background: "var(--color-base)",
+              }}
+            >
+              <span aria-hidden>⊕</span>
+              {i.hopExpandLabel}
+            </button>
           </div>
 
           {hovered && (

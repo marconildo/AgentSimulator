@@ -27,6 +27,11 @@ interface SimulatorState {
   following: boolean; // cursor tracks the live tail
   playing: boolean; // replay animation running
   selected: StationId | null;
+  // 085-hop-communication-detail — the network hop (edge) selected by clicking an
+  // arrow; its detail opens in the Inspector body, like a station detail. The id is
+  // the `"${source}-${target}"` FlowCanvas uses for edges. Mutually exclusive with
+  // `selected` / `tracesOpen` (only one fills the Inspector body at a time).
+  selectedHop: string | null;
   expanded: StationId[]; // stations expanded inline on the canvas
   detail: StationId | null; // station opened in the focused drill-in overlay
   // 038-execution-traces — the run-level span tree opened in the Inspector body
@@ -47,6 +52,9 @@ interface SimulatorState {
   // AC3). The tour passes `reveal: false` so the auto-tour keeps the canvas-first
   // frame on a first visit (037 AC4).
   select: (id: StationId | null, opts?: { reveal?: boolean }) => void;
+  // 085 — select a network hop (edge id "source-target"); clears the station /
+  // traces selection and re-opens the Inspector (like `select`).
+  selectHop: (id: string | null, opts?: { reveal?: boolean }) => void;
   toggleExpand: (id: StationId) => void;
   openDetail: (id: StationId) => void;
   closeDetail: () => void;
@@ -184,6 +192,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   following: true,
   playing: false,
   selected: null,
+  selectedHop: null,
   expanded: [],
   detail: null,
   tracesOpen: false,
@@ -201,9 +210,21 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   select: (id, opts) =>
     set((s) => ({
       selected: id,
-      // Selecting a station leaves the Execution-traces detail (038) — they share
-      // the Inspector body, so only one shows at a time.
+      // Selecting a station leaves the Execution-traces detail (038) and any
+      // selected hop (085) — they share the Inspector body, so only one shows.
       tracesOpen: false,
+      selectedHop: null,
+      inspectorCollapsed:
+        opts?.reveal === false ? s.inspectorCollapsed : id !== null ? false : s.inspectorCollapsed,
+    })),
+  // 085 — selecting a hop is the dual of `select`: it fills the Inspector body with
+  // the hop's communication detail and clears the station / traces selection.
+  selectHop: (id, opts) =>
+    set((s) => ({
+      selectedHop: id,
+      selected: null,
+      tracesOpen: false,
+      detail: null,
       inspectorCollapsed:
         opts?.reveal === false ? s.inspectorCollapsed : id !== null ? false : s.inspectorCollapsed,
     })),
@@ -215,11 +236,11 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
         ? state.expanded.filter((x) => x !== id)
         : [...state.expanded, id],
     })),
-  openDetail: (id) => set({ detail: id, selected: id }),
+  openDetail: (id) => set({ detail: id, selected: id, selectedHop: null }),
   closeDetail: () => set({ detail: null }),
   // 038 — the run-level span tree opens in the Inspector body (like a station
-  // detail); clear `selected` so the tracesOpen branch wins over any station.
-  openTraces: () => set({ tracesOpen: true, selected: null }),
+  // detail); clear `selected`/`selectedHop` so the tracesOpen branch wins.
+  openTraces: () => set({ tracesOpen: true, selected: null, selectedHop: null }),
   closeTraces: () => set({ tracesOpen: false }),
 
   beginRun: () => {
@@ -306,6 +327,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       playing: false,
       error: null,
       selected: null,
+      selectedHop: null,
       detail: null,
       tracesOpen: false,
       tour: IDLE_TOUR,

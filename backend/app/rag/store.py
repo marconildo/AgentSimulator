@@ -41,6 +41,26 @@ def reset_vectorstore_cache() -> None:
     get_vectorstore.cache_clear()
 
 
+def reset_collection() -> None:
+    """Drop and recreate the underlying Chroma collection (clears ALL vectors).
+
+    Needed when the embedding *space* changed: Chroma bakes the vector dimension
+    into the collection at build time, so a model swap to a different dimension
+    can't be repaired by deleting documents (``build_index``'s delete-by-``corpus``
+    path) — the whole collection must be recreated. This unavoidably invalidates
+    user uploads too: their old-space vectors are meaningless under the new model.
+
+    The cache is cleared first so the recreated collection is opened with the
+    *current* embedding function, not a handle that captured the old one.
+    """
+    reset_vectorstore_cache()
+    try:
+        get_vectorstore().reset_collection()
+    except Exception:  # noqa: BLE001 - an empty/new collection is fine to "reset"
+        pass
+    reset_vectorstore_cache()
+
+
 def is_indexed() -> bool:
     """True if the collection already has at least one document.
 

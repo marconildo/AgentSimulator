@@ -2,6 +2,11 @@
 
 export type Stage =
   | "frontend"
+  // 084-network-edge: the production network edge (reverse proxy · TLS · load
+  // balancer). A single observation event (like `frontend`) fired between
+  // frontend and backend, only when the request's `edge` toggle is on. Maps to
+  // the `edge` station; carries only what the forwarded headers prove (EdgeData).
+  | "edge"
   | "backend"
   | "db.read"
   | "agent.route"
@@ -97,6 +102,22 @@ export interface RequestBody {
   enabled_tools?: string[];
   // 017-failure-injection — present only when a failure was forced (≠ none).
   simulate_failure?: string;
+  // 084-network-edge — present only when the run was routed through the edge.
+  edge?: boolean;
+}
+
+// 084-network-edge — what the network edge did to this request, carried on the
+// `edge` event `data`. Mirrors backend/app/edge.py::EdgeInfo.as_data(). Only
+// what the forwarded headers prove: `proxied` is false (and `proxy_server` null)
+// when no reverse proxy is in front (honest "direct access").
+export interface EdgeData {
+  proxied: boolean;
+  tls: boolean;
+  scheme: string;
+  client_ip: string | null;
+  request_id: string | null;
+  proxy_server: string | null;
+  forwarded_host: string | null;
 }
 
 // 079-db-query-detail — one real SQL statement an App Database operation ran,

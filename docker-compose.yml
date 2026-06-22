@@ -1,7 +1,14 @@
 # One command to run the whole simulator:  docker compose up --build
 #
-# - backend  -> FastAPI + LangGraph agent on http://localhost:8000
+# - backend  -> FastAPI + LangGraph agent (private; reached via the edge)
+# - edge     -> nginx reverse proxy / LB / TLS on http://localhost:8080
+#               (084-network-edge — the real "Network Edge" box on the canvas)
 # - frontend -> static React build served by nginx on http://localhost:5173
+#
+# The frontend talks to the API *through* the edge, so every request genuinely
+# traverses nginx (forwarded headers, SSE-safe) — the backend reports it as the
+# `edge` trace event. Run the backend directly (`uvicorn`) and the edge is
+# bypassed: the backend honestly reports `proxied=false`.
 #
 # The app runs ONLY against OpenAI — set OPENAI_API_KEY. With no key the
 # backend fails fast at startup.
@@ -23,15 +30,26 @@ services:
       # Persist uploaded documents (object storage) between runs.
       - storage-data:/app/app/data/storage
 
+  # 084-network-edge: the real reverse proxy / load balancer in front of the API.
+  edge:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
   frontend:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE: http://localhost:8000
+        # Talk to the API through the edge so requests really cross nginx.
+        VITE_API_BASE: http://localhost:8080
     ports:
       - "5173:80"
     depends_on:
-      - backend
+      - edge
 
 volumes:
   chroma-data:
