@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -39,6 +39,7 @@ from .db.store import (
     UnknownAgentId,
     get_store,
 )
+from .edge import read_edge
 from .llm.context import history_pair_tokens
 from .llm.models import (
     DEFAULT_PROVIDER,
@@ -495,8 +496,13 @@ async def set_embedding_settings(body: EmbeddingSettings) -> dict:
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     settings = get_settings()
+    # 084-network-edge: read the production edge's evidence (forwarded headers a
+    # real reverse proxy injects) up front — pure, no I/O. Emitted as a single
+    # `edge` event before BACKEND when `req.edge` is on; with no proxy in front
+    # it honestly reports `proxied=False`.
+    edge_info = read_edge(request)
     # 074-ollama-provider: validate the optional provider override up front.
     if req.provider is not None and req.provider not in provider_ids():
         raise HTTPException(
@@ -616,6 +622,10 @@ async def chat(req: ChatRequest):
     # is byte-for-byte unchanged (AC1).
     if req.ragless:
         request_body["ragless"] = True
+    # 084-network-edge: echo the edge flag only when on, so a default run's body
+    # stays minimal (mirrors the rerank/hybrid/ragless echoes).
+    if req.edge:
+        request_body["edge"] = True
 
     async def producer() -> None:
         try:
@@ -625,6 +635,19 @@ async def chat(req: ChatRequest):
                 "User sent a message",
                 {"message": req.message, "session_id": session_id, "request": request_body},
             )
+            # 084-network-edge: the first hop in production. A single observation
+            # event (like FRONTEND), fired only when the edge is enabled, carrying
+            # only what the forwarded headers prove. With no proxy in front it is
+            # honestly labelled "direct".
+            if req.edge:
+                await emitter.emit(
+                    Stage.EDGE,
+                    Phase.END,
+                    "Edge: TLS terminated · load-balanced"
+                    if edge_info.proxied
+                    else "Direct access — no edge proxy",
+                    edge_info.as_data(),
+                )
             async with emitter.stage(
                 Stage.BACKEND, "API received the request", {"message": req.message}
             ) as rec:

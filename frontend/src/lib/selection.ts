@@ -37,6 +37,9 @@ export type RetrievalStrategy = "vector" | "ragless";
 /** Toggleable components, beyond the always-on skeleton + the runtime & retrieval radios. */
 export type ComponentId =
   | "mcp" // MCP Tools (optional base, default-on)
+  // 084/085 (2026-06-22): the network edge is NOT a component — it is always-on
+  // platform behaviour (backend `ChatRequest.edge` defaults True). It has no toggle
+  // and no station; its detail shows on the frontend→backend arrow (085).
   | "rerank" // RAG reranker (real; sub-stage, no station of its own; vector-only)
   | "hybrid" // Hybrid search BM25 + vector (real; sub-stage, no station; vector-only)
   | "summarization" // context compaction (preview)
@@ -52,7 +55,8 @@ export const SKELETON: readonly StationId[] = ["frontend", "backend", "agent", "
 /** The Advanced-rung sub-agent stations revealed by the `multiagent` runtime. */
 const SUBAGENT_STATIONS: readonly StationId[] = ["researcher", "coder", "critic"];
 
-/** Component → the station it shows (omitted for `rerank`/`hybrid`, which are sub-stages). */
+/** Component → the station it shows (omitted for `rerank`/`hybrid`/`edge`, which have
+ *  no station of their own — they drive a per-feature request input only). */
 const COMPONENT_STATION: Partial<Record<ComponentId, StationId>> = {
   mcp: "mcp",
   summarization: "summarization",

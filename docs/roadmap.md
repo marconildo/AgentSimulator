@@ -44,6 +44,7 @@ shipped. Each item here is therefore the *seed of its own spec*.
 | **AI-Ops** | `aiops` | run it in production — gateway, semantic cache, eval runner, observability, router, multi-provider |
 | **Security & Trust** | `security` | guardrails, secrets/DLP, supply chain, tool sandbox, identity/OIDC, jailbreak, auth/rate-limit |
 | **Scale & Infra** | `scale` | multi-replica, shared state, workload identity |
+| **Network & Edge** | `network` | network edge (reverse proxy · TLS · LB) ✅ · CDN · WAF · DNS · API gateway · internal mesh |
 
 **The matrix — every roadmap item by `{rung × track}`** (✅ shipped · 🟡 preview · 🏷️ label · 🔧 seam):
 
@@ -55,6 +56,29 @@ shipped. Each item here is therefore the *seed of its own spec*.
 
 The sections below are grouped by rung; within the Advanced rung each `###` is annotated with its
 **Track** so the matrix and the prose stay in sync.
+
+---
+
+## ✅ Network & Edge track — first node SHIPPED (084-network-edge)
+
+The **Network & Edge** track opens the classic distributed-systems axis around the agent (the
+production network in front of and between the services). Its first node is **done**:
+
+### ✅ Network edge (reverse proxy · TLS · LB) — SHIPPED (084-network-edge)
+- **Status.** Done. A real `nginx` reverse proxy fronts the backend in `docker-compose`
+  (`infra/nginx/nginx.conf`): it terminates TLS, load-balances and injects the forwarded headers
+  (`X-Forwarded-*`, `X-Request-Id`). The backend emits one `edge` `Stage` from
+  `backend/app/edge.py::read_edge` — reporting only what the headers prove and honestly showing
+  `proxied=false` with no proxy in front. `ChatRequest.edge: bool = False` is opt-in at the protocol
+  so an API-direct call is byte-for-byte; `edge` is a default-on Build toggle.
+  **Revised (085):** the edge has **no node/tier of its own** — the `edge` stage maps to the
+  `backend` station, and its chain (DNS · CDN · WAF · TLS/LB · API GW, only TLS/LB real) +
+  forwarded headers render in the **`frontend→backend` hop detail** (click the arrow), not a box.
+- **What's still open (later specs).** Each preview segment graduates to its own real node:
+  **CDN**, **WAF**, **DNS**, **API gateway**, and **internal service mesh / mTLS depth** (subnets,
+  NSG, private endpoints). Real TLS with a mounted cert (the nginx.conf has the commented `listen
+  8443 ssl` block ready). The 058 GitHub Pages demo fixtures don't yet include `edge` events — old
+  fixtures render the edge box idle (graceful fallback) until re-captured.
 
 ---
 
@@ -539,6 +563,7 @@ própria spec*.
 | **AI-Ops** | `aiops` | rodar em produção — gateway, cache semântico, eval runner, observabilidade, router, multi-provider |
 | **Security & Trust** | `security` | guardrails, segredos/DLP, cadeia de suprimentos, sandbox de tools, identidade/OIDC, jailbreak, auth/rate-limit |
 | **Scale & Infra** | `scale` | multi-réplica, estado compartilhado, workload identity |
+| **Network & Edge** | `network` | borda de rede (reverse proxy · TLS · LB) ✅ · CDN · WAF · DNS · API gateway · mesh interna |
 
 **A matriz — cada item do roadmap por `{degrau × track}`** (✅ entregue · 🟡 prévia · 🏷️ rótulo ·
 🔧 costura):
@@ -551,6 +576,30 @@ própria spec*.
 
 As seções abaixo estão agrupadas por degrau; dentro do degrau Avançado cada `###` é anotado com o
 seu **Track** para a matriz e a prosa ficarem em sincronia.
+
+---
+
+## ✅ Track Network & Edge — primeiro nó ENTREGUE (084-network-edge)
+
+O track **Network & Edge** abre o eixo clássico de sistemas distribuídos em volta do agente (a rede
+de produção à frente e entre os serviços). Seu primeiro nó está **concluído**:
+
+### ✅ Borda de rede (reverse proxy · TLS · LB) — ENTREGUE (084-network-edge)
+- **Status.** Concluído. Um `nginx` real fica à frente do backend no `docker-compose`
+  (`infra/nginx/nginx.conf`): termina o TLS, balanceia e injeta os headers de encaminhamento
+  (`X-Forwarded-*`, `X-Request-Id`). O backend emite um `Stage` `edge` a partir de
+  `backend/app/edge.py::read_edge` — reportando só o que os headers provam e mostrando honestamente
+  `proxied=false` quando não há proxy à frente. `ChatRequest.edge: bool = False` é opt-in no
+  protocolo, então uma chamada direta de API fica byte-for-byte; `edge` é um toggle ligado por
+  padrão no Build. **Revisado (085):** a borda **não tem nó/tier próprio** — o `Stage` `edge` mapeia
+  para a estação `backend`, e sua cadeia (DNS · CDN · WAF · TLS/LB · API GW, só o TLS/LB real) +
+  os forwarded headers aparecem no **detalhe do hop `frontend→backend`** (clique na seta), não numa
+  caixa.
+- **O que ainda falta (specs futuras).** Cada segmento de prévia vira seu próprio nó real:
+  **CDN**, **WAF**, **DNS**, **API gateway** e a **mesh interna / profundidade de mTLS** (subnets,
+  NSG, private endpoints). TLS real com um cert montado (o nginx.conf já tem o bloco comentado
+  `listen 8443 ssl`). As fixtures do demo no GitHub Pages (058) ainda não têm eventos `edge` — as
+  antigas renderizam a caixa da borda ociosa (fallback gracioso) até serem recapturadas.
 
 ---
 

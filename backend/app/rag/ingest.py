@@ -27,7 +27,7 @@ from .chunking import (
     chunk_text,
 )
 from .embeddings import embedding_model_name, get_embeddings
-from .store import COLLECTION_NAME, get_vectorstore
+from .store import COLLECTION_NAME, get_vectorstore, reset_collection
 
 # 072-chunking-strategies: the chunking parameters + the default recursive splitter now
 # live in `chunking.py`. Re-exported here so existing importers (ingestion.py,
@@ -141,7 +141,20 @@ def build_index(strategy: ChunkStrategy | None = None, params: ChunkParams | Non
         print(f"No .md files found in {settings.corpus_path}")
         return 0
 
-    store.add_documents(docs)
+    try:
+        store.add_documents(docs)
+    except Exception as exc:  # noqa: BLE001 - retry only the dimension-drift case
+        # The persisted collection's vector dimension was baked in by a previous
+        # embedding model; a model swap to a different dimension makes add_documents
+        # fail ("Collection expecting embedding with dimension of N, got M"). Deleting
+        # documents doesn't reset the dimension, so drop + recreate the collection
+        # (old-space vectors are useless anyway) and retry once — the index self-heals
+        # instead of leaving RAG empty. Re-raise anything that isn't a dimension drift.
+        if "dimension" not in str(exc).lower():
+            raise
+        reset_collection()
+        store = get_vectorstore()
+        store.add_documents(docs)
     global _active_strategy
     _active_strategy = str(resolved)
     # 075-ollama-embeddings: stamp the embedding space this index was built for so

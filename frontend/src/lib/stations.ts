@@ -132,6 +132,10 @@ export interface HopMeta {
   secure: boolean; // draw a lock
   zone: NetworkZone; // public internet vs inside the private network
   controls: string; // network/security controls on this hop (WAF, mTLS, …)
+  // 086-hop-detail-enrichment — the role + reasoning behind this communication
+  // (why this protocol/zone, what it does, what would break). Rendered in the hop
+  // detail under the theory. Optional in the type; authored for every real hop.
+  why?: string;
   // Which node handles the edge attaches to (the API↔Agent hop is vertical).
   sourceHandle: "right" | "bottom";
   targetHandle: "left" | "top";
@@ -182,11 +186,15 @@ type TierSrc = Omit<TierMeta, "title" | "alias" | "generic" | "scenarios"> & {
   generic: Tr;
   scenarios?: Scenario[];
 };
-type HopSrc = Omit<HopMeta, "label" | "protocol" | "detail" | "controls" | "scenarios"> & {
+type HopSrc = Omit<
+  HopMeta,
+  "label" | "protocol" | "detail" | "controls" | "why" | "scenarios"
+> & {
   label: Tr;
   protocol: Tr;
   detail: Tr;
   controls: Tr;
+  why?: Tr;
   scenarios?: Scenario[];
 };
 type BoundarySrc = Omit<BoundaryMeta, "label" | "generic"> & { label: Tr; generic: Tr };
@@ -360,7 +368,10 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "streaming", pt: "streaming" }, v: "EventSourceResponse" },
       { k: { en: "middleware", pt: "middleware" }, v: "CORS" },
     ],
-    stages: ["backend"],
+    // 084/085: the `edge` stage (network edge — reverse proxy/TLS/LB) maps to the
+    // backend (the ingress it fronts). There is no separate edge node; the edge's
+    // chain + forwarded headers surface in the frontend→backend hop detail (085).
+    stages: ["edge", "backend"],
     position: { x: 340, y: 112 },
   },
   {
@@ -921,6 +932,10 @@ const HOPS_SRC: HopSrc[] = [
       en: "POST /api/chat — the public request that kicks off the whole pipeline",
       pt: "POST /api/chat — a requisição pública que dá início a todo o pipeline",
     },
+    why: {
+      en: "nginx sits at the network edge as a reverse proxy — the client never reaches the app server directly. Here it terminates TLS (decrypts HTTPS), can load-balance across backend replicas, and forwards the request with the real client in X-Forwarded-For/Proto and X-Request-Id. A reverse proxy can do far more than proxy: cache responses, gzip, rate-limit, serve static files and route by path — one hardened front door for everything behind it.",
+      pt: "O nginx fica na borda de rede como reverse proxy — o cliente nunca alcança o servidor da aplicação direto. Aqui ele termina o TLS (descriptografa o HTTPS), pode balancear a carga entre réplicas do backend e encaminha a requisição com o cliente real em X-Forwarded-For/Proto e X-Request-Id. Um reverse proxy faz muito além de encaminhar: cachear respostas, gzip, rate-limit, servir arquivos estáticos e rotear por path — uma única porta de entrada endurecida para tudo atrás dele.",
+    },
     comm: "async", // SSE response (flips to sync in batch mode)
     secure: true,
     zone: "public",
@@ -936,6 +951,10 @@ const HOPS_SRC: HopSrc[] = [
     detail: {
       en: "In-cluster service-to-service call, not exposed to the internet",
       pt: "Chamada serviço-a-serviço dentro do cluster, não exposta à internet",
+    },
+    why: {
+      en: "The agent runtime holds tool access and model credentials, so it lives on a private network the internet can't reach. mTLS authenticates both ends and an NSG/Security Group restricts who may talk to whom — so a compromised public tier can't freely pivot to the agent. The backend blocks (sync) waiting for the agent's answer.",
+      pt: "O runtime do agente detém o acesso às ferramentas e as credenciais do modelo, então vive numa rede privada que a internet não alcança. O mTLS autentica as duas pontas e um NSG/Security Group restringe quem pode falar com quem — então uma camada pública comprometida não pivota livremente para o agente. O backend bloqueia (sync) esperando a resposta do agente.",
     },
     comm: "sync", // backend awaits the agent run
     secure: true,
@@ -956,6 +975,10 @@ const HOPS_SRC: HopSrc[] = [
       en: "The backend reads recent history and persists each conversation. \"SQL\" is the query language; the transport differs by environment — an in-process file driver here, a pooled TLS connection to a managed SQL service in production.",
       pt: "O backend lê o histórico recente e persiste cada conversa. \"SQL\" é a linguagem de consulta; o transporte muda por ambiente — um driver de arquivo in-process aqui, uma conexão TLS com pool a um serviço SQL gerenciado em produção.",
     },
+    why: {
+      en: "Transactional conversation state needs ACID guarantees, so it lives in a relational store reached over a pooled, TLS connection via a Private Endpoint (no public exposure). 'SQL' is the query language; the transport is an in-process file driver here and a SQL wire protocol (PostgreSQL/TDS) in production. Pooling avoids paying a new TLS handshake per request.",
+      pt: "O estado transacional da conversa precisa de garantias ACID, então vive num banco relacional acessado por uma conexão TLS com pool via Private Endpoint (sem exposição pública). 'SQL' é a linguagem; o transporte é um driver de arquivo in-process aqui e um protocolo de fio SQL (PostgreSQL/TDS) em produção. O pool evita pagar um novo handshake TLS por requisição.",
+    },
     comm: "sync", // blocking read / write
     secure: true,
     zone: "private",
@@ -971,6 +994,10 @@ const HOPS_SRC: HopSrc[] = [
     detail: {
       en: "Vector similarity query against the embedding index",
       pt: "Consulta de similaridade vetorial contra o índice de embeddings",
+    },
+    why: {
+      en: "The agent sends the query embedding and gets back the top-k nearest chunks (cosine) from the vector index — an approximate-nearest-neighbour search a relational DB can't do efficiently. It stays on a private endpoint because it carries your indexed content; the agent blocks on the result before reasoning.",
+      pt: "O agente envia o embedding da consulta e recebe os top-k trechos mais próximos (cosseno) do índice vetorial — uma busca aproximada por vizinhos que um banco relacional não faz de forma eficiente. Fica num endpoint privado porque carrega o seu conteúdo indexado; o agente bloqueia no resultado antes de raciocinar.",
     },
     comm: "sync", // blocking similarity query
     secure: false,
@@ -990,6 +1017,10 @@ const HOPS_SRC: HopSrc[] = [
       en: "LLM navigation over the document tree (no vector query)",
       pt: "Navegação por LLM sobre a árvore do documento (sem consulta vetorial)",
     },
+    why: {
+      en: "Reasoning-based retrieval: instead of an embedding similarity search, the LLM navigates the document's heading tree to pick the relevant section. Same private TLS egress as the model call — the trade is a vector index for extra model calls, in exchange for an explainable selection path.",
+      pt: "Recuperação por raciocínio: em vez de uma busca por similaridade de embeddings, a LLM navega a árvore de títulos do documento para escolher a seção relevante. Mesmo egress TLS privado da chamada do modelo — a troca é um índice vetorial por chamadas extras de modelo, em troca de um caminho de seleção explicável.",
+    },
     comm: "sync", // blocking navigation call
     secure: true,
     zone: "private",
@@ -1007,6 +1038,10 @@ const HOPS_SRC: HopSrc[] = [
       en: "Tool discovery and invocation over the Model Context Protocol",
       pt: "Descoberta e invocação de ferramentas pelo Model Context Protocol",
     },
+    why: {
+      en: "Tools sit behind a standard protocol (MCP) so the agent doesn't hard-link their code, secrets or dependencies — they can be swapped, sandboxed and scaled on their own. Here the transport is stdio/JSON-RPC (local, same host); out-of-process or remote tools would speak HTTP/SSE instead.",
+      pt: "As ferramentas ficam atrás de um protocolo padrão (MCP) para o agente não acoplar código, segredos ou dependências delas — podem ser trocadas, isoladas e escaladas sozinhas. Aqui o transporte é stdio/JSON-RPC (local, mesmo host); ferramentas fora do processo ou remotas falariam HTTP/SSE.",
+    },
     comm: "sync", // request/response JSON-RPC tool call
     secure: false,
     zone: "private",
@@ -1022,6 +1057,10 @@ const HOPS_SRC: HopSrc[] = [
     detail: {
       en: "Chat Completions request to the managed model endpoint",
       pt: "Requisição Chat Completions ao endpoint do modelo gerenciado",
+    },
+    why: {
+      en: "Generation runs on a provider-operated model endpoint reached over TLS egress through a Private Endpoint — the weights are huge and GPU-bound, so you call them as a service. The answer streams back token by token (async), which is why the chat types itself out.",
+      pt: "A geração roda num endpoint de modelo operado pelo provedor, acessado por egress TLS via Private Endpoint — os pesos são enormes e dependem de GPU, então você os chama como serviço. A resposta volta token a token (async), por isso o chat vai sendo digitado.",
     },
     comm: "async", // streams tokens back (flips to sync in batch mode)
     secure: true,
@@ -1048,6 +1087,10 @@ const HOPS_SRC: HopSrc[] = [
       en: "The API hands the received file to the indexer, which persists it to durable object storage, reads it back, and builds the index",
       pt: "A API entrega o arquivo recebido ao indexador, que o persiste em armazenamento de objetos durável, lê de volta e constrói o índice",
     },
+    why: {
+      en: "Indexing is the offline half of RAG and a different job from query-time search, so it runs as a private, in-cluster call (mTLS) the API awaits before responding. Keeping the durable original in object storage means the index can be rebuilt later (e.g. after an embedding-model change) without re-uploading.",
+      pt: "A indexação é a metade offline do RAG e um trabalho diferente da busca em tempo de consulta, então roda como uma chamada privada dentro do cluster (mTLS) que a API aguarda antes de responder. Manter o original durável no armazenamento de objetos permite reconstruir o índice depois (ex.: após troca do modelo de embedding) sem reenviar.",
+    },
     comm: "sync", // the API awaits the indexing before responding
     secure: true,
     zone: "private",
@@ -1063,6 +1106,10 @@ const HOPS_SRC: HopSrc[] = [
     detail: {
       en: "The indexer upserts the chunk embeddings into the vector index",
       pt: "O indexador faz upsert dos embeddings dos chunks no índice vetorial",
+    },
+    why: {
+      en: "The write half of RAG: the indexer pushes the chunk embeddings into the vector index over a private endpoint, ahead of time, so query-time retrieval stays fast. Doing it offline (not on the request path) is what keeps chat latency low.",
+      pt: "A metade de escrita do RAG: o indexador empurra os embeddings dos chunks para o índice vetorial por um endpoint privado, com antecedência, para a recuperação em tempo de consulta ficar rápida. Fazer isso offline (fora do caminho da requisição) é o que mantém a latência do chat baixa.",
     },
     comm: "sync",
     secure: false,
@@ -1085,6 +1132,10 @@ const HOPS_SRC: HopSrc[] = [
       detail: {
         en: "The orchestrator spawns the sub-agent with a focused task and tools, then collects its result. (Preview — not yet executed.)",
         pt: "O orquestrador cria o subagente com uma tarefa e ferramentas focadas e depois coleta o resultado. (Prévia — ainda não executado.)",
+      },
+      why: {
+        en: "Multi-agent orchestration: instead of one monolithic loop, the orchestrator delegates a focused task to a specialized sub-agent with its own tools and isolated context, then folds back only its result. In-process delegation (same runtime), so there is no network hop. Preview — not yet executed.",
+        pt: "Orquestração multiagente: em vez de um loop monolítico, o orquestrador delega uma tarefa focada a um subagente especializado com ferramentas e contexto isolados próprios, e dobra de volta só o resultado. Delegação em processo (mesmo runtime), então não há hop de rede. Prévia — ainda não executado.",
       },
       comm: "sync",
       secure: false,
@@ -1130,6 +1181,7 @@ function resolveHop(h: HopSrc, lang: Lang): HopMeta {
     protocol: r(h.protocol, lang),
     detail: r(h.detail, lang),
     controls: r(h.controls, lang),
+    why: h.why ? r(h.why, lang) : undefined,
     scenarios: h.scenarios ?? ALL_SCENARIOS,
   };
 }

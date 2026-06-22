@@ -59,6 +59,10 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
   const mode = useSettings((s) => s.mode);
   const expanded = useSimulator((s) => s.expanded);
   const events = useSimulator((s) => s.events);
+  // 085-hop-communication-detail — the selected hop (edge id) + its setter, so
+  // clicking an arrow opens its detail in the Inspector (like selecting a station).
+  const selectedHop = useSimulator((s) => s.selectedHop);
+  const selectHop = useSimulator((s) => s.selectHop);
   const t = useT();
   // 035-conditional-upload-nodes — reveal the write-path nodes only when the
   // current trace shows an upload (pure projection of the event log).
@@ -191,6 +195,8 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
             reverse: activeHop?.reverse ?? false,
             // The SSE return packet only applies to live streaming delivery.
             stream: id === "frontend-backend" && view.streaming && mode === "stream",
+            // 085 — highlight the edge whose hop detail is open in the Inspector.
+            selected: id === selectedHop,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -198,7 +204,7 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
           },
         };
       }),
-    [view, hops, stationById, mode, comms],
+    [view, hops, stationById, mode, comms, selectedHop],
   );
 
   return (
@@ -218,6 +224,9 @@ export function FlowCanvas({ view, selected, onSelect }: FlowCanvasProps) {
       onNodeClick={(_, node) => {
         if (node.type === "station") onSelect(node.id as StationId);
       }}
+      // 085 — clicking an arrow opens its hop detail in the Inspector. `onSelect`
+      // (→ store.select) already clears any selected hop, so node/pane clicks reset it.
+      onEdgeClick={(_, edge) => selectHop(edge.id)}
       onPaneClick={() => onSelect(null)}
     >
       <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="var(--color-dots)" />

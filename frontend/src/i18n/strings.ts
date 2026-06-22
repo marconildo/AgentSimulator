@@ -178,6 +178,28 @@ export interface Strings {
     totalInCollection: string;
     vectorPreview: string;
     fromDocument: string;
+    // 085-hop-communication-detail — clicking an arrow opens its detail here.
+    onThisRun: string; // section title for the real per-run data that crossed the hop
+    // 086-hop-detail-enrichment — the per-hop role/reasoning + the edge expand affordance.
+    hopWhy: string; // "Why this hop" section title
+    hopExpandHint: string; // title/aria for the ⊕ expand control on the edge label
+    hopExpandLabel: string; // short visible label on the edge's expand pill
+    noHopData: string; // honest empty-state when nothing crossed the hop this run
+    hopRequest: string; // the request body row group
+    hopAnswer: string; // the final answer row group
+    hopForwarded: string; // forwarded headers row group (edge)
+    hopQueries: string; // SQL statements row group
+    hopChunks: string; // retrieved chunks row group
+    hopScore: string; // top similarity score row
+    hopToolCalls: string; // MCP tool calls row group
+    hopPrompt: string; // assembled prompt row group
+    // 084-network-edge — the Network Edge expanded chain + inspector rows.
+    edgePreview: string; // marker on the non-executing chain segments (DNS/CDN/WAF/API GW)
+    edgeChain: string; // the expanded chain label
+    edgeClient: string; // forwarded client IP row
+    edgeRequestId: string; // request id row
+    edgeScheme: string; // scheme (http/https) row
+    edgeDirectNote: string; // honest "no proxy in front" note
     // 056-ragless-pageindex — RAGLESS box at-a-glance rows + inspector detail.
     treeNodes: string;
     selectedSections: string;
@@ -1197,6 +1219,25 @@ const en: Strings = {
     totalInCollection: "total in collection",
     vectorPreview: "vector preview",
     fromDocument: "from your PDF",
+    onThisRun: "On this run",
+    hopWhy: "Why this hop",
+    hopExpandHint: "Network details",
+    hopExpandLabel: "details",
+    noHopData: "Nothing crossed this hop on this run.",
+    hopRequest: "Request",
+    hopAnswer: "Answer",
+    hopForwarded: "Forwarded headers",
+    hopQueries: "SQL statements",
+    hopChunks: "Retrieved chunks",
+    hopScore: "top score",
+    hopToolCalls: "Tool calls",
+    hopPrompt: "Assembled prompt",
+    edgePreview: "preview",
+    edgeChain: "edge chain",
+    edgeClient: "client IP",
+    edgeRequestId: "request id",
+    edgeScheme: "scheme",
+    edgeDirectNote: "no proxy in front (direct access)",
     treeNodes: "tree nodes",
     selectedSections: "selected sections",
     navReasoning: "Navigation reasoning",
@@ -2290,6 +2331,25 @@ const pt: Strings = {
     totalInCollection: "total na coleção",
     vectorPreview: "prévia do vetor",
     fromDocument: "do seu PDF",
+    onThisRun: "Nesta execução",
+    hopWhy: "Por que este hop",
+    hopExpandHint: "Detalhes de rede",
+    hopExpandLabel: "detalhes",
+    noHopData: "Nada cruzou este hop nesta execução.",
+    hopRequest: "Requisição",
+    hopAnswer: "Resposta",
+    hopForwarded: "Headers de encaminhamento",
+    hopQueries: "Comandos SQL",
+    hopChunks: "Trechos recuperados",
+    hopScore: "escore do topo",
+    hopToolCalls: "Chamadas de ferramenta",
+    hopPrompt: "Prompt montado",
+    edgePreview: "prévia",
+    edgeChain: "cadeia da borda",
+    edgeClient: "IP do cliente",
+    edgeRequestId: "id da requisição",
+    edgeScheme: "esquema",
+    edgeDirectNote: "sem proxy à frente (acesso direto)",
     treeNodes: "nós da árvore",
     selectedSections: "seções selecionadas",
     navReasoning: "Raciocínio da navegação",

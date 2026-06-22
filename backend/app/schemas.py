@@ -26,6 +26,14 @@ class Stage(StrEnum):
     """Pipeline stations, in roughly the order they fire."""
 
     FRONTEND = "frontend"
+    # Network edge (084-network-edge): the first hop in production — TLS is
+    # terminated, traffic is load-balanced, and forwarded headers are added by a
+    # reverse proxy (a real nginx in docker-compose) before the app sees the
+    # request. Fires once, between FRONTEND and BACKEND, only when the request's
+    # `edge` toggle is on; the backend reports only what the forwarded headers
+    # prove (proxied / scheme / client ip / request id), and honestly says
+    # "direct" with no proxy in front. CDN/WAF/DNS are preview-only sub-nodes.
+    EDGE = "edge"
     BACKEND = "backend"
     DB_READ = "db.read"
     AGENT_ROUTE = "agent.route"
@@ -220,6 +228,18 @@ class ChatRequest(BaseModel):
     # Simple run byte-for-byte (no rerank, ReAct loop).
     rerank: bool = False
     runtime: Runtime = Runtime.REACT
+
+    # --- Network edge (084-network-edge; default flipped on, 2026-06-22) ------
+    # Routes the run through the production network edge (reverse proxy · TLS ·
+    # load balancer). When True the backend emits one ``edge`` event before
+    # ``backend``, populated from the forwarded headers a real proxy (nginx in
+    # docker-compose) injects. **Default ``True``** — the edge is always-on
+    # platform behaviour now (not a user toggle): with no proxy in front the
+    # event honestly reports ``proxied=False`` ("direct access"). Set ``edge=False``
+    # to opt out (e.g. to assert the no-edge path). The FE no longer sends this
+    # field; its detail (the chain + forwarded headers) shows on the
+    # ``frontend→backend`` hop (085).
+    edge: bool = True
 
     # --- Hybrid search (070-hybrid-search) -----------------------------------
     # Runs a sparse BM25 lane alongside the dense vector search and fuses the two
