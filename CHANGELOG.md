@@ -15,8 +15,11 @@ which triggers the Release workflow.
 Use these categories: Added · Changed · Deprecated · Removed · Fixed · Security.
 -->
 
+## [1.0.1] - 2026-06-22
+
 ### Added
 
+- Table of contents (📑) to `README.md` and `README.pt-BR.md` for quick navigation.
 - Automated GitHub Release workflow (`.github/workflows/release.yml`): pushing a
   `vX.Y.Z` tag creates a Release with an auto-generated changelog; pre-release
   tags (`-rc`, `-beta`) are flagged as pre-releases.
@@ -62,5 +65,6 @@ against OpenAI (with an optional local Ollama provider for LLM/embeddings).
 - **Local Ollama provider** — optional per-agent LLM and embeddings without an
   OpenAI key.
 
-[Unreleased]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/reginaldosilva27/AgentSimulator/releases/tag/v1.0.0

@@ -40,6 +40,31 @@ reasoning, embeddings, vector store, relational DB and tool calls are all real.
 
 ---
 
+## 📑 Table of contents
+
+- [✨ Feature highlights](#-feature-highlights)
+- [🔭 What it does](#-what-it-does)
+- [🪜 The maturity ladder — Simple · Intermediate · Advanced](#-the-maturity-ladder--simple--intermediate--advanced)
+- [🧠 Agent anatomy — open the box](#-agent-anatomy--open-the-box)
+- [🎬 Interactive replay & the timeline](#-interactive-replay--the-timeline)
+- [🧭 Guided tour](#-guided-tour)
+- [⚡ Stream vs Batch](#-stream-vs-batch)
+- [📚 Conversation with your documents (RAG)](#-conversation-with-your-documents-rag)
+- [🧪 Experiment live](#-experiment-live)
+- [🌍 Bilingual + ☁️ Cloud overlay](#-bilingual---cloud-overlay)
+- [📚 Learn mode](#-learn-mode)
+- [🎓 What you'll learn](#-what-youll-learn)
+- [🏗️ Architecture](#️-architecture)
+- [🚀 Quickstart](#-quickstart)
+- [🔌 OpenAI-only](#-openai-only)
+- [🧱 Tech stack](#-tech-stack)
+- [📁 Project layout](#-project-layout)
+- [🧪 How it's built — SDD + TDD](#-how-its-built--sdd--tdd)
+- [🧑‍🤝‍🧑 How to collaborate on this project](#-how-to-collaborate-on-this-project)
+- [🤝 Contributing & license](#-contributing--license)
+
+---
+
 ## ✨ Feature highlights
 
 <table>

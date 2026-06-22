@@ -42,6 +42,31 @@ relacional e as chamadas de ferramentas são todos reais.
 
 ---
 
+## 📑 Sumário
+
+- [✨ Destaques](#-destaques)
+- [🔭 O que ele faz](#-o-que-ele-faz)
+- [🪜 A escada de maturidade — Simples · Intermediário · Avançado](#-a-escada-de-maturidade--simples--intermediário--avançado)
+- [🧠 Anatomia do agente — abra a caixa](#-anatomia-do-agente--abra-a-caixa)
+- [🎬 Replay interativo & a linha do tempo](#-replay-interativo--a-linha-do-tempo)
+- [🧭 Tour guiado](#-tour-guiado)
+- [⚡ Stream vs Batch](#-stream-vs-batch)
+- [📚 Conversa com seus documentos (RAG)](#-conversa-com-seus-documentos-rag)
+- [🧪 Experimente ao vivo](#-experimente-ao-vivo)
+- [🌍 Bilíngue + ☁️ Camada de nuvem](#-bilíngue---camada-de-nuvem)
+- [📚 Modo Learn](#-modo-learn)
+- [🎓 O que você vai aprender](#-o-que-você-vai-aprender)
+- [🏗️ Arquitetura](#️-arquitetura)
+- [🚀 Início rápido](#-início-rápido)
+- [🔌 Somente OpenAI](#-somente-openai)
+- [🧱 Stack de tecnologia](#-stack-de-tecnologia)
+- [📁 Organização do projeto](#-organização-do-projeto)
+- [🧪 Como é construído — SDD + TDD](#-como-é-construído--sdd--tdd)
+- [🧑‍🤝‍🧑 Como colaborar com este projeto](#-como-colaborar-com-este-projeto)
+- [🤝 Contribuição & licença](#-contribuição--licença)
+
+---
+
 ## ✨ Destaques
 
 <table>
