@@ -125,6 +125,14 @@ class Settings(BaseSettings):
     # local filesystem stand-in for Blob/S3 (a mounted Docker volume, like chroma).
     storage_dir: str = "app/data/storage"
 
+    # --- Network layer (088-network-layer) ---
+    # True only when the backend runs behind the real ingress chain (DNS · CDN ·
+    # WAF · TLS/LB · API-GW). The docker-compose network stack sets `NETWORK_CHAIN=1`
+    # on the backend service; a bare `uvicorn` run leaves it False, so the frontend's
+    # Build "Network" component is disabled (the appliance containers aren't there).
+    # This is a presence flag only — the backend never starts/stops the containers.
+    network_chain: bool = False
+
     # --- HTTP ---
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

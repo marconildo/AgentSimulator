@@ -147,6 +147,9 @@ export interface Strings {
     requestSent: string;
     answerReceived: string;
     routes: string;
+    // 088-network-layer — the ingress appliance's real forwarded evidence (the
+    // headers it injected), shown verbatim in its Inspector detail.
+    forwardedEvidence: string;
     query: string;
     agentLoop: string;
     reasoningTurns: string;
@@ -510,6 +513,10 @@ export interface Strings {
     // and once the circuit breaker opens and hands off to the fallback.
     retrying: (n: number, max: number) => string;
     circuitOpen: string;
+    // 088-network-layer — the ingress appliances' compact readouts.
+    netUnseen: string;
+    wafClean: string;
+    wafBlocked: (rule: string) => string;
   };
   node: {
     expand: string;
@@ -552,14 +559,17 @@ export interface Strings {
     zoneReal: string;
     zonePreview: string;
     requiresRag: string;
+    // 088-network-layer — tooltip on the disabled "Network" toggle (chain absent).
+    networkUnavailable: string;
     skeletonNote: string;
     done: string;
-    groups: { retrieval: string; agent: string; aiops: string };
+    groups: { retrieval: string; agent: string; infra: string; aiops: string };
     retrievalStrategies: Record<"vector" | "ragless", { name: string; blurb: string }>;
     components: Record<
       | "mcp"
       | "rerank"
       | "hybrid"
+      | "network"
       | "summarization"
       | "gateway"
       | "guardrails"
@@ -1279,6 +1289,7 @@ const en: Strings = {
     request: "Request",
     response: "Response",
     requestBody: "Request body",
+    forwardedEvidence: "Forwarded evidence",
     reconstructed: "reconstructed (local fallback)",
     rank: "rank",
     distance: "distance",
@@ -1503,6 +1514,12 @@ const en: Strings = {
     decision: "decision: answer — the agent chose to reply directly; the alternative is call: a tool to gather more first.",
     "top-k": "top-k · score — the k most similar chunks retrieved; score (0–1) is how close the best match is.",
     iterations: "×N — this phase ran N times because the ReAct loop repeated (reason → act → observe).",
+    // 088-network-layer — the real ingress appliance images (station tags).
+    CoreDNS: "CoreDNS — the DNS server that resolves the chain's internal service names to addresses (with a TTL).",
+    Varnish: "Varnish — an HTTP edge cache; serves cached responses (HIT) or forwards misses (MISS) to the origin.",
+    ModSecurity: "ModSecurity — the WAF rule engine (with the OWASP Core Rule Set) that inspects requests and blocks known attacks with a 403.",
+    HAProxy: "HAProxy — terminates TLS and load-balances requests onto a backend upstream, adding X-Forwarded-* headers.",
+    Kong: "Kong — an API gateway: routing, rate-limiting and API-key auth at the edge (run here DB-less).",
   },
   timeline: {
     title: "Replay & step",
@@ -1627,6 +1644,9 @@ const en: Strings = {
     simulatedError: "⚠️ simulated failure",
     retrying: (n, max) => `⚠️ retry ${n}/${max}`,
     circuitOpen: "⚠️ circuit open → fallback",
+    netUnseen: "not detected",
+    wafClean: "clean ✓",
+    wafBlocked: (rule) => `⛔ blocked · ${rule}`,
   },
   node: {
     expand: "Expand",
@@ -1681,7 +1701,9 @@ const en: Strings = {
     requiresRag: "requires Vector RAG",
     skeletonNote: "Frontend · Backend · Agent · LLM · Database are always on.",
     done: "Done",
-    groups: { retrieval: "Retrieval & Data", agent: "Agent", aiops: "AI-Ops" },
+    networkUnavailable:
+      "Available only when running the full Docker stack (the network containers must be up).",
+    groups: { retrieval: "Retrieval & Data", agent: "Agent", infra: "Infrastructure", aiops: "AI-Ops" },
     retrievalStrategies: {
       vector: {
         name: "Vector RAG",
@@ -1697,6 +1719,10 @@ const en: Strings = {
       mcp: { name: "MCP Tools", blurb: "Tool service (calculator, time, web search…)." },
       rerank: { name: "Reranker", blurb: "Re-scores RAG candidates with a cross-encoder." },
       hybrid: { name: "Hybrid Search", blurb: "BM25 + vector fusion (RRF)." },
+      network: {
+        name: "Network",
+        blurb: "Real ingress chain: DNS · CDN · WAF · TLS/LB · API-Gateway (Docker only).",
+      },
       summarization: { name: "Summarization", blurb: "Compacts the agent's context (preview)." },
       gateway: { name: "LLM Gateway", blurb: "Routing, fallback, budgets (preview)." },
       guardrails: { name: "Guardrails", blurb: "Input/output safety (preview)." },
@@ -2392,6 +2418,7 @@ const pt: Strings = {
     request: "Requisição",
     response: "Resposta",
     requestBody: "Corpo da requisição",
+    forwardedEvidence: "Evidência encaminhada",
     reconstructed: "reconstruído (fallback local)",
     rank: "posição",
     distance: "distância",
@@ -2617,6 +2644,12 @@ const pt: Strings = {
     decision: "decision: answer — o agente decidiu responder direto; a alternativa é call: chamar uma tool para buscar mais antes.",
     "top-k": "top-k · score — os k trechos mais similares recuperados; o score (0–1) indica o quão próximo é o melhor.",
     iterations: "×N — esta fase rodou N vezes porque o loop ReAct se repetiu (raciocinar → agir → observar).",
+    // 088-network-layer — as imagens reais das appliances de entrada (tags das estações).
+    CoreDNS: "CoreDNS — o servidor DNS que resolve os nomes internos dos serviços da cadeia para endereços (com um TTL).",
+    Varnish: "Varnish — um cache HTTP de borda; serve respostas em cache (HIT) ou encaminha as ausentes (MISS) para a origem.",
+    ModSecurity: "ModSecurity — o motor de regras do WAF (com o OWASP Core Rule Set) que inspeciona requisições e bloqueia ataques conhecidos com 403.",
+    HAProxy: "HAProxy — termina o TLS e balanceia as requisições para um upstream do backend, adicionando headers X-Forwarded-*.",
+    Kong: "Kong — um API gateway: roteamento, rate-limit e autenticação por chave de API na borda (aqui rodando sem banco).",
   },
   timeline: {
     title: "Replay e passo a passo",
@@ -2741,6 +2774,9 @@ const pt: Strings = {
     simulatedError: "⚠️ falha simulada",
     retrying: (n, max) => `⚠️ retentativa ${n}/${max}`,
     circuitOpen: "⚠️ circuito aberto → fallback",
+    netUnseen: "não detectado",
+    wafClean: "limpo ✓",
+    wafBlocked: (rule) => `⛔ bloqueado · ${rule}`,
   },
   node: {
     expand: "Expandir",
@@ -2795,7 +2831,9 @@ const pt: Strings = {
     requiresRag: "requer Vector RAG",
     skeletonNote: "Frontend · Backend · Agente · LLM · Banco estão sempre ligados.",
     done: "Concluir",
-    groups: { retrieval: "Recuperação & Dados", agent: "Agente", aiops: "AI-Ops" },
+    networkUnavailable:
+      "Disponível apenas rodando o stack Docker completo (os containers de rede precisam estar no ar).",
+    groups: { retrieval: "Recuperação & Dados", agent: "Agente", infra: "Infraestrutura", aiops: "AI-Ops" },
     retrievalStrategies: {
       vector: {
         name: "Vector RAG",
@@ -2811,6 +2849,10 @@ const pt: Strings = {
       mcp: { name: "MCP Tools", blurb: "Serviço de ferramentas (calculadora, hora, busca web…)." },
       rerank: { name: "Reranker", blurb: "Reordena os candidatos do RAG com um cross-encoder." },
       hybrid: { name: "Busca Híbrida", blurb: "Fusão BM25 + vetorial (RRF)." },
+      network: {
+        name: "Redes",
+        blurb: "Cadeia de entrada real: DNS · CDN · WAF · TLS/LB · API-Gateway (só no Docker).",
+      },
       summarization: { name: "Sumarização", blurb: "Compacta o contexto do agente (prévia)." },
       gateway: { name: "Gateway LLM", blurb: "Roteamento, fallback, orçamentos (prévia)." },
       guardrails: { name: "Guardrails", blurb: "Segurança de entrada/saída (prévia)." },

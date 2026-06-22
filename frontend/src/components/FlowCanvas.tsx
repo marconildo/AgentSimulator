@@ -28,7 +28,14 @@ import {
   type StationId,
 } from "../lib/stations";
 import { useSimulator } from "../store/useSimulator";
-import type { SimulatedError } from "../types/events";
+import type {
+  ApiGwData,
+  CdnData,
+  DnsData,
+  LbData,
+  SimulatedError,
+  WafData,
+} from "../types/events";
 import { FlowEdge } from "./edges/FlowEdge";
 import { BoundaryNode } from "./nodes/BoundaryNode";
 import { PublicFrontierNode } from "./nodes/PublicFrontierNode";
@@ -261,6 +268,46 @@ export function readoutFor(
     }
     case "backend":
       return rt.status === "idle" ? "" : ro.fastapiSse;
+    // 088-network-layer — the ingress appliances' compact readouts, from the real
+    // evidence each one's stage carried (host/TTL · HIT/MISS · clean/blocked · TLS+
+    // upstream · route+rate-limit). Honest "not detected" when no header was present.
+    case "dns": {
+      const e = lastWith(rt.events, (ev) => ev.stage === "dns" && ev.phase === "end");
+      if (!e) return rt.status === "idle" ? "" : "…";
+      const d = e.data as Partial<DnsData>;
+      if (!d.seen) return ro.netUnseen;
+      const ttl = typeof d.ttl === "number" ? ` · ${d.ttl}s` : "";
+      return `${d.host ?? d.address ?? "resolved"}${ttl}`;
+    }
+    case "cdn": {
+      const e = lastWith(rt.events, (ev) => ev.stage === "cdn" && ev.phase === "end");
+      if (!e) return rt.status === "idle" ? "" : "…";
+      const d = e.data as Partial<CdnData>;
+      return d.seen ? (d.cache ?? "—") : ro.netUnseen;
+    }
+    case "waf": {
+      const e = lastWith(rt.events, (ev) => ev.stage === "waf" && ev.phase === "end");
+      if (!e) return rt.status === "idle" ? "" : "…";
+      const d = e.data as Partial<WafData>;
+      if (d.status === "blocked") return ro.wafBlocked(d.rules != null ? `${d.rules}` : "rule");
+      return d.seen ? ro.wafClean : ro.netUnseen;
+    }
+    case "lb": {
+      const e = lastWith(rt.events, (ev) => ev.stage === "lb" && ev.phase === "end");
+      if (!e) return rt.status === "idle" ? "" : "…";
+      const d = e.data as Partial<LbData>;
+      if (!d.seen) return ro.netUnseen;
+      const up = d.upstream ? ` · ${d.upstream}` : "";
+      return `${d.tls_version ?? d.scheme ?? "TLS"}${up}`;
+    }
+    case "apigw": {
+      const e = lastWith(rt.events, (ev) => ev.stage === "apigw" && ev.phase === "end");
+      if (!e) return rt.status === "idle" ? "" : "…";
+      const d = e.data as Partial<ApiGwData>;
+      if (!d.seen) return ro.netUnseen;
+      const rl = typeof d.rate_limit_remaining === "number" ? ` · ${d.rate_limit_remaining}` : "";
+      return `${d.route ?? "route"}${rl}`;
+    }
     case "database": {
       const write = lastWith(rt.events, (e) => e.stage === "db.write" && e.phase === "end");
       if (write) return ro.dbPersisted;

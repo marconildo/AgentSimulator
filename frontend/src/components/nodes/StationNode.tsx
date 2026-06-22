@@ -388,6 +388,13 @@ function innerRows(
       if (sel) rows.push({ k: i.selectedSections, v: String(sel.data.count ?? 0) });
       return rows;
     }
+    // 088-network-layer — the ingress appliances are collapsed-only tiles; their
+    // key fact shows in the readout and the full evidence in the Inspector detail.
+    case "dns":
+    case "cdn":
+    case "waf":
+    case "lb":
+    case "apigw":
     // 008 preview nodes have no live events to summarize.
     case "gateway":
     case "guardrails":

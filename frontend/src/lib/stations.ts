@@ -25,6 +25,13 @@ import type { Track } from "./track";
 
 export type StationId =
   | "frontend"
+  // 088-network-layer — the real ingress chain (one station per appliance), shown
+  // only when the `network` Build component is on. Each owns exactly one Stage.
+  | "dns"
+  | "cdn"
+  | "waf"
+  | "lb"
+  | "apigw"
   | "backend"
   | "agent"
   | "rag"
@@ -56,7 +63,7 @@ export type StationId =
   // (`stages: []`). (The `hybrid` tile was removed in 070 — hybrid search is now the
   // `rag.hybrid` sub-stage of the `rag` station, not a tile.)
   | "summarization";
-export type TierId = "client" | "api" | "agent" | "services" | "aiops";
+export type TierId = "client" | "edge" | "api" | "agent" | "services" | "aiops";
 export type NetworkZone = "public" | "private";
 
 // Every element belongs to one or more rungs of the maturity ladder. Base
@@ -215,6 +222,27 @@ const TIERS_SRC: TierSrc[] = [
     accent: "var(--color-sky)",
     box: { x: 8, y: 64, w: 272, h: 196 },
   },
+  // 088-network-layer — the real ingress chain (DNS · CDN · WAF · TLS/LB · API-GW).
+  // A public-zone tier between the client and the private API; shown only when the
+  // `network` Build component is on. Each station is a separately-deployed appliance
+  // container the request truly transits.
+  {
+    id: "edge",
+    title: { en: "Network Edge", pt: "Borda de Rede" },
+    alias: { en: "Ingress / edge", pt: "Ingresso / borda" },
+    generic: {
+      en: "DNS, CDN, WAF, load balancer and API gateway",
+      pt: "DNS, CDN, WAF, balanceador e API gateway",
+    },
+    clouds: {
+      azure: "Azure DNS · Front Door · WAF · App Gateway · API Management",
+      aws: "Route 53 · CloudFront · WAF · ALB · API Gateway",
+      gcp: "Cloud DNS · Cloud CDN · Cloud Armor · Cloud LB · API Gateway",
+    },
+    accent: "var(--color-sky)",
+    box: { x: 312, y: 64, w: 240, h: 586 },
+    scenarios: ["advanced"],
+  },
   {
     id: "api",
     title: { en: "API Tier", pt: "Camada de API" },
@@ -335,6 +363,159 @@ const STATIONS_SRC: StationSrc[] = [
     ],
     stages: ["frontend", "respond"],
     position: { x: 40, y: 112 },
+  },
+  // 088-network-layer — the five real ingress appliances (Advanced rung), in transit
+  // order. Each is a separately-deployed Docker container the request truly crosses;
+  // its stage carries only what the appliance's forwarded headers prove.
+  {
+    id: "dns",
+    tier: "edge",
+    title: "DNS",
+    subtitle: { en: "Name resolution", pt: "Resolução de nomes" },
+    icon: "🧭",
+    accent: "var(--color-sky)",
+    tag: "CoreDNS",
+    blurb: {
+      en: "Resolves the service name to an address before any connection is made — returning an A record and a TTL that says how long the answer may be cached.",
+      pt: "Resolve o nome do serviço para um endereço antes de qualquer conexão — retornando um registro A e um TTL que diz por quanto tempo a resposta pode ser cacheada.",
+    },
+    why: {
+      en: "Nothing can be reached by name until DNS resolves it to an IP; the TTL lets resolvers cache the answer so every request doesn't pay a lookup. Here a real CoreDNS resolves the chain's internal service names.",
+      pt: "Nada é alcançado por nome até o DNS resolvê-lo para um IP; o TTL deixa os resolvers cachearem a resposta para nem toda requisição pagar uma consulta. Aqui um CoreDNS real resolve os nomes internos da cadeia.",
+    },
+    whatBreaks: {
+      en: "With no resolver, clients must hardcode IPs — every redeploy breaks them. Honest caveat: the browser still uses the host's resolver; CoreDNS resolves the chain's internal hops, not the user's lookup.",
+      pt: "Sem resolver, clientes precisam fixar IPs — todo redeploy os quebra. Ressalva honesta: o navegador ainda usa o resolver do host; o CoreDNS resolve os hops internos da cadeia, não a consulta do usuário.",
+    },
+    generic: { en: "DNS resolver", pt: "Resolvedor DNS" },
+    clouds: { azure: "Azure DNS", aws: "Route 53", gcp: "Cloud DNS" },
+    tech: [
+      { k: { en: "server", pt: "servidor" }, v: "CoreDNS" },
+      { k: { en: "record", pt: "registro" }, v: "A / AAAA + TTL" },
+    ],
+    stages: ["dns"],
+    position: { x: 312, y: 112 },
+    scenarios: ["advanced"],
+  },
+  {
+    id: "cdn",
+    tier: "edge",
+    title: { en: "CDN / Cache", pt: "CDN / Cache" },
+    subtitle: { en: "Edge cache", pt: "Cache de borda" },
+    icon: "⚡",
+    accent: "var(--color-blue)",
+    tag: "Varnish",
+    blurb: {
+      en: "An edge cache in front of the app: a cache HIT is served straight from the edge, a MISS is forwarded on. The X-Cache header says which happened.",
+      pt: "Um cache de borda na frente da app: um HIT de cache é servido direto da borda, um MISS é encaminhado adiante. O header X-Cache diz qual ocorreu.",
+    },
+    why: {
+      en: "Caching cacheable responses at the edge cuts latency and offloads the origin — the app never computes what the cache can already answer. A real Varnish reports HIT/MISS here.",
+      pt: "Cachear respostas cacheáveis na borda corta a latência e alivia a origem — a app nunca recomputa o que o cache já responde. Um Varnish real reporta HIT/MISS aqui.",
+    },
+    whatBreaks: {
+      en: "Without a cache every request hits the origin, so a traffic spike becomes an origin overload. Honest caveat: this is a single edge cache, not a geo-distributed CDN with many PoPs.",
+      pt: "Sem cache toda requisição bate na origem, então um pico de tráfego vira sobrecarga da origem. Ressalva honesta: é um único cache de borda, não um CDN geo-distribuído com vários PoPs.",
+    },
+    generic: { en: "CDN / edge cache", pt: "CDN / cache de borda" },
+    clouds: { azure: "Azure CDN / Front Door", aws: "CloudFront", gcp: "Cloud CDN" },
+    tech: [
+      { k: { en: "cache", pt: "cache" }, v: "Varnish" },
+      { k: { en: "signal", pt: "sinal" }, v: "X-Cache: HIT / MISS" },
+    ],
+    stages: ["cdn"],
+    position: { x: 312, y: 220 },
+    scenarios: ["advanced"],
+  },
+  {
+    id: "waf",
+    tier: "edge",
+    title: "WAF",
+    subtitle: { en: "Web App Firewall", pt: "Firewall de Aplicação" },
+    icon: "🛡️",
+    accent: "var(--color-warn)",
+    tag: "ModSecurity",
+    blurb: {
+      en: "OWASP Core Rule Set inspects every request; a known attack signature (SQL injection, XSS) is blocked with a 403 before it ever reaches the app. A clean request passes through.",
+      pt: "O OWASP Core Rule Set inspeciona cada requisição; uma assinatura de ataque conhecida (SQL injection, XSS) é bloqueada com 403 antes de chegar à app. Uma requisição limpa passa.",
+    },
+    why: {
+      en: "A WAF is the rule engine that stops common web attacks at the edge, before they touch application code — defense in depth. Here a real ModSecurity/CRS returns a real 403 on a malicious payload.",
+      pt: "Um WAF é o motor de regras que barra ataques web comuns na borda, antes de tocarem o código da aplicação — defesa em profundidade. Aqui um ModSecurity/CRS real retorna um 403 real num payload malicioso.",
+    },
+    whatBreaks: {
+      en: "Without it, injection and scanner traffic reach the app and rely on perfect application code to be safe. A WAF is a layer, not a substitute for fixing the underlying vulnerability.",
+      pt: "Sem ele, tráfego de injeção e scanners chega à app e depende de código perfeito para ser seguro. Um WAF é uma camada, não um substituto para corrigir a vulnerabilidade de fundo.",
+    },
+    generic: { en: "Web application firewall", pt: "Firewall de aplicação web" },
+    clouds: { azure: "Azure WAF (Front Door)", aws: "AWS WAF", gcp: "Cloud Armor" },
+    tech: [
+      { k: { en: "engine", pt: "motor" }, v: "ModSecurity + OWASP CRS" },
+      { k: { en: "action", pt: "ação" }, v: "block 403 / pass" },
+    ],
+    stages: ["waf"],
+    position: { x: 312, y: 328 },
+    scenarios: ["advanced"],
+  },
+  {
+    id: "lb",
+    tier: "edge",
+    title: { en: "TLS / Load Balancer", pt: "TLS / Balanceador" },
+    subtitle: { en: "Terminate TLS · balance", pt: "Terminar TLS · balancear" },
+    icon: "⚖️",
+    accent: "var(--color-violet)",
+    tag: "HAProxy",
+    blurb: {
+      en: "Terminates TLS (decrypts HTTPS) and balances the request onto a backend upstream, adding X-Forwarded-* headers so the app still sees the real client and scheme.",
+      pt: "Termina o TLS (descriptografa o HTTPS) e balanceia a requisição para um upstream do backend, adicionando headers X-Forwarded-* para a app ainda ver o cliente e o esquema reais.",
+    },
+    why: {
+      en: "One place terminates TLS and spreads load so backends stay simple and replaceable; the forwarded headers preserve the client identity the app needs. A real HAProxy does this here.",
+      pt: "Um único ponto termina o TLS e distribui a carga para os backends ficarem simples e substituíveis; os headers encaminhados preservam a identidade do cliente que a app precisa. Um HAProxy real faz isso aqui.",
+    },
+    whatBreaks: {
+      en: "Without it every backend handles its own certs and there's no single place to add or drain instances. Honest caveat: §7 — this fronts a single backend (a one-node pool), not a horizontally scaled fleet.",
+      pt: "Sem ele cada backend cuida dos próprios certificados e não há um único ponto para adicionar ou drenar instâncias. Ressalva honesta: §7 — ele fronteia um único backend (pool de um nó), não uma frota escalada horizontalmente.",
+    },
+    generic: { en: "TLS termination / load balancer", pt: "Terminação TLS / balanceador" },
+    clouds: { azure: "Application Gateway", aws: "ALB / NLB", gcp: "Cloud Load Balancing" },
+    tech: [
+      { k: { en: "balancer", pt: "balanceador" }, v: "HAProxy" },
+      { k: { en: "tls", pt: "tls" }, v: "TLS 1.3 termination" },
+    ],
+    stages: ["lb"],
+    position: { x: 312, y: 436 },
+    scenarios: ["advanced"],
+  },
+  {
+    id: "apigw",
+    tier: "edge",
+    title: { en: "API Gateway", pt: "API Gateway" },
+    subtitle: { en: "Route · rate-limit", pt: "Rotear · rate-limit" },
+    icon: "🚪",
+    accent: "var(--color-indigo)",
+    tag: "Kong",
+    blurb: {
+      en: "The single front door for the API: it routes by path, enforces rate limits and API keys, and reports headers like X-RateLimit-Remaining before forwarding to the backend.",
+      pt: "A porta de entrada única da API: roteia por path, aplica rate limits e chaves de API, e reporta headers como X-RateLimit-Remaining antes de encaminhar ao backend.",
+    },
+    why: {
+      en: "A gateway centralizes routing, authentication and quotas so every service doesn't reimplement them — one policy plane at the edge. A real Kong (DB-less) enforces it here.",
+      pt: "Um gateway centraliza roteamento, autenticação e cotas para cada serviço não reimplementá-los — um plano de política único na borda. Um Kong real (sem banco) o aplica aqui.",
+    },
+    whatBreaks: {
+      en: "Without it each service reinvents auth and rate limiting inconsistently, and there's no single chokepoint to apply a quota or revoke a key.",
+      pt: "Sem ele cada serviço reinventa auth e rate limiting de forma inconsistente, e não há um ponto único para aplicar uma cota ou revogar uma chave.",
+    },
+    generic: { en: "API gateway", pt: "API gateway" },
+    clouds: { azure: "API Management", aws: "API Gateway", gcp: "API Gateway / Apigee" },
+    tech: [
+      { k: { en: "gateway", pt: "gateway" }, v: "Kong (DB-less)" },
+      { k: { en: "policy", pt: "política" }, v: "routing · rate-limit · keys" },
+    ],
+    stages: ["apigw"],
+    position: { x: 312, y: 544 },
+    scenarios: ["advanced"],
   },
   {
     id: "backend",
@@ -943,6 +1124,129 @@ const HOPS_SRC: HopSrc[] = [
     sourceHandle: "right",
     targetHandle: "left",
   },
+  // 088-network-layer — the real ingress chain, in transit order. Shown only when the
+  // `network` component is on; the direct frontend→backend hop is hidden then (the
+  // request really traverses these appliances instead). Vertical down the edge column.
+  {
+    source: "frontend",
+    target: "dns",
+    label: { en: "resolve", pt: "resolver" },
+    protocol: "DNS",
+    detail: {
+      en: "The hostname is resolved to an address before any connection opens",
+      pt: "O hostname é resolvido para um endereço antes de qualquer conexão abrir",
+    },
+    why: {
+      en: "Every request begins with a name lookup: DNS maps the hostname to an IP (with a TTL the resolver caches). Here a real CoreDNS resolves the chain's internal service names.",
+      pt: "Toda requisição começa com uma consulta de nome: o DNS mapeia o hostname para um IP (com um TTL que o resolver cacheia). Aqui um CoreDNS real resolve os nomes internos da cadeia.",
+    },
+    comm: "async",
+    secure: false,
+    zone: "public",
+    controls: { en: "DNSSEC · TTL", pt: "DNSSEC · TTL" },
+    sourceHandle: "right",
+    targetHandle: "left",
+  },
+  {
+    source: "dns",
+    target: "cdn",
+    label: "HTTPS",
+    protocol: "HTTPS / TLS 1.3",
+    detail: {
+      en: "The resolved request reaches the CDN edge cache first",
+      pt: "A requisição resolvida chega primeiro ao cache de borda da CDN",
+    },
+    why: {
+      en: "Once resolved, traffic hits the CDN edge: a cache HIT is served from there, a MISS continues down the chain. A real Varnish reports HIT/MISS.",
+      pt: "Resolvida, a requisição bate na borda da CDN: um HIT é servido ali, um MISS segue pela cadeia. Um Varnish real reporta HIT/MISS.",
+    },
+    comm: "sync",
+    secure: true,
+    zone: "public",
+    controls: { en: "TLS 1.3 · cache", pt: "TLS 1.3 · cache" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
+  },
+  {
+    source: "cdn",
+    target: "waf",
+    label: { en: "inspect", pt: "inspecionar" },
+    protocol: "HTTP",
+    detail: {
+      en: "A cache MISS is inspected by the WAF rule engine",
+      pt: "Um MISS de cache é inspecionado pelo motor de regras do WAF",
+    },
+    why: {
+      en: "Before the request can reach the app it is screened by the WAF (OWASP CRS) — known attack signatures are blocked with a 403; clean traffic passes. A real ModSecurity enforces it.",
+      pt: "Antes de chegar à app a requisição é triada pelo WAF (OWASP CRS) — assinaturas de ataque conhecidas são bloqueadas com 403; tráfego limpo passa. Um ModSecurity real o aplica.",
+    },
+    comm: "sync",
+    secure: true,
+    zone: "public",
+    controls: { en: "OWASP CRS · 403", pt: "OWASP CRS · 403" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
+  },
+  {
+    source: "waf",
+    target: "lb",
+    label: { en: "balance", pt: "balancear" },
+    protocol: "HTTPS / TLS 1.3",
+    detail: {
+      en: "A clean request is load-balanced; TLS is terminated here",
+      pt: "Uma requisição limpa é balanceada; o TLS é terminado aqui",
+    },
+    why: {
+      en: "Past the WAF, the load balancer terminates TLS and picks a backend upstream, adding X-Forwarded-* so the app still sees the real client. A real HAProxy does this.",
+      pt: "Passado o WAF, o balanceador termina o TLS e escolhe um upstream do backend, adicionando X-Forwarded-* para a app ainda ver o cliente real. Um HAProxy real faz isso.",
+    },
+    comm: "sync",
+    secure: true,
+    zone: "public",
+    controls: { en: "TLS 1.3 · X-Forwarded-*", pt: "TLS 1.3 · X-Forwarded-*" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
+  },
+  {
+    source: "lb",
+    target: "apigw",
+    label: { en: "route", pt: "rotear" },
+    protocol: "HTTP",
+    detail: {
+      en: "The API gateway routes, rate-limits and checks the API key",
+      pt: "O API gateway roteia, aplica rate-limit e verifica a chave de API",
+    },
+    why: {
+      en: "The gateway is the single policy plane: it routes by path, enforces rate limits and API keys, and reports X-RateLimit-Remaining before forwarding. A real Kong (DB-less) enforces it.",
+      pt: "O gateway é o plano único de política: roteia por path, aplica rate limits e chaves de API, e reporta X-RateLimit-Remaining antes de encaminhar. Um Kong real (sem banco) o aplica.",
+    },
+    comm: "sync",
+    secure: true,
+    zone: "public",
+    controls: { en: "rate-limit · API key", pt: "rate-limit · chave de API" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
+  },
+  {
+    source: "apigw",
+    target: "backend",
+    label: { en: "forward", pt: "encaminhar" },
+    protocol: { en: "Private network · HTTP", pt: "Rede privada · HTTP" },
+    detail: {
+      en: "Past the edge, the request enters the private network and reaches the app",
+      pt: "Passada a borda, a requisição entra na rede privada e chega à app",
+    },
+    why: {
+      en: "Only after clearing the whole chain does the request cross into the private network and reach the backend — the appliances are the hardened public front door the app sits behind.",
+      pt: "Só depois de passar por toda a cadeia a requisição cruza para a rede privada e chega ao backend — as appliances são a porta pública endurecida atrás da qual a app fica.",
+    },
+    comm: "async",
+    secure: true,
+    zone: "public",
+    controls: { en: "X-Forwarded-* · X-Request-Id", pt: "X-Forwarded-* · X-Request-Id" },
+    sourceHandle: "right",
+    targetHandle: "left",
+  },
   {
     source: "backend",
     target: "agent",
@@ -1350,7 +1654,14 @@ export function visibleStationIdsFor(sel: ResolvedSelection, showUpload = false)
 
 export function visibleHopsFor(lang: Lang, sel: ResolvedSelection, showUpload = false): HopMeta[] {
   const visible = new Set(visibleStationIdsFor(sel, showUpload));
-  return hopsFor(lang).filter((h) => visible.has(h.source) && visible.has(h.target));
+  // 088-network-layer — when the ingress chain is on, the request really traverses
+  // the appliances, so the direct frontend→backend hop is replaced by the chain
+  // (frontend→dns→…→apigw→backend). Hide the direct hop to avoid drawing both.
+  const chainOn = visible.has("dns");
+  return hopsFor(lang).filter((h) => {
+    if (chainOn && h.source === "frontend" && h.target === "backend") return false;
+    return visible.has(h.source) && visible.has(h.target);
+  });
 }
 
 export function visibleTiersFor(lang: Lang, sel: ResolvedSelection, showUpload = false): TierMeta[] {

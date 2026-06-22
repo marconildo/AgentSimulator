@@ -311,6 +311,10 @@ export interface AppConfig {
   // 081-chunking-config: per-strategy tunable parameters + their default/min/max,
   // so the Settings picker renders exactly the relevant controls without hardcoding bounds.
   chunk_params?: Record<string, Record<string, ChunkParamSpec>>;
+  // 088-network-layer: whether the real ingress chain (DNS · CDN · WAF · TLS/LB ·
+  // API-GW) is present (the Docker network stack is up). The Build "Network"
+  // component is enabled only when true; a bare `uvicorn` run reports false.
+  network_available?: boolean;
 }
 
 export interface ChunkParamSpec {

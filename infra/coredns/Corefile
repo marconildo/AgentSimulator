@@ -1,0 +1,20 @@
+# 088-network-layer — CoreDNS resolves the chain's internal service names.
+#
+# The backend's `dns:` points here (docker-compose), so service-name lookups the
+# chain makes (e.g. "backend", "kong") are genuinely resolved by CoreDNS, with a
+# TTL. Docker's own embedded DNS (127.0.0.11) is the upstream for the compose
+# network's service names; everything else forwards to a public resolver.
+#
+# This makes DNS a real, separately-deployed hop — not just Docker's implicit
+# resolver. Honest caveat (§3): the *browser* still uses the host's resolver;
+# CoreDNS resolves the chain's internal hops, not the end user's lookup.
+
+. {
+    # Resolve compose service names via Docker's embedded DNS, the rest publicly.
+    forward . 127.0.0.11 1.1.1.1 {
+        policy sequential
+    }
+    cache 30
+    log
+    errors
+}

@@ -74,11 +74,26 @@ production network in front of and between the services). Its first node is **do
   **Revised (085):** the edge has **no node/tier of its own** — the `edge` stage maps to the
   `backend` station, and its chain (DNS · CDN · WAF · TLS/LB · API GW, only TLS/LB real) +
   forwarded headers render in the **`frontend→backend` hop detail** (click the arrow), not a box.
-- **What's still open (later specs).** Each preview segment graduates to its own real node:
-  **CDN**, **WAF**, **DNS**, **API gateway**, and **internal service mesh / mTLS depth** (subnets,
-  NSG, private endpoints). Real TLS with a mounted cert (the nginx.conf has the commented `listen
-  8443 ssl` block ready). The 058 GitHub Pages demo fixtures don't yet include `edge` events — old
-  fixtures render the edge box idle (graceful fallback) until re-captured.
+### ✅ Network layer chain (DNS · CDN · WAF · TLS/LB · API-GW) — SHIPPED (088-network-layer)
+- **Status.** Done (frontend + backend green; the five appliance containers need a live
+  `docker compose up` to validate header injection + the real WAF 403). The five preview chain
+  segments graduated to **five real, separately-deployed appliance containers** the request truly
+  transits — `coredns` · `varnish` · `owasp/modsecurity-crs` · `haproxy` · `kong` — each emitting a
+  new `Stage` (`dns`/`cdn`/`waf`/`lb`/`apigw`) from forwarded evidence (`backend/app/network.py`,
+  the `edge.py` honesty seam). They are a single **advanced** Build component ("Network"/"Redes"),
+  **reversing 084's "no box"** — the chain now renders as five stations in a public-zone `edge` tier
+  between the client and the API. The containers come up with `docker compose up`; the toggle is
+  **visualization/emission only** (no `docker.sock`, no lifecycle), gated on `NETWORK_CHAIN=1`
+  (`/api/config.network_available`) so a bare `uvicorn` run disables it.
+- **What's still open (later specs).** The interactive "send a blocked request" WAF demo and the
+  rate-limit (burst → 429) demo; **internal service mesh / mTLS depth** (subnets, NSG, private
+  endpoints); real TLS with a mounted cert. The 058 GitHub Pages demo is backend-less so the chain
+  is naturally absent there (the toggle is disabled, as designed).
+
+- **What was still open under 084, now closed by 088.** **CDN**, **WAF**, **DNS** and **API gateway**
+  are real nodes. Remaining: **internal service mesh / mTLS depth**. Real TLS with a mounted cert (the
+  nginx.conf has the commented `listen 8443 ssl` block ready). The 058 GitHub Pages demo fixtures
+  don't include `edge`/network events — old fixtures render those stations idle (graceful fallback).
 
 ---
 

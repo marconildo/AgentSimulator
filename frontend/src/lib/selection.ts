@@ -42,6 +42,11 @@ export type ComponentId =
   // and no station; its detail shows on the frontend→backend arrow (085).
   | "rerank" // RAG reranker (real; sub-stage, no station of its own; vector-only)
   | "hybrid" // Hybrid search BM25 + vector (real; sub-stage, no station; vector-only)
+  // 088-network-layer — the real ingress chain (DNS→CDN→WAF→TLS/LB→API-GW) as ONE toggle.
+  // Maps to FIVE stations (special-cased in resolveStations), floor=advanced. Real infra
+  // that comes up with `docker compose up`; the toggle is visualization/emission only (it
+  // never starts/stops containers). The builder disables it when the chain isn't present.
+  | "network"
   | "summarization" // context compaction (preview)
   | "gateway"
   | "guardrails"
@@ -54,6 +59,10 @@ export const SKELETON: readonly StationId[] = ["frontend", "backend", "agent", "
 
 /** The Advanced-rung sub-agent stations revealed by the `multiagent` runtime. */
 const SUBAGENT_STATIONS: readonly StationId[] = ["researcher", "coder", "critic"];
+
+/** The five real ingress-chain stations revealed by the `network` component (088), in
+ *  request order. Special-cased in `resolveStations` since `network` maps to >1 station. */
+export const NETWORK_STATIONS: readonly StationId[] = ["dns", "cdn", "waf", "lb", "apigw"];
 
 /** Component → the station it shows (omitted for `rerank`/`hybrid`/`edge`, which have
  *  no station of their own — they drive a per-feature request input only). */
@@ -77,6 +86,7 @@ export const ALL_COMPONENTS: readonly ComponentId[] = [
   "mcp",
   "rerank",
   "hybrid",
+  "network",
   "summarization",
   "gateway",
   "guardrails",
@@ -106,6 +116,7 @@ export const COMPONENT_IS_REAL: Record<ComponentId, boolean> = {
   mcp: true,
   rerank: true,
   hybrid: true, // 070-hybrid-search: real BM25 + vector RRF fusion sub-stage
+  network: true, // 088-network-layer: real ingress chain of Docker containers
   summarization: false,
   gateway: false,
   guardrails: false,
@@ -134,6 +145,7 @@ const COMPONENT_FLOOR: Record<ComponentId, Maturity> = {
   mcp: "simple",
   rerank: "intermediate",
   hybrid: "intermediate",
+  network: "advanced",
   summarization: "intermediate",
   gateway: "advanced",
   guardrails: "advanced",
@@ -181,6 +193,8 @@ export function resolveStations(
     const station = COMPONENT_STATION[c];
     if (station) ids.add(station);
   }
+  // The network component maps to FIVE stations (the ingress chain), not one (088).
+  if (enabled.has("network")) for (const s of NETWORK_STATIONS) ids.add(s);
   // Exactly one retrieval station, per the strategy radio.
   ids.add(RETRIEVAL_STATION[retrieval]);
   if (runtime === "multiagent") for (const s of SUBAGENT_STATIONS) ids.add(s);

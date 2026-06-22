@@ -26,6 +26,19 @@ class Stage(StrEnum):
     """Pipeline stations, in roughly the order they fire."""
 
     FRONTEND = "frontend"
+    # Network layer (088-network-layer): the real ingress chain — five separately
+    # deployed appliance containers the request genuinely transits before the app
+    # sees it (CoreDNS → Varnish → ModSecurity/CRS → HAProxy → Kong). Each fires
+    # once, in this order, between FRONTEND and BACKEND, only when the request's
+    # `network` toggle is on AND the chain is present (forwarded evidence headers).
+    # Each reports only what the appliance's headers prove (the `edge.py` honesty
+    # seam, extended in `network.py`). The chain comes up with `docker compose up`;
+    # the toggle is visualization/emission only — it never starts/stops containers.
+    DNS = "dns"
+    CDN = "cdn"
+    WAF = "waf"
+    LB = "lb"
+    APIGW = "apigw"
     # Network edge (084-network-edge): the first hop in production — TLS is
     # terminated, traffic is load-balanced, and forwarded headers are added by a
     # reverse proxy (a real nginx in docker-compose) before the app sees the
@@ -240,6 +253,16 @@ class ChatRequest(BaseModel):
     # field; its detail (the chain + forwarded headers) shows on the
     # ``frontend→backend`` hop (085).
     edge: bool = True
+
+    # --- Network layer (088-network-layer) -----------------------------------
+    # Visualize + emit the real ingress chain (DNS → CDN → WAF → TLS/LB → API-GW).
+    # The five appliance containers come up with ``docker compose up`` (real infra
+    # always in front of the backend when the stack runs); this flag only controls
+    # whether the backend emits their five stages — it never starts/stops anything.
+    # Default ``False`` ⇒ today's stage stream byte-for-byte. The frontend only sets
+    # it (and the Build "Network" component only enables) when the chain is present
+    # (``/api/config.network_available``); a bare ``uvicorn`` run reports it absent.
+    network: bool = False
 
     # --- Hybrid search (070-hybrid-search) -----------------------------------
     # Runs a sparse BM25 lane alongside the dense vector search and fuses the two

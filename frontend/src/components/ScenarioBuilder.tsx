@@ -15,6 +15,7 @@ import {
   useMaturity,
   useSelection,
 } from "../lib/selection";
+import { useNetworkAvailable } from "../lib/network";
 
 // 061-scenario-builder — the à-la-carte component palette. Replaces the maturity-ladder
 // segmented control + the track switcher: the user composes the architecture by toggling
@@ -24,9 +25,11 @@ import {
 
 // 066-retrieval-strategy-radio — the retrieval group leads with a strategy radio
 // (Vector RAG ⊻ RAGLESS); rerank/hybrid are vector-only sub-features below it.
-const GROUPS: { id: "retrieval" | "agent" | "aiops"; components: ComponentId[] }[] = [
+const GROUPS: { id: "retrieval" | "agent" | "infra" | "aiops"; components: ComponentId[] }[] = [
   { id: "retrieval", components: ["rerank", "hybrid"] },
   { id: "agent", components: ["mcp", "summarization"] },
+  // 088-network-layer — the real ingress chain (Advanced), gated on the Docker stack.
+  { id: "infra", components: ["network"] },
   { id: "aiops", components: ["gateway", "guardrails", "cache", "eval", "observability"] },
 ];
 
@@ -49,6 +52,9 @@ export function ScenarioBuilder() {
   const setRetrieval = useSelection((s) => s.setRetrieval);
   const canToggle = useSelection((s) => s.canToggle);
   const maturity = useMaturity();
+  // 088-network-layer — the "Network" component is enabled only when the real
+  // ingress chain is present (the Docker stack is up); otherwise it's disabled.
+  const networkAvailable = useNetworkAvailable();
 
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -197,14 +203,24 @@ export function ScenarioBuilder() {
                   // Dependency-blocked (e.g. reranker without Vector RAG) ⇒ dimmed + unclickable.
                   // Locked (fundamental) ⇒ checked + unclickable but NOT dimmed.
                   const depBlocked = !on && !canToggle(id);
+                  // 088-network-layer — the chain's appliances only exist under the
+                  // full Docker stack, so the toggle is disabled when it's absent.
+                  const netBlocked = id === "network" && !networkAvailable && !on;
+                  const blocked = depBlocked || netBlocked;
                   return (
                     <button
                       key={id}
-                      onClick={() => !locked && !depBlocked && toggle(id)}
-                      disabled={locked || depBlocked}
-                      title={dep && depBlocked ? b.requiresRag : b.components[id].blurb}
+                      onClick={() => !locked && !blocked && toggle(id)}
+                      disabled={locked || blocked}
+                      title={
+                        netBlocked
+                          ? b.networkUnavailable
+                          : dep && depBlocked
+                            ? b.requiresRag
+                            : b.components[id].blurb
+                      }
                       className={`flex items-center gap-2 rounded-md px-1.5 py-1 text-left transition ${
-                        depBlocked
+                        blocked
                           ? "cursor-not-allowed opacity-45"
                           : locked
                             ? "cursor-default"

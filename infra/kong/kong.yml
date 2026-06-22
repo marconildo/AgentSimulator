@@ -1,0 +1,34 @@
+# 088-network-layer — Kong (DB-less) as the API gateway, the last edge hop before
+# the backend. It routes by path, enforces a real rate limit (a burst returns 429),
+# and stamps gateway evidence as REQUEST headers the backend reads (app/network.py).
+#
+# Honest note: Kong's live X-RateLimit-Remaining is a RESPONSE header (added on the
+# way back to the client), so the backend trace reports the route + gateway (real,
+# static) and leaves the remaining count null — the rate limiting itself is real
+# (the 429 on a burst is enforced here), it just isn't echoed upstream.
+
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: agent-api
+    url: http://backend:8000
+    routes:
+      - name: chat
+        paths:
+          - /
+        strip_path: false
+
+plugins:
+  # Real rate limiting at the edge — a burst over the limit gets a 429 from Kong.
+  - name: rate-limiting
+    config:
+      minute: 60
+      policy: local
+  # Stamp gateway evidence as request headers forwarded to the backend.
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Gateway:kong"
+          - "X-Kong-Route:chat"

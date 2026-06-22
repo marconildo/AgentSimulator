@@ -163,6 +163,35 @@ describe("selection model (061-scenario-builder / 066-retrieval-strategy-radio)"
     expect(stations.has("rag")).toBe(true);
   });
 
+  // 088-network-layer — the real ingress chain as a single advanced Build component.
+  const NETWORK_STATIONS = ["dns", "cdn", "waf", "lb", "apigw"];
+
+  it("088 AC1 — network is off by default and toggles on/off", () => {
+    expect(useSelection.getState().enabled.has("network")).toBe(false);
+    useSelection.getState().toggle("network");
+    expect(useSelection.getState().enabled.has("network")).toBe(true);
+    useSelection.getState().toggle("network");
+    expect(useSelection.getState().enabled.has("network")).toBe(false);
+  });
+
+  it("088 AC2 — enabling network derives the advanced maturity badge", () => {
+    expect(classify(set(["mcp"]), "react", "vector")).toBe("simple");
+    expect(classify(set(["mcp", "network"]), "react", "vector")).toBe("advanced");
+    // Highest floor wins regardless of the other (lower) components.
+    expect(classify(set(["mcp", "rerank", "network"]), "deepagents", "vector")).toBe("advanced");
+  });
+
+  it("088 AC4 — network adds the five chain stations; off adds none", () => {
+    const off = resolveStations(set(["mcp"]), "react", "vector");
+    for (const s of NETWORK_STATIONS) expect(off.has(s as never)).toBe(false);
+
+    const on = resolveStations(set(["mcp", "network"]), "react", "vector");
+    for (const s of NETWORK_STATIONS) expect(on.has(s as never)).toBe(true);
+    // The base set is untouched (additive).
+    expect(on.has("frontend")).toBe(true);
+    expect(on.has("backend")).toBe(true);
+  });
+
   it("persists the selection (incl. retrieval) to localStorage", () => {
     useSelection.getState().toggle("gateway");
     const raw = localStorage.getItem("agentsim.selection");

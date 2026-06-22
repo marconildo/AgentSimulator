@@ -31,6 +31,13 @@ const COLLAPSED_H_OVERRIDE: Partial<Record<StationId, number>> = {
 // so they keep the collapsed height.
 const EXPANDED_H: Record<StationId, number> = {
   frontend: 176,
+  // 088-network-layer — the ingress appliances are collapsed-only tiles (their
+  // detail lives in the Inspector), so expanded == collapsed height.
+  dns: COLLAPSED_H,
+  cdn: COLLAPSED_H,
+  waf: COLLAPSED_H,
+  lb: COLLAPSED_H,
+  apigw: COLLAPSED_H,
   backend: 188,
   agent: 268,
   database: 184,
@@ -77,11 +84,25 @@ interface Column {
 // their two boxes visually separate). The data column is one tier; the AI-Ops
 // column (advanced rung) is the rightmost. Members not in the active scenario
 // are filtered out at layout time, so listing them here is harmless.
-const COLUMNS: Column[] = [
+// 088-network-layer — the ingress chain stations (in transit order) and how far
+// the columns to its right slide when the chain is shown. When the chain is off the
+// edge column has no visible members and SHIFT is 0, so the layout is byte-for-byte
+// today's (AC10).
+const NETWORK_IDS: StationId[] = ["dns", "cdn", "waf", "lb", "apigw"];
+const EDGE_SHIFT = 300;
+
+interface ColumnSrc extends Column {
+  shift?: boolean; // columns right of the edge slide by SHIFT when the chain is on
+}
+
+const COLUMNS: ColumnSrc[] = [
   { x: 40, gap: 44, members: ["frontend"] },
+  // The ingress chain — a public-zone column between the client and the API, shown
+  // only when the `network` component is on (its members are otherwise not visible).
+  { x: 312, gap: 24, members: NETWORK_IDS },
   // Big gap between the API and Agent tiers: the vertical Backend→Agent edge
   // label needs to clear the Agent tier's header, which sits above the node.
-  { x: 372, gap: 168, members: ["backend", "agent"] },
+  { x: 372, gap: 168, members: ["backend", "agent"], shift: true },
   // 034 + 080: ingestion → rag are stacked in write-path order so the upload edges
   // flow downward (ingestion→rag, source-bottom → target-top). Object storage is now
   // a phase inside the ingestion node, not a separate stacked station.
@@ -89,14 +110,26 @@ const COLUMNS: Column[] = [
     x: 1016,
     gap: 36,
     members: ["database", "ingestion", "rag", "pageindex", "mcp", "llm"],
+    shift: true,
   },
-  { x: 1320, gap: 24, members: ["gateway", "guardrails", "cache", "eval", "observability"] },
+  {
+    x: 1320,
+    gap: 24,
+    members: ["gateway", "guardrails", "cache", "eval", "observability"],
+    shift: true,
+  },
 ];
 
 const TOP = 120;
 
 const TIER_OF: Record<StationId, TierId> = {
   frontend: "client",
+  // 088-network-layer — the ingress appliances live in the public-zone `edge` tier.
+  dns: "edge",
+  cdn: "edge",
+  waf: "edge",
+  lb: "edge",
+  apigw: "edge",
   backend: "api",
   agent: "agent",
   database: "services",
@@ -158,12 +191,18 @@ export function computeLayout(
   const heights = {} as Record<StationId, number>;
   const visible = new Set(visibleStationIdsFor(sel, showUpload));
 
+  // 088-network-layer — when the ingress chain is shown, the columns to its right
+  // slide over to make room for the edge column; otherwise SHIFT is 0 (today's layout).
+  const networkOn = NETWORK_IDS.some((id) => visible.has(id));
+  const shiftX = networkOn ? EDGE_SHIFT : 0;
+
   for (const col of COLUMNS) {
+    const colX = col.x + (col.shift ? shiftX : 0);
     let y = TOP;
     for (const id of col.members) {
       if (!visible.has(id)) continue; // not part of this rung — skip
       const h = heightOf(id, expanded);
-      positions[id] = { x: col.x, y };
+      positions[id] = { x: colX, y };
       heights[id] = h;
       y += h + col.gap;
     }
@@ -199,6 +238,7 @@ export function computeLayout(
 
   const tierMembers: Record<TierId, StationId[]> = {
     client: [],
+    edge: [],
     api: [],
     agent: [],
     services: [],
@@ -237,12 +277,13 @@ export function computeLayout(
   };
 
   // The public-internet / egress frontier: a vertical line midway through the gap
-  // between the client tier's right edge and the private boundary's left edge,
-  // spanning the boundary's height. The client tier is always present (frontend
-  // is in every scenario), so there is always a gap to place it in.
-  const client = tierBoxes.client;
-  const clientRight = client ? client.x + client.w : boundary.x - 18;
-  const frontierX = (clientRight + boundary.x) / 2;
+  // between the public side's right edge and the private boundary's left edge,
+  // spanning the boundary's height. The public side is the client tier, or — when
+  // the ingress chain is shown (088) — the `edge` tier (DNS·CDN·WAF·LB·GW are all
+  // public appliances, so the frontier sits after them, just before the private API).
+  const publicTier = tierBoxes.edge ?? tierBoxes.client;
+  const publicRight = publicTier ? publicTier.x + publicTier.w : boundary.x - 18;
+  const frontierX = (publicRight + boundary.x) / 2;
   const publicFrontier = { x: frontierX, y: boundary.y, h: boundary.h };
 
   return { positions, heights, widths, tierBoxes, boundary, publicFrontier };

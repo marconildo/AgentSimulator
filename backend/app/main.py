@@ -48,6 +48,7 @@ from .llm.models import (
     providers_payload,
 )
 from .mcp.client import get_registry
+from .network import network_available, read_network
 from .rag.chunking import CHUNK_PARAM_BOUNDS, ChunkStrategy
 from .rag.ingest import active_chunk_strategy, build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
@@ -292,6 +293,11 @@ async def config() -> dict:
         # Settings page prefills without hardcoding.
         "embedding_provider": effective_embedding_provider(),
         "embedding_model": effective_embedding_model(),
+        # 088-network-layer: whether the real ingress chain (DNS · CDN · WAF · TLS/LB
+        # · API-GW) is present (the Docker network stack is up). The Build "Network"
+        # component is enabled only when True — a bare `uvicorn` run reports False
+        # since the appliance containers aren't there.
+        "network_available": network_available(),
     }
 
 
@@ -503,6 +509,11 @@ async def chat(req: ChatRequest, request: Request):
     # `edge` event before BACKEND when `req.edge` is on; with no proxy in front
     # it honestly reports `proxied=False`.
     edge_info = read_edge(request)
+    # 088-network-layer: read the real ingress chain's evidence (forwarded headers the
+    # DNS/CDN/WAF/LB/API-GW appliances inject) — pure, no I/O. Emitted as five stages
+    # before BACKEND when `req.network` is on; honest "not seen" sub-records when the
+    # chain isn't in front.
+    network_info = read_network(request)
     # 074-ollama-provider: validate the optional provider override up front.
     if req.provider is not None and req.provider not in provider_ids():
         raise HTTPException(
@@ -626,6 +637,9 @@ async def chat(req: ChatRequest, request: Request):
     # stays minimal (mirrors the rerank/hybrid/ragless echoes).
     if req.edge:
         request_body["edge"] = True
+    # 088-network-layer: echo the network flag only when on.
+    if req.network:
+        request_body["network"] = True
 
     async def producer() -> None:
         try:
@@ -635,6 +649,19 @@ async def chat(req: ChatRequest, request: Request):
                 "User sent a message",
                 {"message": req.message, "session_id": session_id, "request": request_body},
             )
+            # 088-network-layer: the real ingress chain — five appliance hops the
+            # request transited before the app saw it (DNS → CDN → WAF → TLS/LB →
+            # API-GW). Emitted only when `req.network` is on; each carries only what
+            # the appliance's forwarded headers prove (honest "not seen" otherwise).
+            if req.network:
+                for stage, label, info in (
+                    (Stage.DNS, "DNS: resolved the service name", network_info.dns),
+                    (Stage.CDN, "CDN: edge cache", network_info.cdn),
+                    (Stage.WAF, "WAF: OWASP rules inspected the request", network_info.waf),
+                    (Stage.LB, "TLS terminated · load-balanced", network_info.lb),
+                    (Stage.APIGW, "API gateway: routed · rate-limited", network_info.apigw),
+                ):
+                    await emitter.emit(stage, Phase.END, label, info.as_data())
             # 084-network-edge: the first hop in production. A single observation
             # event (like FRONTEND), fired only when the edge is enabled, carrying
             # only what the forwarded headers prove. With no proxy in front it is

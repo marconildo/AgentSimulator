@@ -15,7 +15,7 @@
 
 import { create } from "zustand";
 
-import { currentRequestInputs } from "./selection";
+import { currentRequestInputs, useSelection } from "./selection";
 
 export interface ConvExperiment {
   topK: number | null; // null = backend default top-k
@@ -129,6 +129,10 @@ export interface ChatOverrides {
   hybrid?: boolean;
   runtime?: string;
   ragless?: boolean;
+  // 088-network-layer — visualize + emit the real ingress chain. Sent only when the
+  // `network` component is enabled (which the Build popover allows only when the chain
+  // is present), so an ordinary run sends nothing extra.
+  network?: boolean;
 }
 
 export function overridesFor(conv: string | null): ChatOverrides {
@@ -142,5 +146,8 @@ export function overridesFor(conv: string | null): ChatOverrides {
   if (hybrid) out.hybrid = true;
   if (runtime !== "react") out.runtime = runtime;
   if (ragless) out.ragless = true;
+  // 088-network-layer — read straight from the global selection (it's not one of the
+  // four `requestInputs`, whose shape existing tests pin exactly).
+  if (useSelection.getState().enabled.has("network")) out.network = true;
   return out;
 }

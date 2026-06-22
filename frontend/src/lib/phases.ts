@@ -41,6 +41,13 @@ export const PHASE_ORDER: TimelinePhase[] = [
 // `Record<Stage, …>` so `tsc --noEmit` fails if a new `Stage` is left unmapped.
 export const STAGE_TO_PHASE: Record<Stage, TimelinePhase> = {
   frontend: "request",
+  // 088-network-layer — the ingress chain (DNS · CDN · WAF · TLS/LB · API-GW) is
+  // all part of the request phase (it runs before the backend sees the request).
+  dns: "request",
+  cdn: "request",
+  waf: "request",
+  lb: "request",
+  apigw: "request",
   // 084-network-edge — the edge is the first hop of the request phase (before backend).
   edge: "request",
   backend: "request",

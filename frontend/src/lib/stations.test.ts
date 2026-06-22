@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_SELECTION } from "./selection";
+import { DEFAULT_SELECTION, selectionOf } from "./selection";
 import {
   HOP_PAIRS,
   hopsFor,
   publicBoundaryFor,
   stationForEvent,
   stationsFor,
+  visibleHopsFor,
   visibleStationIdsFor,
 } from "./stations";
 
@@ -55,6 +56,57 @@ describe("why / whatBreaks (028-why-this-layer)", () => {
     // App DB: the single-instance / connection-pool assumption.
     expect(en.database.whatBreaks).toMatch(/pool/i);
     expect(pt.database.whatBreaks).toMatch(/pool/i);
+  });
+});
+
+describe("network layer (088-network-layer)", () => {
+  const NETWORK = ["dns", "cdn", "waf", "lb", "apigw"];
+  const withNetwork = selectionOf(["mcp", "network"], "react", "vector");
+
+  it("AC4 — the five chain stations are visible only when network is on, in order", () => {
+    const off = new Set(visibleStationIdsFor(DEFAULT_SELECTION));
+    for (const id of NETWORK) expect(off.has(id as never)).toBe(false);
+
+    const ids = visibleStationIdsFor(withNetwork);
+    for (const id of NETWORK) expect(ids).toContain(id);
+    // STATIONS_SRC declares them in transit order (between frontend and backend).
+    const ordered = ids.filter((i) => NETWORK.includes(i));
+    expect(ordered).toEqual(NETWORK);
+    expect(ids.indexOf("frontend")).toBeLessThan(ids.indexOf("dns"));
+    expect(ids.indexOf("apigw")).toBeLessThan(ids.indexOf("backend"));
+  });
+
+  it("AC4 — the chain replaces the direct frontend→backend hop", () => {
+    const offPairs = visibleHopsFor("en", DEFAULT_SELECTION).map((h) => `${h.source}-${h.target}`);
+    expect(offPairs).toContain("frontend-backend");
+
+    const onPairs = visibleHopsFor("en", withNetwork).map((h) => `${h.source}-${h.target}`);
+    // The direct hop is hidden; the six chain hops draw the real path instead.
+    expect(onPairs).not.toContain("frontend-backend");
+    for (const pair of [
+      "frontend-dns",
+      "dns-cdn",
+      "cdn-waf",
+      "waf-lb",
+      "lb-apigw",
+      "apigw-backend",
+    ]) {
+      expect(onPairs).toContain(pair);
+    }
+  });
+
+  it("AC9 — every chain station has bilingual prose + a full cloud map", () => {
+    for (const lang of ["en", "pt"] as const) {
+      for (const id of NETWORK) {
+        const s = stationsFor(lang).find((st) => st.id === id);
+        expect(s, `${id} (${lang})`).toBeDefined();
+        expect(s!.title.trim()).toBeTruthy();
+        expect(s!.blurb.trim()).toBeTruthy();
+        for (const cloud of ["azure", "aws", "gcp"] as const) {
+          expect(s!.clouds[cloud]?.trim(), `${id}.clouds.${cloud}`).toBeTruthy();
+        }
+      }
+    }
   });
 });
 

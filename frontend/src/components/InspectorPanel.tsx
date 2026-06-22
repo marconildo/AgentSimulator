@@ -279,6 +279,23 @@ function renderDetail(
         </>
       );
     }
+    // 088-network-layer — each ingress appliance shows the real forwarded evidence
+    // it injected (the headers the backend read back), verbatim. The theory (role,
+    // controls, the full chain) renders on the hops; this is the per-run data.
+    case "dns":
+    case "cdn":
+    case "waf":
+    case "lb":
+    case "apigw": {
+      // The network StationIds are identical to their Stage values (dns/cdn/…).
+      const ev = pick(events, id as Stage, "end");
+      if (!ev) return null;
+      return (
+        <Section title={i.forwardedEvidence}>
+          <Scroll>{JSON.stringify(ev.data, null, 2)}</Scroll>
+        </Section>
+      );
+    }
     case "backend": {
       const routes = ["POST /api/chat", "GET /api/trace/{id}", "GET /api/health"];
       return (

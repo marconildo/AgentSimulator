@@ -1,14 +1,19 @@
 # One command to run the whole simulator:  docker compose up --build
 #
-# - backend  -> FastAPI + LangGraph agent (private; reached via the edge)
+# - backend  -> FastAPI + LangGraph agent (private; reached via the edge / chain)
 # - edge     -> nginx reverse proxy / LB / TLS on http://localhost:8080
-#               (084-network-edge — the real "Network Edge" box on the canvas)
+#               (084-network-edge — the original single reverse proxy)
 # - frontend -> static React build served by nginx on http://localhost:5173
 #
-# The frontend talks to the API *through* the edge, so every request genuinely
-# traverses nginx (forwarded headers, SSE-safe) — the backend reports it as the
-# `edge` trace event. Run the backend directly (`uvicorn`) and the edge is
-# bypassed: the backend honestly reports `proxied=false`.
+# 088-network-layer — the real ingress CHAIN (DNS → CDN → WAF → TLS/LB → API-GW).
+# Five separately-deployed appliance containers the request genuinely transits:
+#   coredns (DNS) · varnish (CDN/cache) · modsecurity (WAF) · haproxy (TLS/LB) · kong (API-GW)
+# They come up with `docker compose up` (real infra). The frontend talks to the API
+# THROUGH the chain's front door (varnish, :8090), so every request really crosses
+# all five appliances; each injects an evidence header the backend reads back. The
+# Build "Network" component only controls whether those five stages are drawn/emitted
+# (`NETWORK_CHAIN=1` tells the backend the chain is present). It never starts/stops
+# these containers — that is `docker compose up`'s job.
 #
 # The app runs ONLY against OpenAI — set OPENAI_API_KEY. With no key the
 # backend fails fast at startup.
@@ -24,13 +29,20 @@ services:
       # (or put it in a .env file next to this docker-compose.yml).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      # 088-network-layer — the chain is present, so the Build "Network" component is
+      # enabled and the backend may emit the five ingress stages.
+      NETWORK_CHAIN: "1"
     volumes:
       # Persist the vector store between runs.
       - chroma-data:/app/app/data/chroma
       # Persist uploaded documents (object storage) between runs.
       - storage-data:/app/app/data/storage
+    # Resolve internal service names via the real CoreDNS (088) so DNS is genuinely
+    # exercised, not just Docker's embedded resolver.
+    dns:
+      - 172.28.0.53
 
-  # 084-network-edge: the real reverse proxy / load balancer in front of the API.
+  # 084-network-edge: the original single reverse proxy / LB / TLS in front of the API.
   edge:
     image: nginx:1.27-alpine
     ports:
@@ -40,16 +52,82 @@ services:
     depends_on:
       - backend
 
+  # ---- 088-network-layer: the real ingress chain, in transit order ----------
+  # browser → varnish(CDN) → modsecurity(WAF) → haproxy(TLS/LB) → kong(API-GW) → backend
+
+  # 1) DNS — resolves the chain's internal service names (A record + TTL).
+  coredns:
+    image: coredns/coredns:1.11.1
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./infra/coredns/Corefile:/etc/coredns/Corefile:ro
+    networks:
+      default:
+        ipv4_address: 172.28.0.53
+
+  # 2) CDN / edge cache — the browser-facing front door (:8090). HIT/MISS via X-Cache.
+  varnish:
+    image: varnish:7.5
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./infra/varnish/default.vcl:/etc/varnish/default.vcl:ro
+    environment:
+      VARNISH_HTTP_PORT: "8090"
+    command: ["varnishd", "-F", "-f", "/etc/varnish/default.vcl", "-a", ":8090", "-s", "malloc,64m"]
+    depends_on:
+      - modsecurity
+
+  # 3) WAF — OWASP Core Rule Set inspects every request; attacks get a real 403.
+  # Clean traffic is proxied on to the load balancer (which stamps the WAF-cleared
+  # evidence header — see infra/haproxy/haproxy.cfg). A blocked request never gets
+  # past this hop, so anything HAProxy sees provably cleared the WAF.
+  modsecurity:
+    image: owasp/modsecurity-crs:nginx
+    environment:
+      BACKEND: "http://haproxy:8081"
+      MODSEC_RULE_ENGINE: "On"
+      PARANOIA: "1"
+    depends_on:
+      - haproxy
+
+  # 4) TLS / Load balancer — terminates TLS, balances onto the (single) backend pool.
+  haproxy:
+    image: haproxy:2.9-alpine
+    volumes:
+      - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - kong
+
+  # 5) API gateway — routing, rate-limit and API-key at the edge (DB-less Kong).
+  kong:
+    image: kong:3.7
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: "/etc/kong/kong.yml"
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+    volumes:
+      - ./infra/kong/kong.yml:/etc/kong/kong.yml:ro
+    depends_on:
+      - backend
+
   frontend:
     build:
       context: ./frontend
       args:
-        # Talk to the API through the edge so requests really cross nginx.
-        VITE_API_BASE: http://localhost:8080
+        # 088 — talk to the API through the ingress CHAIN front door (varnish), so
+        # every request really crosses DNS·CDN·WAF·LB·API-GW before the backend.
+        VITE_API_BASE: http://localhost:8090
     ports:
       - "5173:80"
     depends_on:
-      - edge
+      - varnish
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
   chroma-data:

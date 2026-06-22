@@ -2,6 +2,16 @@
 
 export type Stage =
   | "frontend"
+  // 088-network-layer: the real ingress chain — five appliance containers the
+  // request genuinely transits (CoreDNS → Varnish → ModSecurity/CRS → HAProxy →
+  // Kong). Each fires once, in this order, between frontend and backend, only when
+  // the request's `network` toggle is on AND the chain is present. Each maps to its
+  // own station and carries only what the appliance's forwarded headers prove.
+  | "dns"
+  | "cdn"
+  | "waf"
+  | "lb"
+  | "apigw"
   // 084-network-edge: the production network edge (reverse proxy · TLS · load
   // balancer). A single observation event (like `frontend`) fired between
   // frontend and backend, only when the request's `edge` toggle is on. Maps to
@@ -104,6 +114,46 @@ export interface RequestBody {
   simulate_failure?: string;
   // 084-network-edge — present only when the run was routed through the edge.
   edge?: boolean;
+  // 088-network-layer — present only when the run was visualized through the chain.
+  network?: boolean;
+}
+
+// 088-network-layer — what each ingress appliance did to this request, carried on
+// its own stage `data`. Mirrors backend/app/network.py::*Info.as_data(). Each
+// reports only what the appliance's forwarded headers prove (`seen` is false when
+// the chain isn't in front — honest "not seen", like edge's `proxied`).
+export interface DnsData {
+  seen: boolean;
+  host: string | null;
+  address: string | null;
+  ttl: number | null;
+}
+export interface CdnData {
+  seen: boolean;
+  cache: string | null; // "HIT" | "MISS"
+  age: number | null;
+  server: string | null;
+}
+export interface WafData {
+  seen: boolean;
+  status: string; // "clean" | "blocked"
+  rules: number | null;
+  anomaly_score: number | null;
+  engine: string | null;
+}
+export interface LbData {
+  seen: boolean;
+  tls_version: string | null;
+  scheme: string | null;
+  upstream: string | null;
+  server: string | null;
+}
+export interface ApiGwData {
+  seen: boolean;
+  route: string | null;
+  rate_limit_remaining: number | null;
+  upstream_latency_ms: number | null;
+  gateway: string | null;
 }
 
 // 084-network-edge — what the network edge did to this request, carried on the
