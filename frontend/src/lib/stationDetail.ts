@@ -8,7 +8,17 @@
 // Inspector keeps its own (theory-first) rendering, so the two affordances stay
 // independent but read the same underlying event data.
 
-import type { DbQuery, JsonRpcFrames, RequestBody, TraceEvent } from "../types/events";
+import type {
+  ApiGwData,
+  CdnData,
+  DbQuery,
+  DnsData,
+  JsonRpcFrames,
+  LbData,
+  RequestBody,
+  TraceEvent,
+  WafData,
+} from "../types/events";
 import { electedToolCalls } from "./usage";
 
 // Last event matching the stage (+ optional phase), scanning newest-first — the
@@ -241,6 +251,41 @@ export function selectFrontend(events: TraceEvent[]): FrontendDetailData {
     request: frontend?.data.request as RequestBody | undefined,
     answer: respond?.data.answer as string | undefined,
   };
+}
+
+// --- Network edge (089-network-station-detail) -------------------------------
+//
+// One thin selector per ingress appliance. Each reads the appliance's own stage
+// END event (the StationId == the Stage name: dns/cdn/waf/lb/apigw) and returns
+// its typed forwarded-header evidence verbatim, or `undefined` when the appliance
+// hasn't run in front of this request at the current cursor. `seen: false` is
+// preserved as-is so the overlay can show its honest "not in front" state rather
+// than fabricating values (constitution §3). The shapes are the same `*Data`
+// interfaces the backend's `network.py::*Info.as_data()` emits.
+
+export function selectDns(events: TraceEvent[]): DnsData | undefined {
+  const ev = pickLast(events, "dns", "end");
+  return ev ? (ev.data as unknown as DnsData) : undefined;
+}
+
+export function selectCdn(events: TraceEvent[]): CdnData | undefined {
+  const ev = pickLast(events, "cdn", "end");
+  return ev ? (ev.data as unknown as CdnData) : undefined;
+}
+
+export function selectWaf(events: TraceEvent[]): WafData | undefined {
+  const ev = pickLast(events, "waf", "end");
+  return ev ? (ev.data as unknown as WafData) : undefined;
+}
+
+export function selectLb(events: TraceEvent[]): LbData | undefined {
+  const ev = pickLast(events, "lb", "end");
+  return ev ? (ev.data as unknown as LbData) : undefined;
+}
+
+export function selectApiGw(events: TraceEvent[]): ApiGwData | undefined {
+  const ev = pickLast(events, "apigw", "end");
+  return ev ? (ev.data as unknown as ApiGwData) : undefined;
 }
 
 // --- Ingestion (080-ingestion-pipeline-merge) --------------------------------

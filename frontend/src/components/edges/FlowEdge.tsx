@@ -131,24 +131,6 @@ export function FlowEdge(props: EdgeProps) {
                 {comm}
               </span>
             )}
-            {/* 086 — a prominent, always-visible affordance so the user knows the
-                arrow is clickable and carries network detail. Accent-coloured pill. */}
-            <button
-              onClick={openHopDetail}
-              title={i.hopExpandHint}
-              aria-label={i.hopExpandHint}
-              className="flex items-center gap-0.5 rounded-full border px-1.5 py-px text-[8px] font-semibold uppercase leading-none tracking-wide shadow-sm transition hover:scale-105"
-              style={{
-                pointerEvents: "all",
-                cursor: "pointer",
-                borderColor: accent,
-                color: accent,
-                background: "var(--color-base)",
-              }}
-            >
-              <span aria-hidden>⊕</span>
-              {i.hopExpandLabel}
-            </button>
           </div>
 
           {hovered && (

@@ -72,9 +72,9 @@ production network in front of and between the services). Its first node is **do
   `proxied=false` with no proxy in front. `ChatRequest.edge: bool = False` is opt-in at the protocol
   so an API-direct call is byte-for-byte; `edge` is a default-on Build toggle.
   **Revised (085):** the edge has **no node/tier of its own** — the `edge` stage maps to the
-  `backend` station, and its chain (DNS · CDN · WAF · TLS/LB · API GW, only TLS/LB real) +
+  `backend` station, and its chain (DNS · CDN · TLS/LB · WAF · API GW, only TLS/LB real) +
   forwarded headers render in the **`frontend→backend` hop detail** (click the arrow), not a box.
-### ✅ Network layer chain (DNS · CDN · WAF · TLS/LB · API-GW) — SHIPPED (088-network-layer)
+### ✅ Network layer chain (DNS · CDN · TLS/LB · WAF · API GW) — SHIPPED (088-network-layer)
 - **Status.** Done (frontend + backend green; the five appliance containers need a live
   `docker compose up` to validate header injection + the real WAF 403). The five preview chain
   segments graduated to **five real, separately-deployed appliance containers** the request truly
@@ -607,7 +607,7 @@ de produção à frente e entre os serviços). Seu primeiro nó está **concluí
   `proxied=false` quando não há proxy à frente. `ChatRequest.edge: bool = False` é opt-in no
   protocolo, então uma chamada direta de API fica byte-for-byte; `edge` é um toggle ligado por
   padrão no Build. **Revisado (085):** a borda **não tem nó/tier próprio** — o `Stage` `edge` mapeia
-  para a estação `backend`, e sua cadeia (DNS · CDN · WAF · TLS/LB · API GW, só o TLS/LB real) +
+  para a estação `backend`, e sua cadeia (DNS · CDN · TLS/LB · WAF · API GW, só o TLS/LB real) +
   os forwarded headers aparecem no **detalhe do hop `frontend→backend`** (clique na seta), não numa
   caixa.
 - **O que ainda falta (specs futuras).** Cada segmento de prévia vira seu próprio nó real:

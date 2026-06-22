@@ -52,6 +52,23 @@ describe("StationNode — full-view button (076)", () => {
     },
   );
 
+  // 089-network-station-detail — the five ingress appliances get the same button.
+  it.each<StationId>(["dns", "cdn", "waf", "lb", "apigw"])(
+    "renders the Open full view button for network station %s",
+    (id) => {
+      renderNode(id);
+      expect(screen.getByText(/Open full view/i)).toBeTruthy();
+    },
+  );
+
+  it("toggles the store detail for a network station (apigw)", () => {
+    renderNode("apigw");
+    fireEvent.click(screen.getByText(/Open full view/i));
+    expect(useSimulator.getState().detail).toBe("apigw");
+    fireEvent.click(screen.getByText(/Open full view/i));
+    expect(useSimulator.getState().detail).toBeNull();
+  });
+
   it("renders no full-view button for a non-detail station", () => {
     renderNode("gateway");
     expect(screen.queryByText(/Open full view/i)).toBeNull();

@@ -60,7 +60,8 @@ describe("why / whatBreaks (028-why-this-layer)", () => {
 });
 
 describe("network layer (088-network-layer)", () => {
-  const NETWORK = ["dns", "cdn", "waf", "lb", "apigw"];
+  // 090-waf-after-lb: transit order DNS → CDN → TLS/LB → WAF → API-GW.
+  const NETWORK = ["dns", "cdn", "lb", "waf", "apigw"];
   const withNetwork = selectionOf(["mcp", "network"], "react", "vector");
 
   it("AC4 — the five chain stations are visible only when network is on, in order", () => {
@@ -86,13 +87,33 @@ describe("network layer (088-network-layer)", () => {
     for (const pair of [
       "frontend-dns",
       "dns-cdn",
-      "cdn-waf",
-      "waf-lb",
-      "lb-apigw",
+      "cdn-lb",
+      "lb-waf",
+      "waf-apigw",
       "apigw-backend",
     ]) {
       expect(onPairs).toContain(pair);
     }
+    // 090: the old WAF-before-LB wiring is gone.
+    expect(onPairs).not.toContain("cdn-waf");
+    expect(onPairs).not.toContain("waf-lb");
+    expect(onPairs).not.toContain("lb-apigw");
+  });
+
+  it("AC3 (090) — the LB is the single TLS-termination point; the WAF hop is plaintext", () => {
+    const hops = hopsFor("en");
+    const cdnToLb = hops.find((h) => h.source === "cdn" && h.target === "lb")!;
+    const lbToWaf = hops.find((h) => h.source === "lb" && h.target === "waf")!;
+    expect(cdnToLb.protocol).toMatch(/TLS/);
+    // Past the LB the request is decrypted — no TLS on the hop into the WAF.
+    expect(lbToWaf.protocol).toBe("HTTP");
+    expect(lbToWaf.protocol).not.toMatch(/TLS/);
+
+    // Only the into-LB hop talks about terminating TLS — no double termination.
+    const edgeHops = hops.filter((h) => ["dns", "cdn", "lb", "waf", "apigw"].includes(h.source));
+    const terminate = edgeHops.filter((h) => /terminat/i.test(h.why ?? ""));
+    expect(terminate).toHaveLength(1);
+    expect(terminate[0].target).toBe("lb");
   });
 
   it("AC9 — every chain station has bilingual prose + a full cloud map", () => {

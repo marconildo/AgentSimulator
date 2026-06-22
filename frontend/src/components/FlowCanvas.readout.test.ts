@@ -59,6 +59,13 @@ describe("readoutFor — rag station reranked sub-stage (054-rag-block-expansion
   });
 });
 
+describe("readoutFor — CDN bypass (090-waf-after-lb)", () => {
+  it("shows BYPASS for the uncacheable chat API (not a coincidental MISS)", () => {
+    const out = readoutFor("cdn", rt([end("cdn", { seen: true, cache: "BYPASS" })]), ro, noUsage);
+    expect(out).toBe("BYPASS");
+  });
+});
+
 describe("readoutFor — llm station, failure treatments (051)", () => {
   it("shows the retry attempt while the timeout is being retried", () => {
     const out = readoutFor(

@@ -30,7 +30,9 @@ from app.network import (
 from app.schemas import ChatRequest, Stage, TraceEvent
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_NETWORK_STAGES = ["dns", "cdn", "waf", "lb", "apigw"]
+# 090-waf-after-lb: transit order is DNS → CDN → TLS/LB → WAF → API-GW (the WAF
+# inspects already-decrypted HTTP, so it sits after the LB terminates TLS).
+_NETWORK_STAGES = ["dns", "cdn", "lb", "waf", "apigw"]
 
 
 # --- AC8: protocol surface --------------------------------------------------
@@ -72,6 +74,11 @@ def test_parsers_read_real_appliance_headers():
 
     cdn = read_cdn({"x-cache": "MISS", "age": "0", "x-cache-server": "varnish"})
     assert cdn.seen and cdn.cache == "MISS" and cdn.age == 0 and cdn.server == "varnish"
+
+    # 090: the uncacheable chat API is a pass-through — Varnish stamps BYPASS, which
+    # the parser surfaces verbatim (no coincidental "MISS").
+    bypass = read_cdn({"x-cache": "BYPASS", "x-cache-server": "varnish"})
+    assert bypass.seen and bypass.cache == "BYPASS"
 
     waf = read_waf(
         {
@@ -163,7 +170,9 @@ def test_chat_emits_five_network_stages_in_order_when_on():
     headers = {
         "X-DNS-Host": "backend.internal",
         "X-DNS-Ttl": "30",
-        "X-Cache": "MISS",
+        # 090: the dynamic chat API is uncacheable, so the CDN reports a BYPASS
+        # (pass-through), never a coincidental cache MISS.
+        "X-Cache": "BYPASS",
         "X-Waf-Status": "clean",
         "X-Lb-Tls-Version": "TLSv1.3",
         "X-Lb-Upstream": "backend:8000",
@@ -181,17 +190,20 @@ def test_chat_emits_five_network_stages_in_order_when_on():
         assert len(hits) == 1, f"exactly one {stage} event"
         seqs[stage] = hits[0]["seq"]
 
-    # Ordered DNS → CDN → WAF → TLS/LB → API-GW, all before BACKEND.
+    # Ordered DNS → CDN → TLS/LB → WAF → API-GW, all before BACKEND.
     ordered = [seqs[s] for s in _NETWORK_STAGES]
     assert ordered == sorted(ordered)
     backend_seq = min(e["seq"] for e in events if e["stage"] == "backend")
     assert max(ordered) < backend_seq
 
+    # The LB is emitted before the WAF (the WAF inspects decrypted HTTP).
+    assert seqs["lb"] < seqs["waf"]
+
     # Real evidence flowed through (not placeholder constants).
     waf = next(e for e in events if e["stage"] == "waf")
     assert waf["data"]["status"] == "clean"
     cdn = next(e for e in events if e["stage"] == "cdn")
-    assert cdn["data"]["cache"] == "MISS"
+    assert cdn["data"]["cache"] == "BYPASS"
 
 
 def test_chat_off_by_default_emits_no_network_stages():
@@ -213,3 +225,41 @@ def test_compose_defines_the_five_appliance_containers():
     text = compose.read_text(encoding="utf-8").lower()
     for image in ("coredns", "varnish", "modsecurity", "haproxy", "kong"):
         assert image in text, f"docker-compose must define the real {image} appliance"
+
+
+# --- 090-waf-after-lb: the real chain order matches the canvas ----------------
+# CI does not run Docker, so the transit order is pinned by auditing the infra
+# config files. This is the honesty guard (§2): the picture (WAF after LB) can
+# never silently drift from the real containers (varnish → haproxy → modsecurity
+# → kong → backend), and the "WAF cleared" attestation must be stamped by the hop
+# downstream of the WAF (Kong), not by HAProxy which is now upstream of it.
+
+
+def test_real_chain_forwards_waf_after_the_load_balancer():
+    varnish = (_REPO_ROOT / "infra/varnish/default.vcl").read_text(encoding="utf-8")
+    haproxy = (_REPO_ROOT / "infra/haproxy/haproxy.cfg").read_text(encoding="utf-8")
+    compose = (_REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    # Varnish (CDN) forwards to HAProxy (TLS/LB), not to the WAF.
+    assert 'host = "haproxy"' in varnish
+    assert 'host = "modsecurity"' not in varnish
+    # HAProxy (TLS/LB) forwards to ModSecurity (WAF), not straight to Kong.
+    assert "modsecurity:8080" in haproxy
+    assert "kong:8000" not in haproxy
+    # ModSecurity (WAF) forwards to Kong (API-GW).
+    assert "http://kong:8000" in compose
+
+
+def test_waf_cleared_attestation_is_stamped_downstream_of_the_waf():
+    haproxy = (_REPO_ROOT / "infra/haproxy/haproxy.cfg").read_text(encoding="utf-8").lower()
+    kong = (_REPO_ROOT / "infra/kong/kong.yml").read_text(encoding="utf-8").lower()
+    # Kong is the first hop past ModSecurity, so reaching it proves the WAF cleared.
+    assert "x-waf-status" in kong
+    # HAProxy is now upstream of the WAF — it must not *stamp* a WAF-cleared header
+    # (a comment explaining the absence is fine; a set-header directive is not).
+    assert "set-header x-waf-status" not in haproxy
+
+
+def test_varnish_reports_bypass_for_the_uncacheable_api():
+    varnish = (_REPO_ROOT / "infra/varnish/default.vcl").read_text(encoding="utf-8")
+    assert "BYPASS" in varnish

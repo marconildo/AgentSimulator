@@ -2,6 +2,10 @@
 # the backend. It routes by path, enforces a real rate limit (a burst returns 429),
 # and stamps gateway evidence as REQUEST headers the backend reads (app/network.py).
 #
+# 090-waf-after-lb: Kong is the first hop past the WAF (ModSecurity), so reaching it
+# proves the request cleared the WAF — Kong stamps the WAF-cleared evidence header
+# here (HAProxy, now upstream of the WAF, no longer can).
+#
 # Honest note: Kong's live X-RateLimit-Remaining is a RESPONSE header (added on the
 # way back to the client), so the backend trace reports the route + gateway (real,
 # static) and leaves the remaining count null — the rate limiting itself is real
@@ -25,10 +29,14 @@ plugins:
     config:
       minute: 60
       policy: local
-  # Stamp gateway evidence as request headers forwarded to the backend.
+  # Stamp gateway evidence as request headers forwarded to the backend. The WAF
+  # evidence is stamped here (090): Kong is the first hop past ModSecurity, so a
+  # request reaching it provably cleared the WAF.
   - name: request-transformer
     config:
       add:
         headers:
           - "X-Gateway:kong"
           - "X-Kong-Route:chat"
+          - "X-Waf-Status:clean"
+          - "X-Waf-Engine:modsecurity"

@@ -1,31 +1,38 @@
 vcl 4.1;
 
 # 088-network-layer — Varnish as the CDN / edge cache, the browser-facing front
-# door of the ingress chain. It forwards on to the WAF (ModSecurity).
+# door of the ingress chain. 090-waf-after-lb: it forwards on to the load balancer
+# (HAProxy), which terminates TLS before the WAF inspects the plaintext.
 #
-# POST /api/chat is dynamic and uncacheable, so every chat is a cache MISS that is
-# passed straight through (with streaming on, so SSE tokens are not buffered). The
-# MISS is announced to the backend via the X-Cache REQUEST header so the backend's
-# app/network.py can report it honestly. Static GETs could be cached (HIT); the
-# point of the station is to show the HIT/MISS decision, which is real here.
+# POST /api/chat is dynamic and *uncacheable*, so the CDN never caches it — every
+# chat is a BYPASS (a pass-through), not a coincidental cache MISS. The decision is
+# announced to the backend via the X-Cache REQUEST header so app/network.py can
+# report it honestly (BYPASS for the dynamic API; a static GET could still be a real
+# HIT/MISS). Streaming is on so SSE tokens are not buffered.
 
-backend waf {
-    .host = "modsecurity";
-    .port = "80";
+backend lb {
+    .host = "haproxy";
+    # HAProxy's ingress frontend binds :8081 (see infra/haproxy/haproxy.cfg).
+    .port = "8081";
 }
 
 sub vcl_recv {
     # Pass (never cache) anything that isn't a simple cacheable GET/HEAD — the chat
-    # API is dynamic. The pass path still records the MISS below.
+    # API is dynamic. This is a BYPASS, not a cache lookup that missed (recorded below).
     if (req.method != "GET" && req.method != "HEAD") {
         return (pass);
     }
 }
 
 sub vcl_backend_fetch {
-    # A backend fetch only happens on a cache MISS — announce it to the origin so
-    # the backend can report the cache decision honestly (read in app/network.py).
-    set bereq.http.X-Cache = "MISS";
+    # Announce the cache decision to the origin so the backend can report it honestly
+    # (read in app/network.py). A non-GET/HEAD is uncacheable → BYPASS (pass-through);
+    # a cacheable GET that reaches the backend is a genuine MISS.
+    if (bereq.method != "GET" && bereq.method != "HEAD") {
+        set bereq.http.X-Cache = "BYPASS";
+    } else {
+        set bereq.http.X-Cache = "MISS";
+    }
     set bereq.http.X-Cache-Server = "varnish";
 }
 
@@ -40,9 +47,12 @@ sub vcl_backend_response {
 
 sub vcl_deliver {
     # Also expose the cache decision to the browser (response header), the usual
-    # CDN signal. obj.hits > 0 ⇒ served from cache (HIT), else MISS.
+    # CDN signal. obj.hits > 0 ⇒ served from cache (HIT); an uncacheable method is a
+    # BYPASS (pass-through); otherwise a genuine MISS.
     if (obj.hits > 0) {
         set resp.http.X-Cache = "HIT";
+    } else if (req.method != "GET" && req.method != "HEAD") {
+        set resp.http.X-Cache = "BYPASS";
     } else {
         set resp.http.X-Cache = "MISS";
     }

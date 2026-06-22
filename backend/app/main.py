@@ -650,15 +650,18 @@ async def chat(req: ChatRequest, request: Request):
                 {"message": req.message, "session_id": session_id, "request": request_body},
             )
             # 088-network-layer: the real ingress chain — five appliance hops the
-            # request transited before the app saw it (DNS → CDN → WAF → TLS/LB →
-            # API-GW). Emitted only when `req.network` is on; each carries only what
-            # the appliance's forwarded headers prove (honest "not seen" otherwise).
+            # request transited before the app saw it. 090-waf-after-lb: transit
+            # order is DNS → CDN → TLS/LB → WAF → API-GW — the load balancer
+            # terminates TLS (the single decryption point) so the WAF, which can
+            # only inspect plaintext, sits *after* it. Emitted only when
+            # `req.network` is on; each carries only what the appliance's forwarded
+            # headers prove (honest "not seen" otherwise).
             if req.network:
                 for stage, label, info in (
                     (Stage.DNS, "DNS: resolved the service name", network_info.dns),
-                    (Stage.CDN, "CDN: edge cache", network_info.cdn),
-                    (Stage.WAF, "WAF: OWASP rules inspected the request", network_info.waf),
+                    (Stage.CDN, "CDN: uncacheable — passed through", network_info.cdn),
                     (Stage.LB, "TLS terminated · load-balanced", network_info.lb),
+                    (Stage.WAF, "WAF: OWASP rules inspected the request", network_info.waf),
                     (Stage.APIGW, "API gateway: routed · rate-limited", network_info.apigw),
                 ):
                     await emitter.emit(stage, Phase.END, label, info.as_data())

@@ -8,7 +8,7 @@ import type { StationId } from "./stations";
 import { tallyUsage, type TurnUsage } from "./usage";
 import type { DbQuery, EdgeData, PromptPreview, RequestBody, TraceEvent } from "../types/events";
 
-/** One segment of the network-edge chain (DNS·CDN·WAF·TLS/LB·API GW). Only the
+/** One segment of the network-edge chain (DNS·CDN·TLS/LB·WAF·API GW). Only the
  *  TLS/LB segment executes for real; the rest are preview (§3). */
 export interface EdgeChainSeg {
   id: string;
@@ -44,11 +44,12 @@ function lastEnd(events: TraceEvent[], stage: TraceEvent["stage"]): TraceEvent |
 /** Build the edge chain; only TLS/LB binds to real edge data, the rest are preview. */
 export function buildEdgeChain(edge?: EdgeData): EdgeChainSeg[] {
   const tlsLb = edge ? (edge.proxied ? `${edge.proxy_server ?? "proxy"} · ${edge.scheme}` : "direct") : null;
+  // 090-waf-after-lb: transit order — the LB terminates TLS, then the WAF inspects.
   return [
     { id: "dns", label: "DNS", real: false, value: null },
     { id: "cdn", label: "CDN", real: false, value: null },
-    { id: "waf", label: "WAF", real: false, value: null },
     { id: "tls-lb", label: "TLS / LB", real: true, value: tlsLb },
+    { id: "waf", label: "WAF", real: false, value: null },
     { id: "api-gw", label: "API GW", real: false, value: null },
   ];
 }
@@ -71,7 +72,7 @@ export function deriveHopData(
 ): HopRunData {
   // The public request hop. 085: the network edge has no node of its own — when the
   // run went through the edge (an `edge` event is present) this hop shows the edge
-  // chain (DNS·CDN·WAF·TLS/LB·API GW) + the forwarded headers, plus the round-trip;
+  // chain (DNS·CDN·TLS/LB·WAF·API GW) + the forwarded headers, plus the round-trip;
   // otherwise it is a plain request (request body + answer).
   if (source === "frontend" && target === "backend") {
     const edge = lastEnd(events, "edge")?.data as unknown as EdgeData | undefined;

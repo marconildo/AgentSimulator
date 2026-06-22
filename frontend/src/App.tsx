@@ -14,6 +14,7 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { FrontendDetail } from "./components/FrontendDetail";
 import { IngestionPipelinePanel } from "./components/IngestionPipelinePanel";
 import { McpDetail } from "./components/McpDetail";
+import { NetworkApplianceDetail } from "./components/NetworkApplianceDetail";
 import { PageIndexPipelinePanel } from "./components/PageIndexPipelinePanel";
 import { RagPipelinePanel } from "./components/RagPipelinePanel";
 import {
@@ -226,6 +227,12 @@ export default function App() {
       {detail === "frontend" && <FrontendDetail onClose={closeDetail} />}
       {/* 080-ingestion-pipeline-merge — the merged ingestion node's phase walk. */}
       {detail === "ingestion" && <IngestionPipelinePanel onClose={closeDetail} />}
+      {/* 089-network-station-detail — In → Out drill-in per ingress appliance. */}
+      {detail === "dns" && <NetworkApplianceDetail kind="dns" onClose={closeDetail} />}
+      {detail === "cdn" && <NetworkApplianceDetail kind="cdn" onClose={closeDetail} />}
+      {detail === "waf" && <NetworkApplianceDetail kind="waf" onClose={closeDetail} />}
+      {detail === "lb" && <NetworkApplianceDetail kind="lb" onClose={closeDetail} />}
+      {detail === "apigw" && <NetworkApplianceDetail kind="apigw" onClose={closeDetail} />}
     </>
   );
 

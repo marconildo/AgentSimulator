@@ -222,7 +222,8 @@ const TIERS_SRC: TierSrc[] = [
     accent: "var(--color-sky)",
     box: { x: 8, y: 64, w: 272, h: 196 },
   },
-  // 088-network-layer — the real ingress chain (DNS · CDN · WAF · TLS/LB · API-GW).
+  // 088-network-layer — the real ingress chain (DNS · CDN · TLS/LB · WAF · API-GW).
+  // 090-waf-after-lb: the LB terminates TLS before the WAF inspects the plaintext.
   // A public-zone tier between the client and the private API; shown only when the
   // `network` Build component is on. Each station is a separately-deployed appliance
   // container the request truly transits.
@@ -231,13 +232,13 @@ const TIERS_SRC: TierSrc[] = [
     title: { en: "Network Edge", pt: "Borda de Rede" },
     alias: { en: "Ingress / edge", pt: "Ingresso / borda" },
     generic: {
-      en: "DNS, CDN, WAF, load balancer and API gateway",
-      pt: "DNS, CDN, WAF, balanceador e API gateway",
+      en: "DNS, CDN, load balancer, WAF and API gateway",
+      pt: "DNS, CDN, balanceador, WAF e API gateway",
     },
     clouds: {
-      azure: "Azure DNS · Front Door · WAF · App Gateway · API Management",
-      aws: "Route 53 · CloudFront · WAF · ALB · API Gateway",
-      gcp: "Cloud DNS · Cloud CDN · Cloud Armor · Cloud LB · API Gateway",
+      azure: "Azure DNS · Front Door · App Gateway · WAF · API Management",
+      aws: "Route 53 · CloudFront · ALB · WAF · API Gateway",
+      gcp: "Cloud DNS · Cloud CDN · Cloud LB · Cloud Armor · API Gateway",
     },
     accent: "var(--color-sky)",
     box: { x: 312, y: 64, w: 240, h: 586 },
@@ -406,12 +407,12 @@ const STATIONS_SRC: StationSrc[] = [
     accent: "var(--color-blue)",
     tag: "Varnish",
     blurb: {
-      en: "An edge cache in front of the app: a cache HIT is served straight from the edge, a MISS is forwarded on. The X-Cache header says which happened.",
-      pt: "Um cache de borda na frente da app: um HIT de cache é servido direto da borda, um MISS é encaminhado adiante. O header X-Cache diz qual ocorreu.",
+      en: "An edge cache in front of the app. A cacheable GET can be a HIT (served from the edge) or a MISS (fetched from origin); the dynamic chat API is uncacheable, so it is always a BYPASS — passed straight through. The X-Cache header says which happened.",
+      pt: "Um cache de borda na frente da app. Um GET cacheável pode ser HIT (servido da borda) ou MISS (buscado na origem); a API de chat dinâmica é não-cacheável, então é sempre um BYPASS — passada direto. O header X-Cache diz qual ocorreu.",
     },
     why: {
-      en: "Caching cacheable responses at the edge cuts latency and offloads the origin — the app never computes what the cache can already answer. A real Varnish reports HIT/MISS here.",
-      pt: "Cachear respostas cacheáveis na borda corta a latência e alivia a origem — a app nunca recomputa o que o cache já responde. Um Varnish real reporta HIT/MISS aqui.",
+      en: "Caching cacheable responses at the edge cuts latency and offloads the origin — the app never recomputes what the cache can already answer. The chat API is dynamic and uncacheable, so the CDN never caches it (a BYPASS, not a coincidental MISS); a static GET could still be a real HIT. A real Varnish reports the decision here.",
+      pt: "Cachear respostas cacheáveis na borda corta a latência e alivia a origem — a app nunca recomputa o que o cache já responde. A API de chat é dinâmica e não-cacheável, então a CDN nunca a cacheia (um BYPASS, não um MISS por acaso); um GET estático ainda poderia ser um HIT real. Um Varnish real reporta a decisão aqui.",
     },
     whatBreaks: {
       en: "Without a cache every request hits the origin, so a traffic spike becomes an origin overload. Honest caveat: this is a single edge cache, not a geo-distributed CDN with many PoPs.",
@@ -421,40 +422,10 @@ const STATIONS_SRC: StationSrc[] = [
     clouds: { azure: "Azure CDN / Front Door", aws: "CloudFront", gcp: "Cloud CDN" },
     tech: [
       { k: { en: "cache", pt: "cache" }, v: "Varnish" },
-      { k: { en: "signal", pt: "sinal" }, v: "X-Cache: HIT / MISS" },
+      { k: { en: "signal", pt: "sinal" }, v: "X-Cache: HIT / MISS / BYPASS" },
     ],
     stages: ["cdn"],
     position: { x: 312, y: 220 },
-    scenarios: ["advanced"],
-  },
-  {
-    id: "waf",
-    tier: "edge",
-    title: "WAF",
-    subtitle: { en: "Web App Firewall", pt: "Firewall de Aplicação" },
-    icon: "🛡️",
-    accent: "var(--color-warn)",
-    tag: "ModSecurity",
-    blurb: {
-      en: "OWASP Core Rule Set inspects every request; a known attack signature (SQL injection, XSS) is blocked with a 403 before it ever reaches the app. A clean request passes through.",
-      pt: "O OWASP Core Rule Set inspeciona cada requisição; uma assinatura de ataque conhecida (SQL injection, XSS) é bloqueada com 403 antes de chegar à app. Uma requisição limpa passa.",
-    },
-    why: {
-      en: "A WAF is the rule engine that stops common web attacks at the edge, before they touch application code — defense in depth. Here a real ModSecurity/CRS returns a real 403 on a malicious payload.",
-      pt: "Um WAF é o motor de regras que barra ataques web comuns na borda, antes de tocarem o código da aplicação — defesa em profundidade. Aqui um ModSecurity/CRS real retorna um 403 real num payload malicioso.",
-    },
-    whatBreaks: {
-      en: "Without it, injection and scanner traffic reach the app and rely on perfect application code to be safe. A WAF is a layer, not a substitute for fixing the underlying vulnerability.",
-      pt: "Sem ele, tráfego de injeção e scanners chega à app e depende de código perfeito para ser seguro. Um WAF é uma camada, não um substituto para corrigir a vulnerabilidade de fundo.",
-    },
-    generic: { en: "Web application firewall", pt: "Firewall de aplicação web" },
-    clouds: { azure: "Azure WAF (Front Door)", aws: "AWS WAF", gcp: "Cloud Armor" },
-    tech: [
-      { k: { en: "engine", pt: "motor" }, v: "ModSecurity + OWASP CRS" },
-      { k: { en: "action", pt: "ação" }, v: "block 403 / pass" },
-    ],
-    stages: ["waf"],
-    position: { x: 312, y: 328 },
     scenarios: ["advanced"],
   },
   {
@@ -466,8 +437,8 @@ const STATIONS_SRC: StationSrc[] = [
     accent: "var(--color-violet)",
     tag: "HAProxy",
     blurb: {
-      en: "Terminates TLS (decrypts HTTPS) and balances the request onto a backend upstream, adding X-Forwarded-* headers so the app still sees the real client and scheme.",
-      pt: "Termina o TLS (descriptografa o HTTPS) e balanceia a requisição para um upstream do backend, adicionando headers X-Forwarded-* para a app ainda ver o cliente e o esquema reais.",
+      en: "Terminates TLS (decrypts HTTPS) and balances the request onto a backend upstream, adding X-Forwarded-* headers so the app still sees the real client and scheme. As the single decryption point, it sits before the WAF — which can only inspect plaintext.",
+      pt: "Termina o TLS (descriptografa o HTTPS) e balanceia a requisição para um upstream do backend, adicionando headers X-Forwarded-* para a app ainda ver o cliente e o esquema reais. Como único ponto de decriptação, fica antes do WAF — que só inspeciona texto claro.",
     },
     why: {
       en: "One place terminates TLS and spreads load so backends stay simple and replaceable; the forwarded headers preserve the client identity the app needs. A real HAProxy does this here.",
@@ -484,6 +455,36 @@ const STATIONS_SRC: StationSrc[] = [
       { k: { en: "tls", pt: "tls" }, v: "TLS 1.3 termination" },
     ],
     stages: ["lb"],
+    position: { x: 312, y: 328 },
+    scenarios: ["advanced"],
+  },
+  {
+    id: "waf",
+    tier: "edge",
+    title: "WAF",
+    subtitle: { en: "Web App Firewall", pt: "Firewall de Aplicação" },
+    icon: "🛡️",
+    accent: "var(--color-warn)",
+    tag: "ModSecurity",
+    blurb: {
+      en: "OWASP Core Rule Set inspects every (already-decrypted) request; a known attack signature (SQL injection, XSS) is blocked with a 403 before it ever reaches the app. A clean request passes through.",
+      pt: "O OWASP Core Rule Set inspeciona cada requisição (já decriptada); uma assinatura de ataque conhecida (SQL injection, XSS) é bloqueada com 403 antes de chegar à app. Uma requisição limpa passa.",
+    },
+    why: {
+      en: "A WAF is the rule engine that stops common web attacks before they touch application code — defense in depth. It inspects L7 (HTTP) content, so it runs after the load balancer decrypts the request. Here a real ModSecurity/CRS returns a real 403 on a malicious payload.",
+      pt: "Um WAF é o motor de regras que barra ataques web comuns antes de tocarem o código da aplicação — defesa em profundidade. Ele inspeciona conteúdo L7 (HTTP), então roda depois de o balanceador descriptografar a requisição. Aqui um ModSecurity/CRS real retorna um 403 real num payload malicioso.",
+    },
+    whatBreaks: {
+      en: "Without it, injection and scanner traffic reach the app and rely on perfect application code to be safe. A WAF is a layer, not a substitute for fixing the underlying vulnerability.",
+      pt: "Sem ele, tráfego de injeção e scanners chega à app e depende de código perfeito para ser seguro. Um WAF é uma camada, não um substituto para corrigir a vulnerabilidade de fundo.",
+    },
+    generic: { en: "Web application firewall", pt: "Firewall de aplicação web" },
+    clouds: { azure: "Azure WAF (Front Door)", aws: "AWS WAF", gcp: "Cloud Armor" },
+    tech: [
+      { k: { en: "engine", pt: "motor" }, v: "ModSecurity + OWASP CRS" },
+      { k: { en: "action", pt: "ação" }, v: "block 403 / pass" },
+    ],
+    stages: ["waf"],
     position: { x: 312, y: 436 },
     scenarios: ["advanced"],
   },
@@ -1167,38 +1168,20 @@ const HOPS_SRC: HopSrc[] = [
     sourceHandle: "bottom",
     targetHandle: "top",
   },
+  // 090-waf-after-lb: CDN → TLS/LB → WAF → API-GW. The LB is the single TLS-
+  // termination point; the WAF inspects the request only after it is decrypted.
   {
     source: "cdn",
-    target: "waf",
-    label: { en: "inspect", pt: "inspecionar" },
-    protocol: "HTTP",
-    detail: {
-      en: "A cache MISS is inspected by the WAF rule engine",
-      pt: "Um MISS de cache é inspecionado pelo motor de regras do WAF",
-    },
-    why: {
-      en: "Before the request can reach the app it is screened by the WAF (OWASP CRS) — known attack signatures are blocked with a 403; clean traffic passes. A real ModSecurity enforces it.",
-      pt: "Antes de chegar à app a requisição é triada pelo WAF (OWASP CRS) — assinaturas de ataque conhecidas são bloqueadas com 403; tráfego limpo passa. Um ModSecurity real o aplica.",
-    },
-    comm: "sync",
-    secure: true,
-    zone: "public",
-    controls: { en: "OWASP CRS · 403", pt: "OWASP CRS · 403" },
-    sourceHandle: "bottom",
-    targetHandle: "top",
-  },
-  {
-    source: "waf",
     target: "lb",
     label: { en: "balance", pt: "balancear" },
     protocol: "HTTPS / TLS 1.3",
     detail: {
-      en: "A clean request is load-balanced; TLS is terminated here",
-      pt: "Uma requisição limpa é balanceada; o TLS é terminado aqui",
+      en: "The uncacheable request is passed to the load balancer, which terminates TLS",
+      pt: "A requisição não-cacheável é passada ao balanceador, que termina o TLS",
     },
     why: {
-      en: "Past the WAF, the load balancer terminates TLS and picks a backend upstream, adding X-Forwarded-* so the app still sees the real client. A real HAProxy does this.",
-      pt: "Passado o WAF, o balanceador termina o TLS e escolhe um upstream do backend, adicionando X-Forwarded-* para a app ainda ver o cliente real. Um HAProxy real faz isso.",
+      en: "The dynamic API is uncacheable, so the CDN passes it straight to the load balancer. The LB is the single TLS-termination point: it decrypts HTTPS, balances onto a backend upstream, and adds X-Forwarded-* so the app still sees the real client. A real HAProxy does this.",
+      pt: "A API dinâmica é não-cacheável, então a CDN a passa direto ao balanceador. O LB é o único ponto de terminação de TLS: descriptografa o HTTPS, balanceia para um upstream do backend e adiciona X-Forwarded-* para a app ainda ver o cliente real. Um HAProxy real faz isso.",
     },
     comm: "sync",
     secure: true,
@@ -1209,19 +1192,39 @@ const HOPS_SRC: HopSrc[] = [
   },
   {
     source: "lb",
+    target: "waf",
+    label: { en: "inspect", pt: "inspecionar" },
+    protocol: "HTTP",
+    detail: {
+      en: "The now-decrypted request is screened by the WAF rule engine",
+      pt: "A requisição já decriptada é triada pelo motor de regras do WAF",
+    },
+    why: {
+      en: "A WAF inspects L7 (HTTP) content, so it can only run on plaintext — which is why it sits after the LB decrypts the request. The WAF (OWASP CRS) screens it: known attack signatures get a 403; clean traffic passes. A real ModSecurity enforces it.",
+      pt: "Um WAF inspeciona conteúdo L7 (HTTP), então só roda sobre texto claro — por isso fica depois de o LB descriptografar a requisição. O WAF (OWASP CRS) a inspeciona: assinaturas de ataque conhecidas levam 403; tráfego limpo passa. Um ModSecurity real o aplica.",
+    },
+    comm: "sync",
+    secure: false,
+    zone: "public",
+    controls: { en: "OWASP CRS · 403", pt: "OWASP CRS · 403" },
+    sourceHandle: "bottom",
+    targetHandle: "top",
+  },
+  {
+    source: "waf",
     target: "apigw",
     label: { en: "route", pt: "rotear" },
     protocol: "HTTP",
     detail: {
-      en: "The API gateway routes, rate-limits and checks the API key",
-      pt: "O API gateway roteia, aplica rate-limit e verifica a chave de API",
+      en: "Clean traffic reaches the API gateway, which routes and rate-limits",
+      pt: "Tráfego limpo chega ao API gateway, que roteia e aplica rate-limit",
     },
     why: {
-      en: "The gateway is the single policy plane: it routes by path, enforces rate limits and API keys, and reports X-RateLimit-Remaining before forwarding. A real Kong (DB-less) enforces it.",
-      pt: "O gateway é o plano único de política: roteia por path, aplica rate limits e chaves de API, e reporta X-RateLimit-Remaining antes de encaminhar. Um Kong real (sem banco) o aplica.",
+      en: "Past the WAF, the gateway is the single policy plane: it routes by path, enforces rate limits and API keys, and reports X-RateLimit-Remaining before forwarding. A real Kong (DB-less) enforces it — and, being the first hop past the WAF, it stamps the WAF-cleared evidence header.",
+      pt: "Passado o WAF, o gateway é o plano único de política: roteia por path, aplica rate limits e chaves de API, e reporta X-RateLimit-Remaining antes de encaminhar. Um Kong real (sem banco) o aplica — e, por ser o primeiro hop depois do WAF, carimba o header de evidência de WAF aprovado.",
     },
     comm: "sync",
-    secure: true,
+    secure: false,
     zone: "public",
     controls: { en: "rate-limit · API key", pt: "rate-limit · chave de API" },
     sourceHandle: "bottom",

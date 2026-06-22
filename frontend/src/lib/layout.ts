@@ -88,7 +88,9 @@ interface Column {
 // the columns to its right slide when the chain is shown. When the chain is off the
 // edge column has no visible members and SHIFT is 0, so the layout is byte-for-byte
 // today's (AC10).
-const NETWORK_IDS: StationId[] = ["dns", "cdn", "waf", "lb", "apigw"];
+// 090-waf-after-lb: transit order DNS → CDN → TLS/LB → WAF → API-GW (the LB
+// terminates TLS, so the WAF inspects the decrypted request after it).
+const NETWORK_IDS: StationId[] = ["dns", "cdn", "lb", "waf", "apigw"];
 const EDGE_SHIFT = 300;
 
 interface ColumnSrc extends Column {
@@ -279,7 +281,7 @@ export function computeLayout(
   // The public-internet / egress frontier: a vertical line midway through the gap
   // between the public side's right edge and the private boundary's left edge,
   // spanning the boundary's height. The public side is the client tier, or — when
-  // the ingress chain is shown (088) — the `edge` tier (DNS·CDN·WAF·LB·GW are all
+  // the ingress chain is shown (088) — the `edge` tier (DNS·CDN·LB·WAF·GW are all
   // public appliances, so the frontier sits after them, just before the private API).
   const publicTier = tierBoxes.edge ?? tierBoxes.client;
   const publicRight = publicTier ? publicTier.x + publicTier.w : boundary.x - 18;

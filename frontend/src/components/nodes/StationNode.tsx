@@ -45,6 +45,14 @@ const HAS_DETAIL: Partial<Record<StationId, boolean>> = {
   // 080-ingestion-pipeline-merge — the merged ingestion node opens a phase-walk
   // drill-in (object store → chunk → tokenize → embed → metadata → vector DB).
   ingestion: true,
+  // 089-network-station-detail — the five ingress appliances each open an
+  // In → Out drill-in of their forwarded-header evidence (the Inspector keeps the
+  // theory). The StationId == the Stage name (dns/cdn/waf/lb/apigw).
+  dns: true,
+  cdn: true,
+  waf: true,
+  lb: true,
+  apigw: true,
 };
 
 export function StationNode(props: NodeProps) {

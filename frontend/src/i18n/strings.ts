@@ -807,6 +807,21 @@ export interface Strings {
     back: string;
     empty: string;
   };
+  // 089-network-station-detail — per-appliance "open full view" drill-ins for the
+  // five ingress boxes (DNS / CDN / WAF / TLS-LB / API Gateway). Shared chrome keys
+  // + a sub-bundle per appliance (title/subtitle/empty/summary/inDesc + field labels).
+  networkDetail: {
+    back: string;
+    in: string;
+    out: string;
+    did: string;
+    evidence: string;
+    dns: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; host: string; address: string; ttl: string };
+    cdn: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; cache: string; age: string; server: string };
+    waf: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; status: string; rules: string; anomaly: string; engine: string };
+    lb: { title: string; subtitle: string; empty: string; summary: string; role: string; inDesc: string; tls: string; scheme: string; upstream: string; server: string };
+    apigw: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; route: string; rateLimit: string; upstreamLatency: string; gateway: string };
+  };
   // 054-rag-block-expansion — the RAG pipeline drill-in (Vector DB "open full view").
   ragDetail: {
     title: string;
@@ -2081,6 +2096,67 @@ const en: Strings = {
     back: "Canvas",
     empty: "Nothing sent in this turn yet.",
   },
+  networkDetail: {
+    back: "Canvas",
+    in: "In",
+    out: "Out",
+    did: "What it did",
+    evidence: "Forwarded headers (verbatim)",
+    dns: {
+      title: "DNS — name resolution",
+      subtitle: "host → address · TTL",
+      empty: "No DNS resolution in front of this request.",
+      summary: "Resolved the service name to an address before any connection was made.",
+      inDesc: "A service name to resolve.",
+      host: "Host queried",
+      address: "Resolved address",
+      ttl: "TTL (s)",
+    },
+    cdn: {
+      title: "CDN / Cache — edge cache",
+      subtitle: "request → HIT / MISS",
+      empty: "No edge cache in front of this request.",
+      summary: "Checked the edge cache — a HIT is served from the edge, a MISS is forwarded to the origin.",
+      inDesc: "The incoming request for the app.",
+      cache: "Cache",
+      age: "Age (s)",
+      server: "Edge server",
+    },
+    waf: {
+      title: "WAF — web application firewall",
+      subtitle: "request → verdict",
+      empty: "No WAF in front of this request.",
+      summary: "Inspected the request against the OWASP rule set, then let it pass (or blocked it).",
+      inDesc: "The raw request to inspect.",
+      status: "Verdict",
+      rules: "Rules evaluated",
+      anomaly: "Anomaly score",
+      engine: "Engine",
+    },
+    lb: {
+      title: "TLS / Load Balancer — reverse proxy",
+      subtitle: "HTTPS → upstream",
+      empty: "No TLS terminator / load balancer in front of this request.",
+      summary: "Terminated TLS and forwarded the request to a backend upstream, adding X-Forwarded-* headers.",
+      role: "Reverse proxy · terminate TLS · forward to upstream",
+      inDesc: "Encrypted HTTPS from the client.",
+      tls: "TLS version",
+      scheme: "Scheme",
+      upstream: "Upstream",
+      server: "Balancer",
+    },
+    apigw: {
+      title: "API Gateway — routing & quotas",
+      subtitle: "route → backend",
+      empty: "No API gateway in front of this request.",
+      summary: "Matched the route, enforced rate limits, then forwarded the call to the backend.",
+      inDesc: "The routed API call.",
+      route: "Route matched",
+      rateLimit: "Rate-limit remaining",
+      upstreamLatency: "Upstream latency (ms)",
+      gateway: "Gateway",
+    },
+  },
   ragDetail: {
     title: "RAG Pipeline",
     subtitle: "Chunking → Embedding → Retrieval → Reranking",
@@ -3214,6 +3290,67 @@ const pt: Strings = {
     subtitle: "Requisição POST · resposta transmitida",
     back: "Diagrama",
     empty: "Nada enviado neste turno ainda.",
+  },
+  networkDetail: {
+    back: "Diagrama",
+    in: "Entrada",
+    out: "Saída",
+    did: "O que fez",
+    evidence: "Cabeçalhos encaminhados (verbatim)",
+    dns: {
+      title: "DNS — resolução de nomes",
+      subtitle: "host → endereço · TTL",
+      empty: "Sem resolução DNS na frente desta requisição.",
+      summary: "Resolveu o nome do serviço para um endereço antes de qualquer conexão.",
+      inDesc: "Um nome de serviço a resolver.",
+      host: "Host consultado",
+      address: "Endereço resolvido",
+      ttl: "TTL (s)",
+    },
+    cdn: {
+      title: "CDN / Cache — cache de borda",
+      subtitle: "requisição → HIT / MISS",
+      empty: "Sem cache de borda na frente desta requisição.",
+      summary: "Consultou o cache de borda — um HIT é servido da borda, um MISS é encaminhado à origem.",
+      inDesc: "A requisição que chega para a app.",
+      cache: "Cache",
+      age: "Idade (s)",
+      server: "Servidor de borda",
+    },
+    waf: {
+      title: "WAF — firewall de aplicação web",
+      subtitle: "requisição → veredito",
+      empty: "Sem WAF na frente desta requisição.",
+      summary: "Inspecionou a requisição contra o conjunto de regras OWASP e a deixou passar (ou a bloqueou).",
+      inDesc: "A requisição bruta a inspecionar.",
+      status: "Veredito",
+      rules: "Regras avaliadas",
+      anomaly: "Pontuação de anomalia",
+      engine: "Motor",
+    },
+    lb: {
+      title: "TLS / Balanceador — proxy reverso",
+      subtitle: "HTTPS → upstream",
+      empty: "Sem terminador TLS / balanceador na frente desta requisição.",
+      summary: "Terminou o TLS e encaminhou a requisição para um upstream do backend, adicionando headers X-Forwarded-*.",
+      role: "Proxy reverso · termina TLS · encaminha ao upstream",
+      inDesc: "HTTPS criptografado do cliente.",
+      tls: "Versão TLS",
+      scheme: "Esquema",
+      upstream: "Upstream",
+      server: "Balanceador",
+    },
+    apigw: {
+      title: "API Gateway — roteamento e cotas",
+      subtitle: "rota → backend",
+      empty: "Sem API gateway na frente desta requisição.",
+      summary: "Casou a rota, aplicou os rate limits e encaminhou a chamada ao backend.",
+      inDesc: "A chamada de API roteada.",
+      route: "Rota casada",
+      rateLimit: "Rate-limit restante",
+      upstreamLatency: "Latência do upstream (ms)",
+      gateway: "Gateway",
+    },
   },
   ragDetail: {
     title: "Pipeline RAG",
