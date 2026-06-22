@@ -1,0 +1,31 @@
+name: Release
+
+# Cria uma Release no GitHub automaticamente sempre que uma tag de versão
+# (vX.Y.Z, SemVer) for empurrada. Fluxo: `git tag v1.1.0 && git push origin v1.1.0`.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # necessário para criar a release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # histórico completo para o changelog automático
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # --generate-notes monta o changelog a partir dos commits/PRs desde a
+        # última tag. Tags pré-release (v1.0.0-beta.1, -rc.1) são marcadas como tal.
+        run: |
+          PRERELEASE=""
+          case "${GITHUB_REF_NAME}" in
+            *-*) PRERELEASE="--prerelease" ;;
+          esac
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            ${PRERELEASE}
