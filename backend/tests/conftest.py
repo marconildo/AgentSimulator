@@ -17,6 +17,7 @@ _TMP = Path(tempfile.gettempdir())
 os.environ["APP_DB_PATH"] = str(_TMP / "agentsim_test.sqlite3")
 os.environ["CHROMA_DIR"] = str(_TMP / "agentsim_test_chroma")
 os.environ["STORAGE_DIR"] = str(_TMP / "agentsim_test_storage")
+os.environ["LLM_MODEL"] = "gpt-4.1-mini"
 
 
 def _has_openai_key() -> bool:
@@ -38,6 +39,12 @@ def _has_ollama_server() -> bool:
     return bool(os.environ.get("OLLAMA_TEST_SERVER") and os.environ.get("OLLAMA_TEST_MODEL"))
 
 
+def _has_vertexai_config() -> bool:
+    # 089: the integration test needs a real GCP/Vertex AI configuration.
+    # We treat the presence of VERTEXAI_TEST_PROJECT as the opt-in signal.
+    return bool(os.environ.get("VERTEXAI_TEST_PROJECT"))
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "openai: test needs a real OPENAI_API_KEY (skipped without one)"
@@ -49,6 +56,10 @@ def pytest_configure(config):
         "markers",
         "ollama: test needs a real local Ollama server "
         "(OLLAMA_TEST_SERVER/OLLAMA_TEST_MODEL; skipped without one)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "vertexai: test needs a real Vertex AI config (VERTEXAI_TEST_PROJECT; skipped without one)",
     )
 
     from app.config import get_settings
@@ -82,9 +93,11 @@ def pytest_collection_modifyitems(config, items):
     has_openai = _has_openai_key()
     has_tavily = _has_tavily_key()
     has_ollama = _has_ollama_server()
+    has_vertexai = _has_vertexai_config()
     skip_openai = pytest.mark.skip(reason="needs OPENAI_API_KEY (default provider)")
     skip_tavily = pytest.mark.skip(reason="needs TAVILY_API_KEY (optional web search)")
     skip_ollama = pytest.mark.skip(reason="needs a local Ollama server (074)")
+    skip_vertexai = pytest.mark.skip(reason="needs VERTEXAI_TEST_PROJECT (089)")
     for item in items:
         if not has_openai and "openai" in item.keywords:
             item.add_marker(skip_openai)
@@ -92,3 +105,5 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_tavily)
         if not has_ollama and "ollama" in item.keywords:
             item.add_marker(skip_ollama)
+        if not has_vertexai and "vertexai" in item.keywords:
+            item.add_marker(skip_vertexai)

@@ -244,7 +244,7 @@ async def test_emit_persists_non_json_serializable_data_via_default_str(tmp_path
             "SELECT data FROM trace_events WHERE trace_id = ?", (emitter.trace_id,)
         ).fetchone()
     parsed = json.loads(row[0])
-    assert isinstance(parsed["path"], str) and parsed["path"].endswith("/tmp/x")
+    assert isinstance(parsed["path"], str) and parsed["path"].replace("\\", "/").endswith("/tmp/x")
     assert parsed["lst"] == [1, 2, 3]
     assert parsed["nested"] == {"a": 1}
 

@@ -17,6 +17,7 @@ import json
 import uuid
 
 import pytest
+from starlette.requests import Request
 
 from app.db.store import get_store
 from app.main import chat
@@ -30,7 +31,8 @@ async def test_disconnect_mid_stream_cancels_producer_and_discards_turn():
     session = await store.ensure_session(uuid.uuid4().hex)
     sid = session["id"]
 
-    resp = await chat(ChatRequest(message="What is RAG?", session_id=sid))
+    request = Request(scope={"type": "http", "headers": [], "client": None, "path": "/"})
+    resp = await chat(ChatRequest(message="What is RAG?", session_id=sid), request=request)
     agen = resp.body_iterator
 
     # Read a couple of live trace events, then disconnect mid-stream. These early

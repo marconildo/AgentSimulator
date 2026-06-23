@@ -150,6 +150,28 @@ def get_provider(
             base_url=base_url,
         )
 
+    if provider == "vertexai":
+        from ..config import MissingVertexAICredentialsError
+        from ..db.store import get_store
+        from .vertexai_provider import VertexAIProvider
+
+        store = get_store()
+        project = store._get_config_sync("vertexai_project") or settings.vertexai_project
+        location = store._get_config_sync("vertexai_location") or settings.vertexai_location
+        credentials = (
+            store._get_config_sync("vertexai_credentials") or settings.vertexai_credentials
+        )
+
+        if not credentials or not credentials.strip():
+            raise MissingVertexAICredentialsError()
+
+        return VertexAIProvider(
+            model=model or settings.llm_model,
+            project=project,
+            location=location,
+            credentials=credentials,
+        )
+
     # 078-openai-key-ui: the key may come from the UI/DB (DB precedes env).
     from ..config import effective_openai_key
 

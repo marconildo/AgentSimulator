@@ -78,6 +78,40 @@ CURATED_MODELS: tuple[CuratedModel, ...] = (
 )
 
 
+CURATED_VERTEXAI_MODELS: tuple[CuratedModel, ...] = (
+    CuratedModel(
+        id="gemini-3.1-pro-preview",
+        label="Gemini 3.1 Pro",
+        description="Vertex AI - Gemini 3.1 Pro model.",
+    ),
+    CuratedModel(
+        id="gemini-3.5-flash",
+        label="Gemini 3.5 Flash",
+        description="Vertex AI - Gemini 3.5 Flash model.",
+    ),
+    CuratedModel(
+        id="gemini-3-flash-preview",
+        label="Gemini 3 Flash",
+        description="Vertex AI - Gemini 3 Flash model.",
+    ),
+    CuratedModel(
+        id="gemini-2.5-flash-lite",
+        label="Gemini 2.5 Flash Lite",
+        description="Vertex AI - Gemini 2.5 Flash Lite model.",
+    ),
+    CuratedModel(
+        id="gemini-2.5-flash",
+        label="Gemini 2.5 Flash",
+        description="Vertex AI - Gemini 2.5 Flash model.",
+    ),
+    CuratedModel(
+        id="gemini-2.5-pro",
+        label="Gemini 2.5 Pro",
+        description="Vertex AI - Gemini 2.5 Pro model.",
+    ),
+)
+
+
 @dataclass(frozen=True)
 class Provider:
     """One LLM provider the Agent Anatomy dialog can advertise.
@@ -98,10 +132,11 @@ class Provider:
 
 # 074-ollama-provider: both providers are now usable. OpenAI is the default;
 # Ollama is a real local provider (was a disabled preview in 065). Proper nouns
-# ("OpenAI", "Ollama (local)") are not translated.
+# ("OpenAI", "Ollama (local)", "Vertex AI") are not translated.
 PROVIDERS: tuple[Provider, ...] = (
     Provider(id="openai", label="OpenAI", available=True),
     Provider(id="ollama", label="Ollama (local)", available=True),
+    Provider(id="vertexai", label="Vertex AI", available=True),
 )
 
 DEFAULT_PROVIDER = "openai"
@@ -117,6 +152,11 @@ def model_ids() -> set[str]:
     return {m.id for m in CURATED_MODELS}
 
 
+def vertexai_model_ids() -> set[str]:
+    """The set of Vertex AI model ids allowed."""
+    return {m.id for m in CURATED_VERTEXAI_MODELS}
+
+
 def provider_ids() -> set[str]:
     """The set of selectable provider ids (used to validate request/patch input)."""
     return {p.id for p in PROVIDERS if p.available}
@@ -125,6 +165,11 @@ def provider_ids() -> set[str]:
 def models_payload() -> list[dict[str, str]]:
     """JSON-shape the FE renders directly from ``/api/config.models``."""
     return [m.to_dict() for m in CURATED_MODELS]
+
+
+def vertexai_models_payload() -> list[dict[str, str]]:
+    """JSON-shape the FE renders for Vertex AI models."""
+    return [m.to_dict() for m in CURATED_VERTEXAI_MODELS]
 
 
 def providers_payload() -> list[dict[str, str | bool]]:

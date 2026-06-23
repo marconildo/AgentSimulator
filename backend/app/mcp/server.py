@@ -97,16 +97,35 @@ LOAD_SKILL_DESCRIPTION = (
 def _load_skill(name: str) -> str:
     """Return the body of the named skill, or an ``error:`` string if unknown.
 
-    Reads the relational store directly. This runs both in the stdio MCP server
-    subprocess (which inherits ``APP_DB_PATH``, so it opens the same SQLite file)
-    and via the in-process fallback — both see the same catalog.
-    """
-    from ..db.store import get_store
+    Reads the relational store directly via a **raw** ``sqlite3`` connection
+    rather than :func:`get_store`. In the stdio MCP subprocess,
+    ``get_store()`` would call ``ConversationStore.__init__`` which runs
+    ``executescript(_SCHEMA)`` — that requires an exclusive file lock. The
+    parent process may hold an active write transaction at that moment, causing
+    a cross-process deadlock on Windows even under WAL. A plain ``SELECT``
+    never triggers DDL and proceeds concurrently with any WAL writer.
 
-    skill = get_store()._get_skill_by_name_sync((name or "").strip())
-    if skill is None:
+    Both the subprocess and the in-process fallback path inherit ``APP_DB_PATH``
+    and therefore see the same catalog; the parent guarantees the schema exists.
+    """
+    import sqlite3 as _sqlite3
+
+    from ..config import get_settings
+
+    path = str(get_settings().app_db_path_abs)
+    try:
+        conn = _sqlite3.connect(path, timeout=10)
+        try:
+            row = conn.execute(
+                "SELECT body FROM skills WHERE name = ?", ((name or "").strip(),)
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 - return error text to the model
+        return f"error: database unavailable — {exc}"
+    if row is None:
         return f"error: skill '{name}' not found"
-    return skill["body"]
+    return row[0]
 
 
 # --- web search (052-web-search-tool) ----------------------------------------

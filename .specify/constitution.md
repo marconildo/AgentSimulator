@@ -19,22 +19,23 @@ animates across a graph of "stations". Runs only against OpenAI (a key is requir
 the other in the same commit.** A spec that adds a pipeline stage must list the new
 `Stage` and where it is emitted.
 
-### 2. OpenAI by default, real opt-in Ollama — no mock mode
+### 2. OpenAI by default, real opt-in Ollama and Vertex AI — no mock mode
 The app runs against **real** LLM providers; there is no offline/mock mode. **OpenAI is
 the default provider** and requires an OpenAI API key — supplied either from the UI
 (persisted in the DB, which takes precedence) or the `OPENAI_API_KEY` env (fallback). An
 OpenAI-bound run with no effective key fails fast with a clear, typed error rather than
 falling back. A read endpoint never returns a stored key in full (masked). A **local Ollama** provider
-is a real opt-in alternative (per-agent): an Ollama-bound run talks to the user's local
-server and does **not** require an OpenAI key, so the app may boot and run with Ollama
-alone. Either way the provider is real — nothing is mocked. Tests exercise the real
-providers (CI provides the OpenAI key as a secret; Ollama-dependent tests are marked and
-skipped when no server is configured) and assert **structurally** — stages fired, tool
-used, answer non-empty, relevant doc ranks first — to tolerate model variability.
+and a **Vertex AI** provider are real opt-in alternatives (per-agent): an Ollama-bound or
+Vertex AI-bound run talks to the respective real service and does **not** require an OpenAI key,
+so the app may boot and run without OpenAI. Either way the provider is real — nothing is mocked.
+Tests exercise the real providers (CI provides the OpenAI key as a secret; Ollama and Vertex AI
+dependent tests are marked and skipped when no credentials are configured) and assert **structurally**
+— stages fired, tool used, answer non-empty, relevant doc ranks first — to tolerate model variability.
 *(Amended by spec 003; was "Demo mode is deterministic and offline". Amended by spec 074;
 was "Single provider (OpenAI), required" — Ollama is now a real second provider, not a
 disabled preview. Amended by spec 076; the OpenAI key may now come from the UI/DB
-(DB precedes env, which stays a fallback), not env-only.)* *(Scoped carve-out by spec 058: a clearly-labelled `VITE_DEMO_MODE`
+(DB precedes env, which stays a fallback), not env-only. Amended by spec 089; added Vertex AI
+as a real third provider.)* *(Scoped carve-out by spec 058: a clearly-labelled `VITE_DEMO_MODE`
 build — the public GitHub Pages showcase — runs **no** provider and replays real captured
 traces with no backend; the **default** build remains key-/server-required and fails fast
 as above.)*

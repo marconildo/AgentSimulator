@@ -19,10 +19,11 @@ def test_config_advertises_providers():
     providers = body["providers"]
     assert isinstance(providers, list)
     by_id = {p["id"]: p for p in providers}
-    assert set(by_id) == {"openai", "ollama"}
+    assert set(by_id) == {"openai", "ollama", "vertexai"}
     assert by_id["openai"]["available"] is True
     # 074: Ollama is now a real, selectable provider.
     assert by_id["ollama"]["available"] is True
+    assert by_id["vertexai"]["available"] is True
     for row in providers:
         assert isinstance(row["label"], str) and row["label"]
 
