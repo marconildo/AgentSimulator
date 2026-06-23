@@ -40,3 +40,14 @@ plugins:
           - "X-Kong-Route:chat"
           - "X-Waf-Status:clean"
           - "X-Waf-Engine:modsecurity"
+          # 091: the WAF's real config facts (paranoia level + the CRS inbound anomaly
+          # threshold, matching the modsecurity service env). Stamped here for the same
+          # reason as X-Waf-Status: Kong is the first hop past the WAF, so reaching it
+          # proves the request cleared CRS in blocking mode. The per-request anomaly
+          # SCORE is not forwarded — ModSecurity v3 can't emit it as an upstream header
+          # — so the backend reports it honestly as "not measured here".
+          - "X-Waf-Paranoia:1"
+          - "X-Waf-Threshold:5"
+          # 091: the enforced policy, visible upstream (static + real). The live
+          # remaining count stays a response header, so it can't reach the backend.
+          - "X-Gateway-Policy:rate-limit 60/min"

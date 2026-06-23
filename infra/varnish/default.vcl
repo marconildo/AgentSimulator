@@ -27,11 +27,15 @@ sub vcl_recv {
 sub vcl_backend_fetch {
     # Announce the cache decision to the origin so the backend can report it honestly
     # (read in app/network.py). A non-GET/HEAD is uncacheable → BYPASS (pass-through);
-    # a cacheable GET that reaches the backend is a genuine MISS.
+    # a cacheable GET that reaches the backend is a genuine MISS. 091: also stamp the
+    # hit count (0 on any origin fetch) and a human REASON so the box explains WHY.
+    set bereq.http.X-Cache-Hits = "0";
     if (bereq.method != "GET" && bereq.method != "HEAD") {
         set bereq.http.X-Cache = "BYPASS";
+        set bereq.http.X-Cache-Reason = "uncacheable method (" + bereq.method + ")";
     } else {
         set bereq.http.X-Cache = "MISS";
+        set bereq.http.X-Cache-Reason = "cacheable, not in cache — fetched from origin";
     }
     set bereq.http.X-Cache-Server = "varnish";
 }

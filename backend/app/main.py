@@ -13,6 +13,7 @@ import contextlib
 import json
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Annotated, Any
 
 import httpx
@@ -48,7 +49,7 @@ from .llm.models import (
     providers_payload,
 )
 from .mcp.client import get_registry
-from .network import network_available, read_network
+from .network import DNS_ORIGIN_HOST, network_available, read_network, resolve_dns
 from .rag.chunking import CHUNK_PARAM_BOUNDS, ChunkStrategy
 from .rag.ingest import active_chunk_strategy, build_index
 from .rag.ingestion import delete_document_vectors, delete_uploaded_vectors, ingest_uploaded
@@ -657,8 +658,22 @@ async def chat(req: ChatRequest, request: Request):
             # `req.network` is on; each carries only what the appliance's forwarded
             # headers prove (honest "not seen" otherwise).
             if req.network:
+                # 091: a real DNS query against the running CoreDNS for the origin
+                # the edge fronts — gives the actual resolved address + TTL (the
+                # header-derived `dns` only carried a next-hop name). Off the event
+                # loop (bounded) + honest fallback to the header evidence on failure.
+                dns_info = network_info.dns
+                resolved = await asyncio.to_thread(resolve_dns, DNS_ORIGIN_HOST)
+                if resolved.address:
+                    dns_info = replace(
+                        dns_info,
+                        seen=True,
+                        host=resolved.host,
+                        address=resolved.address,
+                        ttl=resolved.ttl,
+                    )
                 for stage, label, info in (
-                    (Stage.DNS, "DNS: resolved the service name", network_info.dns),
+                    (Stage.DNS, "DNS: resolved the origin service", dns_info),
                     (Stage.CDN, "CDN: uncacheable — passed through", network_info.cdn),
                     (Stage.LB, "TLS terminated · load-balanced", network_info.lb),
                     (Stage.WAF, "WAF: OWASP rules inspected the request", network_info.waf),

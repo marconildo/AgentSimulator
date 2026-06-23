@@ -130,9 +130,13 @@ export interface DnsData {
 }
 export interface CdnData {
   seen: boolean;
-  cache: string | null; // "HIT" | "MISS"
+  cache: string | null; // "HIT" | "MISS" | "BYPASS"
   age: number | null;
   server: string | null;
+  // 091 — additive (optional so older traces still type-check): hit count + the
+  // human reason for the decision (e.g. "uncacheable method (POST)").
+  hits?: number | null;
+  reason?: string | null;
 }
 export interface WafData {
   seen: boolean;
@@ -140,6 +144,9 @@ export interface WafData {
   rules: number | null;
   anomaly_score: number | null;
   engine: string | null;
+  // 091 — the WAF's real config facts (anomaly block threshold + paranoia level).
+  threshold?: number | null;
+  paranoia?: number | null;
 }
 export interface LbData {
   seen: boolean;
@@ -147,6 +154,10 @@ export interface LbData {
   scheme: string | null;
   upstream: string | null;
   server: string | null;
+  // 091 — the load-balancing picture: pool size, algorithm, chosen backend.
+  pool_size?: number | null;
+  algorithm?: string | null;
+  backend?: string | null;
 }
 export interface ApiGwData {
   seen: boolean;
@@ -154,6 +165,8 @@ export interface ApiGwData {
   rate_limit_remaining: number | null;
   upstream_latency_ms: number | null;
   gateway: string | null;
+  // 091 — the enforced policy (e.g. "rate-limit 60/min"), static + real.
+  policy?: string | null;
 }
 
 // 084-network-edge — what the network edge did to this request, carried on the

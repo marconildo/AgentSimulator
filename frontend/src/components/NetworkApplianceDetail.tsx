@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { useT } from "../i18n";
+import { buildApplianceLog } from "../lib/networkLog";
 import { selectApiGw, selectCdn, selectDns, selectLb, selectWaf } from "../lib/stationDetail";
 import { useSimulator } from "../store/useSimulator";
 import type { TraceEvent } from "../types/events";
@@ -46,6 +47,11 @@ interface Projected {
   raw: Record<string, unknown>;
   inRows: Row[];
   outRows: Row[];
+  // 091 — an honest caption when something is absent (DNS not resolved, WAF score
+  // not forwarded). Shown so a `null` reads as a real reason, not a missing field.
+  note?: string;
+  // 091 — the reconstructed access-log line, built from the same evidence.
+  log: string;
 }
 
 type Net = ReturnType<typeof useT>["networkDetail"];
@@ -62,6 +68,8 @@ function project(kind: NetworkKind, events: TraceEvent[], L: Net): Projected {
           [L.dns.address, d?.address],
           [L.dns.ttl, d?.ttl],
         ]),
+        note: d?.seen && d?.address == null ? L.dns.notResolved : undefined,
+        log: buildApplianceLog(kind, d ?? {}),
       };
     }
     case "cdn": {
@@ -72,9 +80,12 @@ function project(kind: NetworkKind, events: TraceEvent[], L: Net): Projected {
         inRows: [],
         outRows: rows([
           [L.cdn.cache, d?.cache],
+          [L.cdn.hits, d?.hits],
+          [L.cdn.reason, d?.reason],
           [L.cdn.age, d?.age],
           [L.cdn.server, d?.server],
         ]),
+        log: buildApplianceLog(kind, d ?? {}),
       };
     }
     case "waf": {
@@ -85,10 +96,15 @@ function project(kind: NetworkKind, events: TraceEvent[], L: Net): Projected {
         inRows: [],
         outRows: rows([
           [L.waf.status, d?.status],
-          [L.waf.rules, d?.rules],
+          [L.waf.paranoia, d?.paranoia],
+          [L.waf.threshold, d?.threshold],
           [L.waf.anomaly, d?.anomaly_score],
+          [L.waf.rules, d?.rules],
           [L.waf.engine, d?.engine],
         ]),
+        // The runtime anomaly score can't be forwarded by ModSecurity v3 — say so.
+        note: d?.seen && d?.anomaly_score == null ? L.waf.anomalyNote : undefined,
+        log: buildApplianceLog(kind, d ?? {}),
       };
     }
     case "lb": {
@@ -100,9 +116,13 @@ function project(kind: NetworkKind, events: TraceEvent[], L: Net): Projected {
         outRows: rows([
           [L.lb.tls, d?.tls_version],
           [L.lb.scheme, d?.scheme],
+          [L.lb.poolSize, d?.pool_size],
+          [L.lb.algorithm, d?.algorithm],
+          [L.lb.backend, d?.backend],
           [L.lb.upstream, d?.upstream],
           [L.lb.server, d?.server],
         ]),
+        log: buildApplianceLog(kind, d ?? {}),
       };
     }
     case "apigw": {
@@ -113,10 +133,12 @@ function project(kind: NetworkKind, events: TraceEvent[], L: Net): Projected {
         inRows: [],
         outRows: rows([
           [L.apigw.route, d?.route],
+          [L.apigw.policy, d?.policy],
           [L.apigw.rateLimit, d?.rate_limit_remaining],
           [L.apigw.upstreamLatency, d?.upstream_latency_ms],
           [L.apigw.gateway, d?.gateway],
         ]),
+        log: buildApplianceLog(kind, d ?? {}),
       };
     }
   }
@@ -174,7 +196,21 @@ export function NetworkApplianceDetail({
         {p.outRows.map((r) => (
           <KeyVal key={r.k} k={r.k} v={r.v} />
         ))}
+        {p.note && (
+          <p className="mt-1.5 text-[10.5px] italic leading-snug text-[var(--color-muted)]">
+            {p.note}
+          </p>
+        )}
       </Section>
+
+      {p.log && (
+        <Section title={L.reconstructedLog} accent={accent}>
+          <Scroll>{p.log}</Scroll>
+          <p className="mt-1 text-[10px] italic leading-snug text-[var(--color-muted)]">
+            {L.reconstructedLogHint}
+          </p>
+        </Section>
+      )}
 
       <Section title={L.evidence}>
         <Scroll>{JSON.stringify(p.raw, null, 2)}</Scroll>

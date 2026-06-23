@@ -20,6 +20,7 @@ five stages — this module never starts or stops anything. The parsers are pure
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -68,15 +69,29 @@ class DnsInfo:
 
 @dataclass(frozen=True)
 class CdnInfo:
-    """CDN / edge-cache evidence (Varnish ``X-Cache`` / ``Age``)."""
+    """CDN / edge-cache evidence (Varnish ``X-Cache`` / ``Age``).
+
+    091: ``hits`` (``obj.hits``) and ``reason`` (why the decision happened, e.g.
+    "uncacheable method (POST)") make the HIT/MISS/BYPASS verdict legible — the app
+    can say *whether* the cache was consulted and *why*, not just the outcome.
+    """
 
     seen: bool
-    cache: str | None  # "HIT" | "MISS" | None
+    cache: str | None  # "HIT" | "MISS" | "BYPASS" | None
     age: int | None
     server: str | None
+    hits: int | None = None
+    reason: str | None = None
 
     def as_data(self) -> dict[str, Any]:
-        return {"seen": self.seen, "cache": self.cache, "age": self.age, "server": self.server}
+        return {
+            "seen": self.seen,
+            "cache": self.cache,
+            "age": self.age,
+            "server": self.server,
+            "hits": self.hits,
+            "reason": self.reason,
+        }
 
 
 @dataclass(frozen=True)
@@ -93,6 +108,10 @@ class WafInfo:
     rules: int | None
     anomaly_score: int | None
     engine: str | None
+    # 091: the verdict's basis — the inbound anomaly score vs the block threshold and
+    # the active paranoia level, so a "clean" pass is legible (anomaly 0/5 · PL1).
+    threshold: int | None = None
+    paranoia: int | None = None
 
     def as_data(self) -> dict[str, Any]:
         return {
@@ -101,6 +120,8 @@ class WafInfo:
             "rules": self.rules,
             "anomaly_score": self.anomaly_score,
             "engine": self.engine,
+            "threshold": self.threshold,
+            "paranoia": self.paranoia,
         }
 
 
@@ -113,6 +134,12 @@ class LbInfo:
     scheme: str | None
     upstream: str | None
     server: str | None
+    # 091: the load-balancing picture — how many backends are in the pool, the
+    # algorithm, and which backend this request was sent to. Honest §7 caveat: a
+    # one-node pool here, so ``pool_size`` is 1 and the chosen backend is always it.
+    pool_size: int | None = None
+    algorithm: str | None = None
+    backend: str | None = None
 
     def as_data(self) -> dict[str, Any]:
         return {
@@ -121,6 +148,9 @@ class LbInfo:
             "scheme": self.scheme,
             "upstream": self.upstream,
             "server": self.server,
+            "pool_size": self.pool_size,
+            "algorithm": self.algorithm,
+            "backend": self.backend,
         }
 
 
@@ -133,6 +163,9 @@ class ApiGwInfo:
     rate_limit_remaining: int | None
     upstream_latency_ms: int | None
     gateway: str | None
+    # 091: the enforced policy (e.g. "rate-limit: 60/min") — static + real, unlike
+    # the live remaining count which is a response header and can't reach us upstream.
+    policy: str | None = None
 
     def as_data(self) -> dict[str, Any]:
         return {
@@ -141,6 +174,7 @@ class ApiGwInfo:
             "rate_limit_remaining": self.rate_limit_remaining,
             "upstream_latency_ms": self.upstream_latency_ms,
             "gateway": self.gateway,
+            "policy": self.policy,
         }
 
 
@@ -177,10 +211,14 @@ def read_dns(headers: Mapping[str, str]) -> DnsInfo:
 
 
 def read_cdn(headers: Mapping[str, str]) -> CdnInfo:
-    cache = _get(headers, "x-cache")  # Varnish: "HIT" / "MISS"
+    cache = _get(headers, "x-cache")  # Varnish: "HIT" / "MISS" / "BYPASS"
     age = _int(_get(headers, "age"))
     server = _get(headers, "x-cache-server")
-    return CdnInfo(seen=cache is not None, cache=cache, age=age, server=server)
+    hits = _int(_get(headers, "x-cache-hits"))
+    reason = _get(headers, "x-cache-reason")
+    return CdnInfo(
+        seen=cache is not None, cache=cache, age=age, server=server, hits=hits, reason=reason
+    )
 
 
 def read_waf(headers: Mapping[str, str]) -> WafInfo:
@@ -188,15 +226,27 @@ def read_waf(headers: Mapping[str, str]) -> WafInfo:
     rules = _int(_get(headers, "x-waf-rules"))
     anomaly = _int(_get(headers, "x-waf-anomaly"))
     engine = _get(headers, "x-waf-engine")
+    threshold = _int(_get(headers, "x-waf-threshold"))
+    paranoia = _int(_get(headers, "x-waf-paranoia"))
     seen = any(
         (
             _get(headers, "x-waf-status"),
             rules is not None,
             anomaly is not None,
             engine,
+            threshold is not None,
+            paranoia is not None,
         )
     )
-    return WafInfo(seen=seen, status=status, rules=rules, anomaly_score=anomaly, engine=engine)
+    return WafInfo(
+        seen=seen,
+        status=status,
+        rules=rules,
+        anomaly_score=anomaly,
+        engine=engine,
+        threshold=threshold,
+        paranoia=paranoia,
+    )
 
 
 def read_lb(headers: Mapping[str, str]) -> LbInfo:
@@ -204,12 +254,18 @@ def read_lb(headers: Mapping[str, str]) -> LbInfo:
     scheme = _first(_get(headers, "x-forwarded-proto"))
     upstream = _get(headers, "x-lb-upstream")
     server = _get(headers, "x-lb-server")
+    pool_size = _int(_get(headers, "x-lb-pool-size"))
+    algorithm = _get(headers, "x-lb-algorithm")
+    backend = _get(headers, "x-lb-backend")
     return LbInfo(
-        seen=any((tls_version, upstream, server)),
+        seen=any((tls_version, upstream, server, pool_size is not None, algorithm, backend)),
         tls_version=tls_version,
         scheme=scheme,
         upstream=upstream,
         server=server,
+        pool_size=pool_size,
+        algorithm=algorithm,
+        backend=backend,
     )
 
 
@@ -218,13 +274,45 @@ def read_apigw(headers: Mapping[str, str]) -> ApiGwInfo:
     remaining = _int(_get(headers, "x-ratelimit-remaining"))
     upstream_latency = _int(_get(headers, "x-kong-upstream-latency"))
     gateway = _get(headers, "x-gateway") or _first(_get(headers, "via"))
+    policy = _get(headers, "x-gateway-policy")
     return ApiGwInfo(
-        seen=any((route, remaining is not None, upstream_latency is not None, gateway)),
+        seen=any((route, remaining is not None, upstream_latency is not None, gateway, policy)),
         route=route,
         rate_limit_remaining=remaining,
         upstream_latency_ms=upstream_latency,
         gateway=gateway,
+        policy=policy,
     )
+
+
+# The real CoreDNS in the compose chain (docker-compose assigns it this fixed IP),
+# and the origin service name the edge fronts. Both overridable for other deploys.
+COREDNS_ADDR = os.getenv("COREDNS_ADDR", "172.28.0.53")
+DNS_ORIGIN_HOST = os.getenv("DNS_ORIGIN_HOST", "backend")
+
+
+def resolve_dns(host: str, server: str | None = None, timeout: float = 0.5) -> DnsInfo:
+    """Resolve ``host`` to an A record + TTL with a **real** DNS query.
+
+    Honesty seam (§2/§3): a genuine lookup against the running CoreDNS (the chain's
+    real resolver) — not a fabricated value. On any failure (no chain, timeout,
+    NXDOMAIN) it returns ``seen=False`` with null address/ttl; the caller keeps the
+    header-derived host and the UI says the address wasn't resolved. Bounded by
+    ``timeout`` so it never stalls the request pipeline.
+    """
+    try:
+        import dns.resolver  # lazy: only needed when the chain is exercised
+
+        resolver = dns.resolver.Resolver(configure=False)
+        resolver.nameservers = [server or COREDNS_ADDR]
+        resolver.lifetime = timeout
+        resolver.timeout = timeout
+        answer = resolver.resolve(host, "A")
+        address = answer[0].address
+        ttl = int(answer.rrset.ttl) if answer.rrset is not None else None
+        return DnsInfo(seen=True, host=host, address=address, ttl=ttl)
+    except Exception:  # noqa: BLE001 - any resolver failure is an honest "not resolved"
+        return DnsInfo(seen=False, host=host, address=None, ttl=None)
 
 
 def read_network(request: Request) -> NetworkInfo:

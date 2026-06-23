@@ -58,4 +58,58 @@ describe("NetworkApplianceDetail", () => {
     render(<NetworkApplianceDetail kind="apigw" onClose={vi.fn()} />);
     expect(screen.getByText(/No API gateway in front/i)).toBeTruthy();
   });
+
+  // 091-network-appliance-detail-enrichment
+  it("CDN explains the bypass (reason + hits) and shows the reconstructed log (AC2/AC5)", () => {
+    seq = 0;
+    seed([
+      ev("cdn", "end", {
+        seen: true,
+        cache: "BYPASS",
+        hits: 0,
+        reason: "uncacheable method (POST)",
+        server: "varnish",
+      }),
+    ]);
+    render(<NetworkApplianceDetail kind="cdn" onClose={vi.fn()} />);
+    expect(screen.getByText("uncacheable method (POST)")).toBeTruthy();
+    expect(screen.getByText(/Access log \(reconstructed\)/i)).toBeTruthy();
+    expect(screen.getByText(/not a live container tail/i)).toBeTruthy();
+  });
+
+  it("LB shows the pool size, algorithm and chosen backend (AC3)", () => {
+    seq = 0;
+    seed([
+      ev("lb", "end", {
+        seen: true,
+        tls_version: "TLSv1.3",
+        upstream: "modsecurity:8080",
+        pool_size: 1,
+        algorithm: "roundrobin",
+        backend: "modsecurity",
+        server: "haproxy",
+      }),
+    ]);
+    render(<NetworkApplianceDetail kind="lb" onClose={vi.fn()} />);
+    expect(screen.getByText("roundrobin")).toBeTruthy();
+    expect(screen.getAllByText("modsecurity").length).toBeGreaterThan(0);
+  });
+
+  it("WAF shows config facts and an honest note when the score isn't forwarded (AC4/AC6)", () => {
+    seq = 0;
+    seed([
+      ev("waf", "end", {
+        seen: true,
+        status: "clean",
+        paranoia: 1,
+        threshold: 5,
+        anomaly_score: null,
+        rules: null,
+        engine: "modsecurity",
+      }),
+    ]);
+    render(<NetworkApplianceDetail kind="waf" onClose={vi.fn()} />);
+    expect(screen.getByText("clean")).toBeTruthy();
+    expect(screen.getByText(/isn't forwarded upstream by ModSecurity/i)).toBeTruthy();
+  });
 });

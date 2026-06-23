@@ -816,11 +816,15 @@ export interface Strings {
     out: string;
     did: string;
     evidence: string;
-    dns: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; host: string; address: string; ttl: string };
-    cdn: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; cache: string; age: string; server: string };
-    waf: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; status: string; rules: string; anomaly: string; engine: string };
-    lb: { title: string; subtitle: string; empty: string; summary: string; role: string; inDesc: string; tls: string; scheme: string; upstream: string; server: string };
-    apigw: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; route: string; rateLimit: string; upstreamLatency: string; gateway: string };
+    // 091 — the reconstructed-log block + the honest "not measured at this hop" caption.
+    reconstructedLog: string;
+    reconstructedLogHint: string;
+    notMeasured: string;
+    dns: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; host: string; address: string; ttl: string; notResolved: string };
+    cdn: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; cache: string; age: string; server: string; hits: string; reason: string };
+    waf: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; status: string; rules: string; anomaly: string; engine: string; threshold: string; paranoia: string; anomalyNote: string };
+    lb: { title: string; subtitle: string; empty: string; summary: string; role: string; inDesc: string; tls: string; scheme: string; upstream: string; server: string; poolSize: string; algorithm: string; backend: string };
+    apigw: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; route: string; rateLimit: string; upstreamLatency: string; gateway: string; policy: string };
   };
   // 054-rag-block-expansion — the RAG pipeline drill-in (Vector DB "open full view").
   ragDetail: {
@@ -2102,48 +2106,60 @@ const en: Strings = {
     out: "Out",
     did: "What it did",
     evidence: "Forwarded headers (verbatim)",
+    reconstructedLog: "Access log (reconstructed)",
+    reconstructedLogHint: "Reconstructed from the forwarded evidence — not a live container tail.",
+    notMeasured: "not measured at this hop",
     dns: {
       title: "DNS — name resolution",
       subtitle: "host → address · TTL",
       empty: "No DNS resolution in front of this request.",
-      summary: "Resolved the service name to an address before any connection was made.",
+      summary: "Resolved the origin service name to an address (a real query to CoreDNS) before any connection was made.",
       inDesc: "A service name to resolve.",
       host: "Host queried",
       address: "Resolved address",
       ttl: "TTL (s)",
+      notResolved: "CoreDNS returned no address for this name (chain absent or lookup failed).",
     },
     cdn: {
       title: "CDN / Cache — edge cache",
-      subtitle: "request → HIT / MISS",
+      subtitle: "request → HIT / MISS / BYPASS",
       empty: "No edge cache in front of this request.",
-      summary: "Checked the edge cache — a HIT is served from the edge, a MISS is forwarded to the origin.",
+      summary: "Checked the edge cache — a HIT is served from the edge; the uncacheable chat API is a BYPASS, passed straight to the origin.",
       inDesc: "The incoming request for the app.",
       cache: "Cache",
       age: "Age (s)",
       server: "Edge server",
+      hits: "Cache hits",
+      reason: "Reason",
     },
     waf: {
       title: "WAF — web application firewall",
       subtitle: "request → verdict",
       empty: "No WAF in front of this request.",
-      summary: "Inspected the request against the OWASP rule set, then let it pass (or blocked it).",
+      summary: "Inspected the request against the OWASP rule set, then let it pass (or blocked it with a 403).",
       inDesc: "The raw request to inspect.",
       status: "Verdict",
-      rules: "Rules evaluated",
+      rules: "Rules matched",
       anomaly: "Anomaly score",
       engine: "Engine",
+      threshold: "Anomaly threshold",
+      paranoia: "Paranoia level",
+      anomalyNote: "The per-request anomaly score isn't forwarded upstream by ModSecurity v3 — only the verdict and config reach the app.",
     },
     lb: {
       title: "TLS / Load Balancer — reverse proxy",
       subtitle: "HTTPS → upstream",
       empty: "No TLS terminator / load balancer in front of this request.",
-      summary: "Terminated TLS and forwarded the request to a backend upstream, adding X-Forwarded-* headers.",
+      summary: "Terminated TLS (the single decryption point) and load-balanced the request onto a backend, adding X-Forwarded-* headers.",
       role: "Reverse proxy · terminate TLS · forward to upstream",
       inDesc: "Encrypted HTTPS from the client.",
       tls: "TLS version",
       scheme: "Scheme",
       upstream: "Upstream",
       server: "Balancer",
+      poolSize: "Backends in pool",
+      algorithm: "Algorithm",
+      backend: "Chose backend",
     },
     apigw: {
       title: "API Gateway — routing & quotas",
@@ -2155,6 +2171,7 @@ const en: Strings = {
       rateLimit: "Rate-limit remaining",
       upstreamLatency: "Upstream latency (ms)",
       gateway: "Gateway",
+      policy: "Policy enforced",
     },
   },
   ragDetail: {
@@ -3297,48 +3314,60 @@ const pt: Strings = {
     out: "Saída",
     did: "O que fez",
     evidence: "Cabeçalhos encaminhados (verbatim)",
+    reconstructedLog: "Log de acesso (reconstruído)",
+    reconstructedLogHint: "Reconstruído a partir da evidência encaminhada — não é um tail real do container.",
+    notMeasured: "não medido neste hop",
     dns: {
       title: "DNS — resolução de nomes",
       subtitle: "host → endereço · TTL",
       empty: "Sem resolução DNS na frente desta requisição.",
-      summary: "Resolveu o nome do serviço para um endereço antes de qualquer conexão.",
+      summary: "Resolveu o nome do serviço de origem para um endereço (uma consulta real ao CoreDNS) antes de qualquer conexão.",
       inDesc: "Um nome de serviço a resolver.",
       host: "Host consultado",
       address: "Endereço resolvido",
       ttl: "TTL (s)",
+      notResolved: "O CoreDNS não retornou endereço para este nome (cadeia ausente ou consulta falhou).",
     },
     cdn: {
       title: "CDN / Cache — cache de borda",
-      subtitle: "requisição → HIT / MISS",
+      subtitle: "requisição → HIT / MISS / BYPASS",
       empty: "Sem cache de borda na frente desta requisição.",
-      summary: "Consultou o cache de borda — um HIT é servido da borda, um MISS é encaminhado à origem.",
+      summary: "Consultou o cache de borda — um HIT é servido da borda; a API de chat não-cacheável é um BYPASS, passada direto à origem.",
       inDesc: "A requisição que chega para a app.",
       cache: "Cache",
       age: "Idade (s)",
       server: "Servidor de borda",
+      hits: "Hits de cache",
+      reason: "Motivo",
     },
     waf: {
       title: "WAF — firewall de aplicação web",
       subtitle: "requisição → veredito",
       empty: "Sem WAF na frente desta requisição.",
-      summary: "Inspecionou a requisição contra o conjunto de regras OWASP e a deixou passar (ou a bloqueou).",
+      summary: "Inspecionou a requisição contra o conjunto de regras OWASP e a deixou passar (ou a bloqueou com 403).",
       inDesc: "A requisição bruta a inspecionar.",
       status: "Veredito",
-      rules: "Regras avaliadas",
+      rules: "Regras casadas",
       anomaly: "Pontuação de anomalia",
       engine: "Motor",
+      threshold: "Limite de anomalia",
+      paranoia: "Nível de paranoia",
+      anomalyNote: "A pontuação de anomalia por requisição não é encaminhada pelo ModSecurity v3 — só o veredito e a configuração chegam à app.",
     },
     lb: {
       title: "TLS / Balanceador — proxy reverso",
       subtitle: "HTTPS → upstream",
       empty: "Sem terminador TLS / balanceador na frente desta requisição.",
-      summary: "Terminou o TLS e encaminhou a requisição para um upstream do backend, adicionando headers X-Forwarded-*.",
+      summary: "Terminou o TLS (o único ponto de decriptação) e balanceou a requisição para um backend, adicionando headers X-Forwarded-*.",
       role: "Proxy reverso · termina TLS · encaminha ao upstream",
       inDesc: "HTTPS criptografado do cliente.",
       tls: "Versão TLS",
       scheme: "Esquema",
       upstream: "Upstream",
       server: "Balanceador",
+      poolSize: "Backends no pool",
+      algorithm: "Algoritmo",
+      backend: "Backend escolhido",
     },
     apigw: {
       title: "API Gateway — roteamento e cotas",
@@ -3350,6 +3379,7 @@ const pt: Strings = {
       rateLimit: "Rate-limit restante",
       upstreamLatency: "Latência do upstream (ms)",
       gateway: "Gateway",
+      policy: "Política aplicada",
     },
   },
   ragDetail: {

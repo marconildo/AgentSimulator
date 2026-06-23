@@ -26,6 +26,7 @@ from app.network import (
     read_dns,
     read_lb,
     read_waf,
+    resolve_dns,
 )
 from app.schemas import ChatRequest, Stage, TraceEvent
 
@@ -263,3 +264,84 @@ def test_waf_cleared_attestation_is_stamped_downstream_of_the_waf():
 def test_varnish_reports_bypass_for_the_uncacheable_api():
     varnish = (_REPO_ROOT / "infra/varnish/default.vcl").read_text(encoding="utf-8")
     assert "BYPASS" in varnish
+
+
+# --- 091-network-appliance-detail-enrichment: richer real evidence -----------
+
+
+def test_parsers_surface_enriched_evidence():
+    cdn = read_cdn(
+        {"x-cache": "BYPASS", "x-cache-hits": "0", "x-cache-reason": "uncacheable method (POST)"}
+    )
+    assert cdn.hits == 0 and cdn.reason == "uncacheable method (POST)"
+
+    waf = read_waf(
+        {
+            "x-waf-status": "clean",
+            "x-waf-anomaly": "0",
+            "x-waf-threshold": "5",
+            "x-waf-paranoia": "1",
+            "x-waf-rules": "0",
+        }
+    )
+    assert waf.anomaly_score == 0 and waf.threshold == 5 and waf.paranoia == 1 and waf.rules == 0
+
+    lb = read_lb(
+        {"x-lb-pool-size": "1", "x-lb-algorithm": "roundrobin", "x-lb-backend": "modsecurity"}
+    )
+    assert lb.pool_size == 1 and lb.algorithm == "roundrobin" and lb.backend == "modsecurity"
+    assert lb.seen is True
+
+    gw = read_apigw({"x-gateway": "kong", "x-gateway-policy": "rate-limit: 60/min"})
+    assert gw.policy == "rate-limit: 60/min"
+
+
+def test_enriched_fields_are_present_in_as_data_even_when_absent():
+    # The keys always exist (null when not stamped) so the FE can render an honest
+    # "not reported" rather than a missing field. Everything stays JSON-serialisable.
+    cdn = read_cdn({}).as_data()
+    waf = read_waf({}).as_data()
+    lb = read_lb({}).as_data()
+    gw = read_apigw({}).as_data()
+    for data in (cdn, waf, lb, gw):
+        json.dumps(data)
+    assert "hits" in cdn and "reason" in cdn
+    assert "threshold" in waf and "paranoia" in waf
+    assert "pool_size" in lb and "algorithm" in lb and "backend" in lb
+    assert "policy" in gw
+
+
+def test_resolve_dns_honest_fallback_on_unreachable_resolver():
+    # No resolver at a TEST-NET address → honest "not resolved", never fabricated.
+    info = resolve_dns("backend", server="203.0.113.1", timeout=0.2)
+    assert info.seen is False
+    assert info.address is None and info.ttl is None
+    assert info.host == "backend"
+
+
+def test_resolve_dns_returns_a_real_record_when_reachable():
+    # Best-effort real query via a public resolver; skip if egress is unavailable so
+    # CI stays deterministic. Proves the real A-record + TTL path (AC1).
+    info = resolve_dns("one.one.one.one", server="1.1.1.1", timeout=1.0)
+    if not info.seen:
+        pytest.skip("no DNS egress in this environment")
+    assert info.address and info.ttl is not None
+
+
+def test_infra_stamps_enriched_evidence_headers():
+    varnish = (_REPO_ROOT / "infra/varnish/default.vcl").read_text(encoding="utf-8").lower()
+    haproxy = (_REPO_ROOT / "infra/haproxy/haproxy.cfg").read_text(encoding="utf-8").lower()
+    kong = (_REPO_ROOT / "infra/kong/kong.yml").read_text(encoding="utf-8").lower()
+    assert "x-cache-hits" in varnish and "x-cache-reason" in varnish
+    assert "x-lb-pool-size" in haproxy
+    assert "x-lb-algorithm" in haproxy
+    assert "x-lb-backend" in haproxy
+    assert "x-gateway-policy" in kong
+
+
+def test_kong_attests_the_waf_config_facts():
+    # ModSecurity v3 can't forward its runtime anomaly score upstream, so Kong (the
+    # first hop past the WAF) stamps the WAF's real config facts — the same
+    # attestation pattern as X-Waf-Status. The per-request score stays unmeasured.
+    kong = (_REPO_ROOT / "infra/kong/kong.yml").read_text(encoding="utf-8").lower()
+    assert "x-waf-paranoia" in kong and "x-waf-threshold" in kong
