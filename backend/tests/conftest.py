@@ -92,6 +92,13 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
+    # Same guard as pytest_configure: an integration-only run imports no app code
+    # (and the lightweight CI runner has no backend deps installed), and the
+    # openai/tavily/ollama skip markers don't apply to the black-box suite.
+    markexpr = (getattr(config.option, "markexpr", "") or "").replace(" ", "")
+    if markexpr == "integration":
+        return
+
     has_openai = _has_openai_key()
     has_tavily = _has_tavily_key()
     has_ollama = _has_ollama_server()
