@@ -820,6 +820,10 @@ export interface Strings {
     reconstructedLog: string;
     reconstructedLogHint: string;
     notMeasured: string;
+    // 092 — the real inbound request shown as IN (instead of generic prose).
+    requestLine: string;
+    message: string;
+    noRequest: string;
     dns: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; host: string; address: string; ttl: string; notResolved: string };
     cdn: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; cache: string; age: string; server: string; hits: string; reason: string };
     waf: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; status: string; rules: string; anomaly: string; engine: string; threshold: string; paranoia: string; anomalyNote: string };
@@ -2109,6 +2113,9 @@ const en: Strings = {
     reconstructedLog: "Access log (reconstructed)",
     reconstructedLogHint: "Reconstructed from the forwarded evidence — not a live container tail.",
     notMeasured: "not measured at this hop",
+    requestLine: "Request",
+    message: "Message",
+    noRequest: "No request captured at this point yet.",
     dns: {
       title: "DNS — name resolution",
       subtitle: "host → address · TTL",
@@ -3317,6 +3324,9 @@ const pt: Strings = {
     reconstructedLog: "Log de acesso (reconstruído)",
     reconstructedLogHint: "Reconstruído a partir da evidência encaminhada — não é um tail real do container.",
     notMeasured: "não medido neste hop",
+    requestLine: "Requisição",
+    message: "Mensagem",
+    noRequest: "Nenhuma requisição capturada até aqui ainda.",
     dns: {
       title: "DNS — resolução de nomes",
       subtitle: "host → endereço · TTL",

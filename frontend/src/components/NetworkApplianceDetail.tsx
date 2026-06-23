@@ -2,10 +2,17 @@ import { useMemo } from "react";
 
 import { useT } from "../i18n";
 import { buildApplianceLog } from "../lib/networkLog";
-import { selectApiGw, selectCdn, selectDns, selectLb, selectWaf } from "../lib/stationDetail";
+import {
+  selectApiGw,
+  selectCdn,
+  selectDns,
+  selectInboundRequest,
+  selectLb,
+  selectWaf,
+} from "../lib/stationDetail";
 import { useSimulator } from "../store/useSimulator";
 import type { TraceEvent } from "../types/events";
-import { DetailShell, KeyVal, Mono, Scroll, Section } from "./DetailShell";
+import { Caption, DetailShell, KeyVal, Mono, Scroll, Section } from "./DetailShell";
 
 // 089-network-station-detail — the "open full view" overlay shared by the five
 // ingress appliances (DNS / CDN / WAF / TLS-LB / API Gateway). The Inspector keeps
@@ -164,6 +171,9 @@ export function NetworkApplianceDetail({
   );
 
   const p = useMemo(() => project(kind, visible, L), [kind, visible, L]);
+  // 092 — the real request that entered this appliance (shown as IN for the HTTP
+  // appliances; DNS keeps its host-name input). A pure projection of the trace.
+  const inbound = useMemo(() => selectInboundRequest(visible), [visible]);
 
   return (
     <DetailShell
@@ -186,10 +196,27 @@ export function NetworkApplianceDetail({
       </Section>
 
       <Section title={L.in} accent={accent}>
-        <Mono>{La.inDesc}</Mono>
-        {p.inRows.map((r) => (
-          <KeyVal key={r.k} k={r.k} v={r.v} />
-        ))}
+        {kind === "dns" ? (
+          // DNS operates on a name, not the HTTP request — its input IS the host.
+          p.inRows.length ? (
+            p.inRows.map((r) => <KeyVal key={r.k} k={r.k} v={r.v} />)
+          ) : (
+            <Mono>{L.noRequest}</Mono>
+          )
+        ) : inbound ? (
+          // The real request that traversed this appliance (from the trace).
+          <>
+            <KeyVal k={L.requestLine} v="POST /api/chat" />
+            {inbound.message && (
+              <>
+                <Caption>{L.message}</Caption>
+                <Mono>{inbound.message}</Mono>
+              </>
+            )}
+          </>
+        ) : (
+          <Mono>{L.noRequest}</Mono>
+        )}
       </Section>
 
       <Section title={L.out} accent={accent}>

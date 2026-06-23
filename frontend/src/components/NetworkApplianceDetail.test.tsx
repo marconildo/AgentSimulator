@@ -95,6 +95,35 @@ describe("NetworkApplianceDetail", () => {
     expect(screen.getAllByText("modsecurity").length).toBeGreaterThan(0);
   });
 
+  // 092-network-appliance-real-io — the IN shows the real request, not generic prose.
+  it("WAF IN shows the real request (POST /api/chat + message), not prose (092 AC1)", () => {
+    seq = 0;
+    seed([
+      ev("frontend", "end", {
+        message: "What is RAG?",
+        request: { message: "What is RAG?", session_id: "s", top_k: 4, mode: "stream", model: "gpt-4.1-mini" },
+      }),
+      ev("waf", "end", { seen: true, status: "clean", engine: "modsecurity" }),
+    ]);
+    render(<NetworkApplianceDetail kind="waf" onClose={vi.fn()} />);
+    expect(screen.getByText("POST /api/chat")).toBeTruthy();
+    expect(screen.getByText("What is RAG?")).toBeTruthy();
+  });
+
+  it("DNS IN leads with the host queried (092 AC2)", () => {
+    seq = 0;
+    seed([ev("dns", "end", { seen: true, host: "backend", address: "172.28.0.2", ttl: 30 })]);
+    render(<NetworkApplianceDetail kind="dns" onClose={vi.fn()} />);
+    expect(screen.getByText("backend")).toBeTruthy();
+  });
+
+  it("HTTP appliance IN is an honest empty when no request is captured (092 AC4)", () => {
+    seq = 0;
+    seed([ev("cdn", "end", { seen: true, cache: "BYPASS", server: "varnish" })]);
+    render(<NetworkApplianceDetail kind="cdn" onClose={vi.fn()} />);
+    expect(screen.getByText(/No request captured/i)).toBeTruthy();
+  });
+
   it("WAF shows config facts and an honest note when the score isn't forwarded (AC4/AC6)", () => {
     seq = 0;
     seed([

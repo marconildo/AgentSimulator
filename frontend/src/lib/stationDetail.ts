@@ -288,6 +288,24 @@ export function selectApiGw(events: TraceEvent[]): ApiGwData | undefined {
   return ev ? (ev.data as unknown as ApiGwData) : undefined;
 }
 
+// 092-network-appliance-real-io — the real request that entered the chain, read
+// from the `frontend` END event (the same data hopDetail.ts uses). The appliance
+// drill-ins show this as their honest IN (what actually traversed them) instead of
+// generic prose; `undefined` when no request is present at the cursor yet.
+export interface InboundRequest {
+  message?: string;
+  requestBody?: RequestBody;
+}
+
+export function selectInboundRequest(events: TraceEvent[]): InboundRequest | undefined {
+  const ev = pickLast(events, "frontend", "end");
+  if (!ev) return undefined;
+  return {
+    message: ev.data.message as string | undefined,
+    requestBody: ev.data.request as RequestBody | undefined,
+  };
+}
+
 // --- Ingestion (080-ingestion-pipeline-merge) --------------------------------
 //
 // The offline indexer write-path, projected as six ordered phases for the
