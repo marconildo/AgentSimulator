@@ -16,6 +16,7 @@ import {
   type TourState,
 } from "../lib/tour";
 import { tourTrace } from "../lib/tourTrace";
+import type { BlockedOutcome } from "../lib/derive";
 import type { TraceEvent } from "../types/events";
 
 export type Status = "idle" | "streaming" | "done" | "error" | "cancelled";
@@ -39,6 +40,10 @@ interface SimulatorState {
   // (it is not a station, so it stays out of the StationId-exhaustive switches).
   tracesOpen: boolean;
   error: string | null;
+  // 093-waf-block-visualization — set when the chain 403'd the request (the WAF
+  // blocked it). No trace exists for a block, so it's held here and threaded into
+  // deriveView; cleared when a new run begins.
+  blocked: BlockedOutcome | null;
   // Side-panel collapse (013-canvas-space-disclosure) — layout state kept here
   // (not local) so `select` can re-open the Inspector when a station is clicked.
   chatCollapsed: boolean;
@@ -69,6 +74,8 @@ interface SimulatorState {
   pushTrace: (event: TraceEvent) => void;
   endRun: () => void;
   failRun: (message: string) => void;
+  // 093 — terminal "blocked at the WAF" outcome (the chain 403'd the request).
+  blockRun: (outcome: BlockedOutcome) => void;
   // 016-cancel-stream: interrupt an in-flight run. Aborts the request signal,
   // stops the live ticker and marks the run `cancelled` — but keeps events/cursor
   // so the partial trace stays on the canvas, replayable/step-able (AC3).
@@ -197,6 +204,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   detail: null,
   tracesOpen: false,
   error: null,
+  blocked: null,
   chatCollapsed: false,
   // 037 — collapsed on the first visit only (canvas-first opening frame), else the
   // expanded default; clicking a station still re-opens it.
@@ -255,6 +263,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       following: true,
       playing: false,
       error: null,
+      blocked: null,
       tour: IDLE_TOUR,
     });
     startLiveTimer(); // pace the live journey instead of snapping to the tail
@@ -270,6 +279,14 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
   endRun: () => set({ status: "done" }),
 
   failRun: (message) => set({ status: "error", error: message }),
+
+  // 093 — the chain blocked the request at the WAF (403). Terminal, but distinct
+  // from a generic error: holds the outcome so the canvas lights the path up to the
+  // WAF + marks it blocked, and the chat explains why. Stops the live ticker.
+  blockRun: (outcome) => {
+    stopTimer();
+    set({ status: "error", blocked: outcome, following: false, playing: false });
+  },
 
   // 016-cancel-stream: terminal-but-non-destructive interrupt. Only acts on a
   // live run; aborts its signal (so the SSE fetch unwinds with AbortError and the
@@ -289,7 +306,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
     // One blocking round-trip already finished; replay it from the top so the
     // journey still animates (just not live).
     stopTourTimer();
-    set({ events, status: "done", cursor: -1, following: false, playing: false, tour: IDLE_TOUR });
+    set({ events, status: "done", cursor: -1, following: false, playing: false, blocked: null, tour: IDLE_TOUR });
     get().togglePlay();
   },
 
@@ -310,6 +327,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       following: false,
       playing: false,
       error: null,
+      blocked: null,
       tour: IDLE_TOUR,
     });
   },
@@ -326,6 +344,7 @@ export const useSimulator = create<SimulatorState>((set, get) => ({
       following: true,
       playing: false,
       error: null,
+      blocked: null,
       selected: null,
       selectedHop: null,
       detail: null,

@@ -7,7 +7,23 @@ import type { StationId } from "./stations";
 import { HOP_PAIRS, STAGE_TO_STATION, STATION_IDS } from "./stations";
 import { tallyUsage } from "./usage";
 
-export type StationStatus = "idle" | "active" | "done";
+// 093-waf-block-visualization: "blocked" is the WAF's terminal state when it 403s a
+// request — the request stops there and never reaches the backend.
+export type StationStatus = "idle" | "active" | "done" | "blocked";
+
+// 093 — a WAF block has NO server trace (the backend never runs), so it's modeled
+// as a distinct outcome (held in the store, threaded into deriveView) rather than
+// fabricated TraceEvents. Only the WAF blocks in this app (the sole 403 source).
+export interface BlockedOutcome {
+  at: "waf";
+  httpStatus: number; // 403
+  message: string; // the payload that was blocked
+}
+
+// The path the request physically traverses before the WAF (the front door + the
+// pre-WAF appliances). On a block these render "reached"; the WAF renders "blocked";
+// everything downstream stays "idle" (never reached).
+const PRE_WAF_PATH: StationId[] = ["frontend", "dns", "cdn", "lb"];
 
 export interface StationRuntime {
   status: StationStatus;
@@ -55,6 +71,9 @@ export interface DerivedView {
   // null when idle/done (no `tourStation` passed). Independent of `activeStation`
   // (the spotlight follows the cursor; the emphasis follows the narration).
   emphasizedStation: StationId | null;
+  // 093 — set when the run was blocked by the WAF (the chain 403'd it); drives the
+  // "blocked at the WAF" rendering. Null on a normal run.
+  blocked: BlockedOutcome | null;
 }
 
 function hopId(source: StationId, target: StationId): string {
@@ -133,6 +152,7 @@ export function deriveView(
   events: TraceEvent[],
   upto: number,
   tourStation: StationId | null = null,
+  blocked: BlockedOutcome | null = null,
 ): DerivedView {
   const stations = {} as Record<StationId, StationRuntime>;
   for (const id of STATION_IDS) stations[id] = { status: "idle", events: [] };
@@ -202,6 +222,27 @@ export function deriveView(
       ? legsFor(findPath(prevStation, activeStation))
       : [];
 
+  // 093 — a WAF block overrides the projection: the request reached the WAF and was
+  // stopped there (no events exist for it — the backend never ran). Light the path
+  // up to the WAF, mark the WAF blocked, leave everything downstream untouched
+  // ("idle" = not reached). `blocked == null` reproduces the normal projection.
+  if (blocked) {
+    for (const id of PRE_WAF_PATH) stations[id].status = "done";
+    stations.waf.status = "blocked";
+    return {
+      stations,
+      activeStation: null,
+      activeHops: [],
+      streaming: false,
+      answer: "",
+      iterations: 0,
+      usage,
+      generation: {},
+      emphasizedStation: tourStation,
+      blocked,
+    };
+  }
+
   return {
     stations,
     activeStation,
@@ -214,5 +255,6 @@ export function deriveView(
     usage,
     generation: { ttftMs, tokensPerSec },
     emphasizedStation: tourStation,
+    blocked: null,
   };
 }

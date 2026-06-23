@@ -314,6 +314,9 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
   // than threading them down from App — App already passes `bubble`; this is
   // the parallel projection scoped to the loaded message.
   const events = useSimulator((s) => s.events);
+  // 093-waf-block-visualization — when the WAF blocked the turn, show a clear
+  // bilingual "blocked by the WAF" note (with the why) instead of the raw 403.
+  const blocked = useSimulator((s) => s.blocked);
   const cursor = useSimulator((s) => s.cursor);
   const simStatus = useSimulator((s) => s.status);
   const playing = useSimulator((s) => s.playing);
@@ -418,10 +421,16 @@ function Thread({ bubble }: { bubble: PendingBubble }) {
         )}
       </div>
 
-      {error && (
-        <p className="mx-3 mb-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-rose)_14%,transparent)] px-2.5 py-1.5 text-[11px] text-[var(--color-rose-soft)]">
-          ⚠ {error}
+      {blocked ? (
+        <p className="mx-3 mb-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-warn)_16%,transparent)] px-2.5 py-1.5 text-[11px] text-[var(--color-warn)]">
+          🛡️ {t.chat.wafBlocked}
         </p>
+      ) : (
+        error && (
+          <p className="mx-3 mb-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-rose)_14%,transparent)] px-2.5 py-1.5 text-[11px] text-[var(--color-rose-soft)]">
+            ⚠ {error}
+          </p>
+        )
       )}
 
       {/* 016-cancel-stream: a non-error note after the user stops a run. The

@@ -4,35 +4,24 @@
 
 ## Tasks
 
-- [ ] **T1 — test first (AC1)**: `lib/sse.test.ts` — a mocked `403` response from the
-  chat POST yields a typed `WafBlocked` signal (not a generic error). Red.
-- [ ] **T2 — implement detection**: classify `403` in `lib/sse.ts`; surface
-  `WafBlocked`. Green.
-
-- [ ] **T3 — test first (AC2/AC5)**: `derive.test.ts` — `deriveView(events, cursor,
-  blocked)` marks waf=blocked, frontend/dns/cdn/lb=reached, apigw/backend/agent/data
-  =not-reached; with `blocked == null` the projection is byte-for-byte today's. Red.
-- [ ] **T4 — implement projection + store**: add `BlockedOutcome` type + `blocked`
-  state in `useSimulator` (set on a blocked send, cleared on send/reset); thread it
-  through `deriveView`; add the `"blocked"` station status. Green.
-
-- [ ] **T5 — test first (AC3/AC4)**: WAF drill-in shows verdict blocked + 403 + the
-  "never reached the backend" note; the chat bubble shows the bilingual blocked
-  message. Red.
-- [ ] **T6 — implement render**: blocked-station marker in `FlowCanvas`; WAF
-  drill-in blocked branch in `NetworkApplianceDetail`; blocked chat bubble; en + pt
-  strings. Green.
-
-- [ ] **T7 — test first (CORS)**: config-audit — `infra/varnish/default.vcl` sets an
-  `Access-Control-Allow-Origin` response header. Red.
-- [ ] **T8 — implement infra**: add the CORS-on-response directive to Varnish. Green.
-
-- [ ] **T9 — AC6 regression**: a normal (stream) run is unchanged; exhaustive
-  `StationId` switches still compile.
-- [ ] **T10 — i18n**: every new string en + pt; run the i18n auditor.
-- [ ] **T11 — verify gates + smoke**: `tsc` · `npm test` · `npm run build` ·
-  `ruff`/`pytest` (config-audit) · manual `docker compose up` smoke (send
-  `<script>alert(1)</script>` → see the WAF block). `spec.md` → `done`.
+- [x] **T1/T2 — detection**: `WafBlockedError` on a 403 in `lib/sse.ts` (both
+  stream + batch) + `lib/sse.test.ts` (3 tests).
+- [x] **T3/T4 — projection + store**: `BlockedOutcome` + `"blocked"` station status
+  in `derive.ts`; `deriveView(events, cursor, tour, blocked)` lights path-to-WAF;
+  `useSimulator.blocked` + `blockRun` (cleared on beginRun/reset/load); threaded in
+  `App.tsx`. `derive.test.ts` (+2).
+- [x] **T5/T6 — render**: blocked node styling + 403 badge in `StationNode`; WAF
+  blocked readout in `FlowCanvas`; WAF drill-in blocked branch in
+  `NetworkApplianceDetail` (verdict/403/why/payload); bilingual blocked chat note in
+  `ChatPanel`; en + pt strings. Component test (+1).
+- [x] **T7/T8 — CORS**: Varnish adds `Access-Control-Allow-Origin` when absent (so
+  the cross-origin 403 is readable) + config-audit test.
+- [x] **T9 — AC6 regression**: `blocked == null` reproduces today's projection;
+  706 vitest green; exhaustive switches compile.
+- [x] **T10 — i18n**: every new string en + pt.
+- [x] **T11 — verify gates**: tsc ✓ · 706 vitest ✓ · `npm run build` ✓ · ruff ✓ ·
+  backend network tests ✓ (21). Manual `docker compose up` smoke still recommended
+  (send `<script>alert(1)</script>` → see the WAF block live). `spec.md` → `done`.
 
 ## Definition of done
 

@@ -8,6 +8,19 @@ import { demoBatchChat, demoFetchTrace, demoStreamChat, isDemo } from "./demo";
 
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
+// 093-waf-block-visualization: a 403 from the chain means the WAF (ModSecurity/CRS)
+// blocked the request at the edge — it never reached the backend, so there is no SSE
+// stream and no trace. Surfaced as a typed error so the send flow can render a
+// "blocked at the WAF" outcome instead of a generic stream failure.
+export class WafBlockedError extends Error {
+  readonly httpStatus: number;
+  constructor(httpStatus: number) {
+    super(`Blocked by the WAF (${httpStatus})`);
+    this.name = "WafBlockedError";
+    this.httpStatus = httpStatus;
+  }
+}
+
 export interface ChatHandlers {
   onTrace: (event: TraceEvent) => void;
   onDone: (event: DoneEvent) => void;
@@ -18,6 +31,7 @@ export async function consumeEventStream(
   resp: Response,
   onEvent: (eventType: string, payload: unknown) => void,
 ): Promise<void> {
+  if (resp.status === 403) throw new WafBlockedError(resp.status);
   if (!resp.ok || !resp.body) {
     throw new Error(`Request failed: ${resp.status}`);
   }
@@ -118,6 +132,7 @@ export async function batchChat(
     }),
     signal,
   });
+  if (resp.status === 403) throw new WafBlockedError(resp.status);
   if (!resp.ok) throw new Error(`Chat request failed: ${resp.status}`);
   return (await resp.json()) as TraceSummary;
 }

@@ -339,6 +339,14 @@ def test_infra_stamps_enriched_evidence_headers():
     assert "x-gateway-policy" in kong
 
 
+def test_varnish_adds_cors_so_the_403_block_is_readable():
+    # 093-waf-block-visualization: the WAF's 403 is cross-origin to the FE and would
+    # be unreadable without CORS headers — Varnish adds Access-Control-Allow-Origin
+    # (only when absent) so the FE can detect the block instead of a network error.
+    varnish = (_REPO_ROOT / "infra/varnish/default.vcl").read_text(encoding="utf-8").lower()
+    assert "access-control-allow-origin" in varnish
+
+
 def test_kong_attests_the_waf_config_facts():
     # ModSecurity v3 can't forward its runtime anomaly score upstream, so Kong (the
     # first hop past the WAF) stamps the WAF's real config facts — the same

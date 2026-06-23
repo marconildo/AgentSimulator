@@ -86,9 +86,13 @@ export function StationNode(props: NodeProps) {
   const spotlit = isActive && !comingSoon;
   // 014: a coming-soon preview never runs, so it is never emphasized either.
   const emphasized = Boolean(isEmphasized) && !comingSoon;
+  // 093-waf-block-visualization — the WAF's terminal "blocked" state (it 403'd the
+  // request). Stands out in warn red and is never dimmed, like the spotlight.
+  const blocked = runtime.status === "blocked";
+  const WARN = "var(--color-warn)";
   const accent = meta.accent;
-  const borderColor = spotlit ? accent : "var(--color-line)";
-  const dotColor = spotlit ? accent : "var(--color-faint)";
+  const borderColor = blocked ? WARN : spotlit ? accent : "var(--color-line)";
+  const dotColor = blocked ? WARN : spotlit ? accent : "var(--color-faint)";
 
   // The collapsed readout is dense jargon ("decision: answer", "top-4 · score
   // 0.50"). Append the matching one-line glossary hint to its native tooltip so
@@ -116,12 +120,15 @@ export function StationNode(props: NodeProps) {
           border: `1.5px ${comingSoon ? "dashed" : "solid"} ${borderColor}`,
           boxShadow: isSelected
             ? `0 0 0 2px ${accent}`
-            : spotlit
-              ? `0 8px 30px -12px ${accent}`
-              : "none",
+            : blocked
+              ? `0 0 0 2px ${WARN}`
+              : spotlit
+                ? `0 8px 30px -12px ${accent}`
+                : "none",
           // The narrated node stays at full opacity so it lifts out of the
-          // dimmed neighbours even when it is not the live spotlight (014).
-          opacity: comingSoon ? 0.5 : spotlit || emphasized ? 1 : 0.66,
+          // dimmed neighbours even when it is not the live spotlight (014). A
+          // blocked node (093) also stays full-opacity so the stop stands out.
+          opacity: comingSoon ? 0.5 : spotlit || emphasized || blocked ? 1 : 0.66,
         }}
       >
         <Handle id="left" type="target" position={Position.Left} style={{ opacity: 0, border: "none" }} />
@@ -156,6 +163,14 @@ export function StationNode(props: NodeProps) {
               )}
             </div>
           </div>
+          {blocked && (
+            <span
+              className="shrink-0 rounded-full px-1.5 py-px text-[8px] font-bold uppercase leading-none tracking-wide"
+              style={{ background: WARN, color: "var(--color-base)" }}
+            >
+              403
+            </span>
+          )}
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-full"
             style={{ background: dotColor, boxShadow: spotlit ? `0 0 8px ${accent}` : "none" }}

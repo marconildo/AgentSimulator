@@ -46,6 +46,8 @@ export interface Strings {
     send: string;
     answer: string;
     thinking: string;
+    // 093-waf-block-visualization — the chat note when the WAF blocked the turn.
+    wafBlocked: string;
     // 012-chat-flow-sync: running-status label per pipeline stage, shown in the
     // live chat bubble in step with the paced playhead (gerund form, parallel to
     // timeline.phases). `thinking` is the fallback before the first stage.
@@ -826,7 +828,7 @@ export interface Strings {
     noRequest: string;
     dns: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; host: string; address: string; ttl: string; notResolved: string };
     cdn: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; cache: string; age: string; server: string; hits: string; reason: string };
-    waf: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; status: string; rules: string; anomaly: string; engine: string; threshold: string; paranoia: string; anomalyNote: string };
+    waf: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; status: string; rules: string; anomaly: string; engine: string; threshold: string; paranoia: string; anomalyNote: string; http: string; blockedNote: string; blockedWhy: string };
     lb: { title: string; subtitle: string; empty: string; summary: string; role: string; inDesc: string; tls: string; scheme: string; upstream: string; server: string; poolSize: string; algorithm: string; backend: string };
     apigw: { title: string; subtitle: string; empty: string; summary: string; inDesc: string; route: string; rateLimit: string; upstreamLatency: string; gateway: string; policy: string };
   };
@@ -1125,6 +1127,8 @@ const en: Strings = {
     send: "Send message",
     answer: "Answer",
     thinking: "Thinking…",
+    wafBlocked:
+      "Blocked by the WAF (403) — the payload matched an OWASP Core Rule Set signature (a likely web attack), so ModSecurity rejected it at the edge. It never reached the agent. Open the WAF box to see why.",
     stage: {
       request: "Sending…",
       memory: "Recalling memory…",
@@ -2152,6 +2156,9 @@ const en: Strings = {
       threshold: "Anomaly threshold",
       paranoia: "Paranoia level",
       anomalyNote: "The per-request anomaly score isn't forwarded upstream by ModSecurity v3 — only the verdict and config reach the app.",
+      http: "HTTP status",
+      blockedNote: "Stopped here by the WAF — the request was rejected with 403 and never reached the backend.",
+      blockedWhy: "The payload matched an OWASP Core Rule Set signature (a likely SQLi / XSS / traversal pattern). The exact rule id lives in the WAF's audit log and isn't returned in the 403.",
     },
     lb: {
       title: "TLS / Load Balancer — reverse proxy",
@@ -2330,6 +2337,8 @@ const pt: Strings = {
     send: "Enviar mensagem",
     answer: "Resposta",
     thinking: "Pensando…",
+    wafBlocked:
+      "Bloqueado pelo WAF (403) — o payload casou com uma assinatura do OWASP Core Rule Set (provável ataque web), então o ModSecurity o rejeitou na borda. Não chegou ao agente. Abra a caixa do WAF para ver o porquê.",
     stage: {
       request: "Enviando…",
       memory: "Lendo memória…",
@@ -3363,6 +3372,9 @@ const pt: Strings = {
       threshold: "Limite de anomalia",
       paranoia: "Nível de paranoia",
       anomalyNote: "A pontuação de anomalia por requisição não é encaminhada pelo ModSecurity v3 — só o veredito e a configuração chegam à app.",
+      http: "Status HTTP",
+      blockedNote: "Barrado aqui pelo WAF — a requisição foi rejeitada com 403 e não chegou ao backend.",
+      blockedWhy: "O payload casou com uma assinatura do OWASP Core Rule Set (provável padrão de SQLi / XSS / traversal). O id exato da regra fica no log de auditoria do WAF e não volta no 403.",
     },
     lb: {
       title: "TLS / Balanceador — proxy reverso",

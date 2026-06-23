@@ -164,9 +164,12 @@ export default function App() {
   // its current station into the projection so the canvas leads the eye to it;
   // null when no tour is running (deriveView then emphasizes nothing).
   const tourStation = isTouring(tour) ? (currentStep(tour)?.station ?? null) : null;
+  // 093-waf-block-visualization — a WAF block has no trace, so its outcome is held
+  // in the store and threaded into the projection (lights the path up to the WAF).
+  const blocked = useSimulator((s) => s.blocked);
   const view = useMemo(
-    () => deriveView(events, cursor, tourStation),
-    [events, cursor, tourStation],
+    () => deriveView(events, cursor, tourStation, blocked),
+    [events, cursor, tourStation, blocked],
   );
   // What the live chat bubble shows, projected from the same paced cursor as the
   // canvas: a stage status until the answer exists, then the answer itself (012).

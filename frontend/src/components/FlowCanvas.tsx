@@ -286,6 +286,9 @@ export function readoutFor(
       return d.seen ? (d.cache ?? "—") : ro.netUnseen;
     }
     case "waf": {
+      // 093 — a real WAF block has no event (the request never reached the backend);
+      // the blocked status is set on the runtime by deriveView's blocked override.
+      if (rt.status === "blocked") return ro.wafBlocked("403");
       const e = lastWith(rt.events, (ev) => ev.stage === "waf" && ev.phase === "end");
       if (!e) return rt.status === "idle" ? "" : "…";
       const d = e.data as Partial<WafData>;

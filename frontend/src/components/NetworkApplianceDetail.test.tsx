@@ -19,7 +19,7 @@ function seed(events: TraceEvent[]): void {
 
 afterEach(() => {
   cleanup();
-  useSimulator.setState({ events: [], cursor: -1 });
+  useSimulator.setState({ events: [], cursor: -1, blocked: null });
 });
 
 describe("NetworkApplianceDetail", () => {
@@ -122,6 +122,22 @@ describe("NetworkApplianceDetail", () => {
     seed([ev("cdn", "end", { seen: true, cache: "BYPASS", server: "varnish" })]);
     render(<NetworkApplianceDetail kind="cdn" onClose={vi.fn()} />);
     expect(screen.getByText(/No request captured/i)).toBeTruthy();
+  });
+
+  // 093-waf-block-visualization — the WAF drill-in explains a real 403 block.
+  it("WAF drill-in shows the block (verdict/403/why) when the chain blocked the turn", () => {
+    seq = 0;
+    useSimulator.setState({
+      events: [],
+      cursor: -1,
+      blocked: { at: "waf", httpStatus: 403, message: "<script>alert(1)</script>" },
+    });
+    render(<NetworkApplianceDetail kind="waf" onClose={vi.fn()} />);
+    expect(screen.getByText("blocked")).toBeTruthy();
+    expect(screen.getByText("403")).toBeTruthy();
+    expect(screen.getByText(/never reached the backend/i)).toBeTruthy();
+    // The real payload that tripped the WAF is shown as the input.
+    expect(screen.getByText("<script>alert(1)</script>")).toBeTruthy();
   });
 
   it("WAF shows config facts and an honest note when the score isn't forwarded (AC4/AC6)", () => {

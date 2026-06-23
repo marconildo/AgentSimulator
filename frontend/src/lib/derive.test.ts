@@ -10,6 +10,30 @@ import { describe, expect, it } from "vitest";
 import type { Phase, Stage, TraceEvent } from "../types/events";
 import { deriveView } from "./derive";
 
+describe("deriveView — WAF block outcome (093)", () => {
+  const blocked = { at: "waf" as const, httpStatus: 403, message: "<script>alert(1)</script>" };
+
+  it("lights the path up to the WAF, marks the WAF blocked, leaves downstream idle", () => {
+    const view = deriveView([], -1, null, blocked);
+    expect(view.blocked).toEqual(blocked);
+    expect(view.stations.waf.status).toBe("blocked");
+    for (const id of ["frontend", "dns", "cdn", "lb"] as const) {
+      expect(view.stations[id].status).toBe("done");
+    }
+    for (const id of ["apigw", "backend", "agent"] as const) {
+      expect(view.stations[id].status).toBe("idle");
+    }
+    expect(view.activeStation).toBeNull();
+    expect(view.streaming).toBe(false);
+  });
+
+  it("a normal run (no block) leaves blocked null and the WAF unblocked", () => {
+    const view = deriveView([], -1);
+    expect(view.blocked).toBeNull();
+    expect(view.stations.waf.status).toBe("idle");
+  });
+});
+
 let seq = 0;
 function ev(stage: Stage, phase: Phase, data: Record<string, unknown> = {}): TraceEvent {
   return { trace_id: "t", seq: seq++, ts: 0, stage, phase, label: "", data, metrics: {} };

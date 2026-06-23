@@ -19,7 +19,7 @@ import { isFlowSettled } from "../lib/chatStatus";
 import { clearDraftPending, isDraftPending, markDraftPending } from "../lib/draftSession";
 import { overridesFor, useExperiment } from "../lib/experiment";
 import { useSettings } from "../lib/settings";
-import { batchChat, streamChat } from "../lib/sse";
+import { batchChat, streamChat, WafBlockedError } from "../lib/sse";
 import { loadTrace as loadCachedTrace } from "../lib/traceCache";
 import { useSimulator } from "./useSimulator";
 
@@ -414,6 +414,14 @@ export const useChat = create<ChatState>((set, get) => ({
       });
     } catch (err) {
       if (isAbort(err)) return;
+      // 093-waf-block-visualization: a 403 is the WAF blocking the request at the
+      // edge — render a "blocked at the WAF" outcome (canvas + drill-in explain it),
+      // not a generic stream error. The message never reached the backend.
+      if (err instanceof WafBlockedError) {
+        useSimulator.getState().blockRun({ at: "waf", httpStatus: err.httpStatus, message });
+        set({ error: err.message, pending: null, pendingAttachments: [] });
+        return;
+      }
       useSimulator.getState().failRun((err as Error).message);
       set({ error: (err as Error).message, pending: null, pendingAttachments: [] });
     } finally {

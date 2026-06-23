@@ -174,6 +174,11 @@ export function NetworkApplianceDetail({
   // 092 — the real request that entered this appliance (shown as IN for the HTTP
   // appliances; DNS keeps its host-name input). A pure projection of the trace.
   const inbound = useMemo(() => selectInboundRequest(visible), [visible]);
+  // 093-waf-block-visualization — when the WAF blocked this turn there is no trace
+  // (the request never reached the backend), so the WAF box reads the outcome from
+  // the store and renders a dedicated "blocked" view that explains why.
+  const blockedOutcome = useSimulator((s) => s.blocked);
+  const wafBlocked = kind === "waf" ? blockedOutcome : null;
 
   return (
     <DetailShell
@@ -183,7 +188,7 @@ export function NetworkApplianceDetail({
       subtitle={La.subtitle}
       back={L.back}
       onClose={onClose}
-      empty={!p.seen}
+      empty={!p.seen && !wafBlocked}
       emptyText={La.empty}
     >
       <Section title={L.did} accent={accent}>
@@ -196,7 +201,14 @@ export function NetworkApplianceDetail({
       </Section>
 
       <Section title={L.in} accent={accent}>
-        {kind === "dns" ? (
+        {wafBlocked ? (
+          // The real payload that tripped the WAF (held in the blocked outcome).
+          <>
+            <KeyVal k={L.requestLine} v="POST /api/chat" />
+            <Caption>{L.message}</Caption>
+            <Mono>{wafBlocked.message}</Mono>
+          </>
+        ) : kind === "dns" ? (
           // DNS operates on a name, not the HTTP request — its input IS the host.
           p.inRows.length ? (
             p.inRows.map((r) => <KeyVal key={r.k} k={r.k} v={r.v} />)
@@ -220,13 +232,29 @@ export function NetworkApplianceDetail({
       </Section>
 
       <Section title={L.out} accent={accent}>
-        {p.outRows.map((r) => (
-          <KeyVal key={r.k} k={r.k} v={r.v} />
-        ))}
-        {p.note && (
-          <p className="mt-1.5 text-[10.5px] italic leading-snug text-[var(--color-muted)]">
-            {p.note}
-          </p>
+        {wafBlocked ? (
+          <>
+            <KeyVal k={L.waf.status} v="blocked" />
+            <KeyVal k={L.waf.http} v={String(wafBlocked.httpStatus)} />
+            <KeyVal k={L.waf.engine} v="modsecurity" />
+            <p className="mt-1.5 text-[11px] font-semibold" style={{ color: accent }}>
+              🛡️✋ {L.waf.blockedNote}
+            </p>
+            <p className="mt-1 text-[10.5px] leading-snug text-[var(--color-text-soft)]">
+              {L.waf.blockedWhy}
+            </p>
+          </>
+        ) : (
+          <>
+            {p.outRows.map((r) => (
+              <KeyVal key={r.k} k={r.k} v={r.v} />
+            ))}
+            {p.note && (
+              <p className="mt-1.5 text-[10.5px] italic leading-snug text-[var(--color-muted)]">
+                {p.note}
+              </p>
+            )}
+          </>
         )}
       </Section>
 
