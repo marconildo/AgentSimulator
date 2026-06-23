@@ -50,19 +50,6 @@ def pytest_configure(config):
         "ollama: test needs a real local Ollama server "
         "(OLLAMA_TEST_SERVER/OLLAMA_TEST_MODEL; skipped without one)",
     )
-    config.addinivalue_line(
-        "markers",
-        "integration: black-box test against the running Docker stack "
-        "(opt-in via `-m integration`; needs `docker compose up`)",
-    )
-
-    # The black-box integration suite (`-m integration`) talks to the live stack
-    # over HTTP and imports no application code — so when the run targets *only*
-    # it, skip the in-process app import, DB reset and vector-index build below.
-    # This lets the integration CI job install just `httpx` + `pytest`.
-    markexpr = (getattr(config.option, "markexpr", "") or "").replace(" ", "")
-    if markexpr == "integration":
-        return
 
     from app.config import get_settings
     from app.db.store import get_store
@@ -92,13 +79,6 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    # Same guard as pytest_configure: an integration-only run imports no app code
-    # (and the lightweight CI runner has no backend deps installed), and the
-    # openai/tavily/ollama skip markers don't apply to the black-box suite.
-    markexpr = (getattr(config.option, "markexpr", "") or "").replace(" ", "")
-    if markexpr == "integration":
-        return
-
     has_openai = _has_openai_key()
     has_tavily = _has_tavily_key()
     has_ollama = _has_ollama_server()

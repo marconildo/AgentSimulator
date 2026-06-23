@@ -705,6 +705,7 @@ function AgentMessage({
           <Stamp ts={ts} lang={lang} t={t} />
         </div>
         <div
+          data-testid="agent-bubble"
           onClick={onClick}
           title={title}
           role={clickable ? "button" : undefined}

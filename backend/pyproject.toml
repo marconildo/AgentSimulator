@@ -9,11 +9,4 @@ ignore = ["E501"]  # long lines (mostly docstrings/prompts) are fine here
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-# `integration` is opt-in: it needs the full Docker stack up (the ingress chain +
-# backend) and is excluded from the default run so `pytest -q` and CI stay fast and
-# hermetic. Run it explicitly with `pytest -m integration` (CLI -m overrides this).
-addopts = "-q -m 'not integration'"
-markers = [
-    "openai: needs a real OPENAI_API_KEY (skipped without one)",
-    "integration: black-box test against the running Docker stack (opt-in; needs `docker compose up`)",
-]
+addopts = "-q"
