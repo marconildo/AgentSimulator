@@ -55,6 +55,7 @@ reasoning, embeddings, vector store, relational DB and tool calls are all real.
 - [📚 Learn mode](#-learn-mode)
 - [🎓 What you'll learn](#-what-youll-learn)
 - [🏗️ Architecture](#️-architecture)
+- [🌐 Network edge — the real ingress chain](#-network-edge--the-real-ingress-chain)
 - [🚀 Quickstart](#-quickstart)
 - [🔌 OpenAI-only](#-openai-only)
 - [🧱 Tech stack](#-tech-stack)
@@ -384,6 +385,35 @@ same SSE connection. There are **two databases on purpose**: the RAG *vector* st
 
 ---
 
+## 🌐 Network edge — the real ingress chain
+
+<div align="center">
+  <img src="docs/images/networkedge.png" alt="Network edge — a request crossing DNS, CDN, WAF, TLS/load balancer and API gateway before reaching the backend, with the real forwarded headers and per-appliance evidence" width="900"/>
+</div>
+
+Production traffic never hits the backend directly — it crosses a chain of network
+appliances first. The simulator runs that chain as **real Docker containers** (not
+a drawing), so every request genuinely travels through each hop:
+
+| Hop | Container | What it really does here |
+|---|---|---|
+| **DNS** | CoreDNS | Resolves the upstream service name |
+| **CDN / cache** | Varnish | Browser-facing front door (`:8090`); reports cache **HIT / BYPASS** |
+| **TLS / load balancer** | HAProxy | Terminates **TLS 1.3** (the single decryption point), load-balances |
+| **WAF** | ModSecurity + OWASP CRS | Inspects every request; real attacks get a **403** |
+| **API gateway** | Kong | Path routing + **real rate limiting** (a burst returns 429) |
+
+Click the **frontend→backend** arrow (or any appliance) to inspect the real
+evidence each hop adds — forwarded headers, cache status, LB pool/algorithm, WAF
+paranoia level + anomaly threshold, gateway route + rate-limit policy — and watch a
+**WAF block** light the path up with a 403 and an explanation of the matched rule.
+
+> **Requires Docker.** The network edge only comes up via `docker compose up` (the
+> appliances are containers). In local-dev mode (uvicorn + `npm run dev`) the
+> frontend talks to the backend directly, without the chain.
+
+---
+
 ## 🚀 Quickstart
 
 ### Option A — Docker (one command)
@@ -392,6 +422,10 @@ same SSE connection. There are **two databases on purpose**: the RAG *vector* st
 OPENAI_API_KEY=sk-... docker compose up --build
 # Frontend: http://localhost:5173   Backend: http://localhost:8000/docs
 ```
+
+This also brings up the **real [network edge](#-network-edge--the-real-ingress-chain)** —
+DNS · CDN · WAF · TLS/LB · API gateway as containers — and the frontend talks to the
+backend **through the chain** (`:8090`).
 
 ### Option B — Local dev
 

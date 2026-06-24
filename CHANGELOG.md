@@ -15,6 +15,59 @@ which triggers the Release workflow.
 Use these categories: Added · Changed · Deprecated · Removed · Fixed · Security.
 -->
 
+## [1.1.0] - 2026-06-24
+
+This release adds a **real network edge** (the production ingress chain an agent
+request crosses, as actual Docker containers) and a **third LLM provider, Google
+Vertex AI**.
+
+> **Heads up:** the network edge runs as containers — bring it up with
+> `docker compose up`. Local dev (uvicorn + `npm run dev`) talks to the backend
+> directly and does not exercise the chain.
+
+### Added
+
+- **Real network edge / ingress chain** — the front door a request crosses before
+  the backend, as **real Docker containers**, not a diagram: **DNS** (CoreDNS) ·
+  **CDN/cache** (Varnish) · **TLS/Load balancer** (HAProxy, single TLS-1.3
+  termination) · **WAF** (OWASP Core Rule Set on ModSecurity) · **API gateway**
+  (Kong, with real rate limiting). Each appliance reports real evidence —
+  forwarded headers, cache HIT/BYPASS, LB pool/algorithm, WAF paranoia level +
+  anomaly threshold, gateway route + rate-limit policy — surfaced in the
+  `frontend→backend` hop detail and in per-appliance "open full view" drill-ins.
+- **WAF block visualization** — a request blocked by the WAF (an OWASP CRS rule
+  match → 403) is shown honestly: the path lights up to the WAF, the station goes
+  *blocked*, a 403 badge appears, and the drill-in explains **why** (the matched
+  rule), with a bilingual chat note.
+- **Google Vertex AI provider** (PR [#4](https://github.com/reginaldosilva27/AgentSimulator/pull/4),
+  by new contributor [@elizeureisl](https://github.com/elizeureisl)) — a real,
+  opt-in third LLM provider alongside OpenAI and Ollama. Bind an agent to Vertex
+  AI, configure the GCP project/location and a service-account key (persisted,
+  masked on read, with a step-by-step help tooltip), pick a curated **Gemini**
+  model, and run the agentic loop against real Gemini — **no OpenAI key required**
+  for that run. "Save & test" validates the credentials with a live call. Amends
+  constitution §2 (now OpenAI + Ollama + Vertex AI). Bilingual EN/PT throughout.
+- **Chunk overlap highlighting** — the chunk full-text view highlights the carried
+  overlap prefix; the recursive chunker now sub-splits oversized paragraphs.
+- **Playwright integration tests** — browser E2E driving the live Docker stack
+  through the network chain (manual `integration.yml` workflow).
+
+### Fixed
+
+- **WAF blocked the app's own REST calls** — the OWASP CRS default
+  `allowed_methods` (`GET HEAD POST OPTIONS`) returned a 403 for `PATCH` / `PUT` /
+  `DELETE`, breaking agent rename, provider switch, settings save and agent delete
+  *through the chain*. The WAF now allows those verbs (`ALLOWED_METHODS`).
+
+### Security
+
+- **Scoped WAF exclusion for secret-carrying settings endpoints** — `/api/settings/*`
+  legitimately carry opaque secrets (the service-account JSON private key, API
+  keys) whose field names trip the CRS LFI rule family (e.g. the `credentials`
+  field matched rule `930120`, alone exceeding the anomaly threshold → 403). A
+  **narrow, path-scoped** exclusion drops only those LFI rules on those endpoints;
+  the rest of the API keeps full CRS coverage and real attacks stay blocked.
+
 ## [1.0.1] - 2026-06-22
 
 ### Added
@@ -65,6 +118,7 @@ against OpenAI (with an optional local Ollama provider for LLM/embeddings).
 - **Local Ollama provider** — optional per-agent LLM and embeddings without an
   OpenAI key.
 
-[Unreleased]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/reginaldosilva27/AgentSimulator/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/reginaldosilva27/AgentSimulator/releases/tag/v1.0.0

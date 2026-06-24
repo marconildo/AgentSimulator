@@ -57,6 +57,7 @@ relacional e as chamadas de ferramentas são todos reais.
 - [📚 Modo Learn](#-modo-learn)
 - [🎓 O que você vai aprender](#-o-que-você-vai-aprender)
 - [🏗️ Arquitetura](#️-arquitetura)
+- [🌐 Borda de rede — a cadeia real de entrada](#-borda-de-rede--a-cadeia-real-de-entrada)
 - [🚀 Início rápido](#-início-rápido)
 - [🔌 Somente OpenAI](#-somente-openai)
 - [🧱 Stack de tecnologia](#-stack-de-tecnologia)
@@ -394,6 +395,36 @@ longo prazo** do agente. Veja [`docs/architecture.md`](docs/architecture.md) e
 
 ---
 
+## 🌐 Borda de rede — a cadeia real de entrada
+
+<div align="center">
+  <img src="docs/images/networkedge.png" alt="Borda de rede — uma requisição cruzando DNS, CDN, WAF, TLS/balanceador de carga e API gateway antes de chegar ao backend, com os headers encaminhados reais e a evidência de cada appliance" width="900"/>
+</div>
+
+Tráfego de produção nunca chega direto no backend — ele cruza uma cadeia de
+appliances de rede primeiro. O simulador roda essa cadeia como **containers Docker
+reais** (não um desenho), então cada requisição realmente passa por cada hop:
+
+| Hop | Container | O que ele de fato faz aqui |
+|---|---|---|
+| **DNS** | CoreDNS | Resolve o nome do serviço upstream |
+| **CDN / cache** | Varnish | Porta de entrada do navegador (`:8090`); reporta cache **HIT / BYPASS** |
+| **TLS / balanceador** | HAProxy | Termina **TLS 1.3** (o único ponto de descriptografia), balanceia carga |
+| **WAF** | ModSecurity + OWASP CRS | Inspeciona toda requisição; ataques reais levam **403** |
+| **API gateway** | Kong | Roteamento por path + **rate limit real** (uma rajada devolve 429) |
+
+Clique na seta **frontend→backend** (ou em qualquer appliance) para inspecionar a
+evidência real que cada hop adiciona — headers encaminhados, status de cache,
+pool/algoritmo do LB, nível de paranoia + threshold de anomalia do WAF, rota +
+política de rate limit do gateway — e veja um **bloqueio do WAF** acender o caminho
+com um 403 e a explicação da regra que casou.
+
+> **Requer Docker.** A borda de rede só sobe via `docker compose up` (os appliances
+> são containers). No modo dev local (uvicorn + `npm run dev`) o frontend fala com o
+> backend diretamente, sem a cadeia.
+
+---
+
 ## 🚀 Início rápido
 
 ### Opção A — Docker (um comando)
@@ -402,6 +433,10 @@ longo prazo** do agente. Veja [`docs/architecture.md`](docs/architecture.md) e
 OPENAI_API_KEY=sk-... docker compose up --build
 # Frontend: http://localhost:5173   Backend: http://localhost:8000/docs
 ```
+
+Isso também sobe a **[borda de rede](#-borda-de-rede--a-cadeia-real-de-entrada)** real —
+DNS · CDN · WAF · TLS/LB · API gateway como containers — e o frontend fala com o
+backend **através da cadeia** (`:8090`).
 
 ### Opção B — Dev local
 
