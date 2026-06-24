@@ -21,17 +21,18 @@ export function ModelSection() {
   // fall back to the curated list when offline / no key.
   const [liveModels, setLiveModels] = useState<{ id: string }[] | null>(null);
   useEffect(() => {
-    if (agent?.provider === "ollama") return;
+    if (agent?.provider === "ollama" || agent?.provider === "vertexai") return;
     getOpenAIModels()
       .then((r) => setLiveModels(r.reachable ? r.models : null))
       .catch(() => setLiveModels(null));
   }, [agent?.provider]);
 
-  const curated = config?.models ?? [];
+  const isVertexAI = agent?.provider === "vertexai";
+  const curated = isVertexAI ? (config?.vertexai_models ?? []) : (config?.models ?? []);
   const value = agent?.model ?? "";
   // Prefer the live list; else curated. Ensure the current value is always an
   // option so the select reflects the agent's model even if it's not listed.
-  const live = liveModels && liveModels.length > 0;
+  const live = !isVertexAI && liveModels && liveModels.length > 0;
   const models: { id: string; label: string }[] = live
     ? liveModels.map((m) => ({ id: m.id, label: m.id }))
     : curated.map((m) => ({ id: m.id, label: m.label }));

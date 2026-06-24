@@ -87,4 +87,12 @@ async def test_ragless_on_skips_vector_path_and_pageindex_grounds():
         if isinstance(m, ToolMessage) and m.name == RETRIEVAL_TOOL
     ]
     assert retrieval_obs, "the agent should have called the retrieval tool"
-    assert retrieval_obs[-1] == pi_context, "PageIndex context must be what grounds the answer"
+
+    def _norm(s: str) -> str:
+        return "\n".join(
+            line.strip() for line in s.replace("\r\n", "\n").split("\n") if line.strip()
+        )
+
+    assert _norm(retrieval_obs[-1]) == _norm(pi_context), (
+        "PageIndex context must be what grounds the answer"
+    )

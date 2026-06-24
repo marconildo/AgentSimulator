@@ -47,6 +47,8 @@ from .llm.models import (
     models_payload,
     provider_ids,
     providers_payload,
+    vertexai_model_ids,
+    vertexai_models_payload,
 )
 from .mcp.client import get_registry
 from .network import DNS_ORIGIN_HOST, network_available, read_network, resolve_dns
@@ -290,6 +292,9 @@ async def config() -> dict:
         # "Server URL" field with (the live, persisted value comes from
         # GET /api/settings/ollama). Never hardcoded client-side.
         "default_ollama_base_url": settings.ollama_base_url,
+        "vertexai_models": vertexai_models_payload(),
+        "default_vertexai_project": settings.vertexai_project,
+        "default_vertexai_location": settings.vertexai_location,
         # 075-ollama-embeddings: the effective embedding provider + model so the
         # Settings page prefills without hardcoding.
         "embedding_provider": effective_embedding_provider(),
@@ -453,6 +458,179 @@ async def list_openai_models() -> dict:
     return await asyncio.to_thread(_list_openai_chat_models, key)
 
 
+# --- Vertex AI provider (089-vertex-ai-provider) ----------------------------
+
+
+class VertexAISettings(BaseModel):
+    """Body of ``PUT /api/settings/vertexai`` — Vertex AI credentials and configuration."""
+
+    project: str = Field(min_length=1, max_length=200)
+    location: str = Field(min_length=1, max_length=100)
+    credentials: str | None = Field(default=None, max_length=10000)
+    model: str = Field(default="gemini-2.5-flash", min_length=1, max_length=100)
+
+
+def validate_vertexai_connection(
+    project: str, location: str, credentials_json: str, model: str = "gemini-2.5-flash"
+) -> tuple[bool, str | None]:
+    """Test connection to Vertex AI using the given model.
+
+    Tries to instantiate a ChatVertexAI client and run a simple invocation
+    (a simple 1-token prediction check) to verify permissions and settings.
+    The ``model`` argument uses whichever Gemini model the user selected so the
+    test validates that specific model endpoint, not a hardcoded fallback.
+    """
+    try:
+        import json
+
+        from google.oauth2 import service_account
+        from langchain_core.messages import HumanMessage
+        from langchain_google_vertexai import ChatVertexAI
+
+        gcp_creds = None
+        if credentials_json and credentials_json.strip():
+            creds_data = json.loads(credentials_json.strip())
+            gcp_creds = service_account.Credentials.from_service_account_info(creds_data)
+
+        client = ChatVertexAI(
+            model=model,
+            project=project,
+            location=location,
+            credentials=gcp_creds,
+            temperature=0,
+            max_output_tokens=1,
+        )
+
+        # Make a very simple call
+        client.invoke([HumanMessage(content="test")])
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+@app.get("/api/settings/vertexai")
+async def get_vertexai_settings() -> dict:
+    """The persisted Vertex AI credentials and configurations (DB), falling back to settings."""
+    settings = get_settings()
+    store = get_store()
+
+    project = (await store.get_config("vertexai_project")) or settings.vertexai_project
+    location = (await store.get_config("vertexai_location")) or settings.vertexai_location
+    credentials = (await store.get_config("vertexai_credentials")) or settings.vertexai_credentials
+
+    masked = None
+    if credentials:
+        try:
+            import json
+
+            masked = json.loads(credentials.strip()).get("client_email")
+        except Exception:
+            masked = "Credentials are saved."
+
+    return {
+        "project": project,
+        "location": location,
+        "has_credentials": bool(credentials),
+        "masked_credentials": masked,
+    }
+
+
+@app.put("/api/settings/vertexai")
+async def set_vertexai_settings(body: VertexAISettings) -> dict:
+    """Save Vertex AI credentials and configurations, then validate the connection."""
+    settings = get_settings()
+    store = get_store()
+
+    project = body.project.strip()
+    location = body.location.strip()
+
+    if not project or not location:
+        raise HTTPException(status_code=422, detail="project and location cannot be blank")
+
+    # Read existing credentials from DB / settings
+    existing_creds = (
+        await store.get_config("vertexai_credentials")
+    ) or settings.vertexai_credentials
+
+    existing_email = None
+    if existing_creds:
+        try:
+            import json
+
+            existing_email = json.loads(existing_creds.strip()).get("client_email")
+        except Exception:
+            pass
+
+    creds_input = body.credentials
+    use_existing = False
+
+    if creds_input is not None:
+        creds_stripped = creds_input.strip()
+        if not creds_stripped:
+            if existing_creds:
+                use_existing = True
+            else:
+                use_existing = False
+        elif existing_email and creds_stripped == existing_email:
+            use_existing = True
+        elif creds_stripped == "Credentials are saved.":
+            use_existing = True
+        else:
+            try:
+                import json
+
+                creds_data = json.loads(creds_stripped)
+                if not isinstance(creds_data, dict) or "client_email" not in creds_data:
+                    raise ValueError("Missing 'client_email' in Service Account JSON")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=422, detail=f"Invalid Google Service Account Key JSON: {e}"
+                ) from e
+    else:
+        use_existing = True
+
+    if use_existing:
+        if not existing_creds:
+            raise HTTPException(
+                status_code=422,
+                detail="Google Service Account Key JSON is required and cannot be blank",
+            )
+        effective_creds = existing_creds
+    else:
+        if not creds_input or not creds_input.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="Google Service Account Key JSON is required and cannot be blank",
+            )
+        effective_creds = creds_input.strip()
+        await store.set_config("vertexai_credentials", effective_creds)
+
+    await store.set_config("vertexai_project", project)
+    await store.set_config("vertexai_location", location)
+
+    ok, error = await asyncio.to_thread(
+        validate_vertexai_connection, project, location, effective_creds, body.model
+    )
+
+    masked = None
+    if effective_creds:
+        try:
+            import json
+
+            masked = json.loads(effective_creds.strip()).get("client_email")
+        except Exception:
+            masked = "Credentials are saved."
+
+    return {
+        "ok": ok,
+        "error": error,
+        "project": project,
+        "location": location,
+        "has_credentials": bool(effective_creds),
+        "masked_credentials": masked,
+    }
+
+
 # --- Embeddings provider (075-ollama-embeddings) ----------------------------
 
 _EMBEDDING_PROVIDERS = ("openai", "ollama")
@@ -583,6 +761,19 @@ async def chat(req: ChatRequest, request: Request):
         effective_agent_description = agent.get("description")
     resolved_model = effective_model or settings.llm_model
     resolved_provider = effective_provider or "openai"
+
+    # Enforce curated allowlist for Vertex AI models
+    if resolved_provider == "vertexai":
+        if resolved_model not in vertexai_model_ids():
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "model not allowed for provider",
+                    "model": resolved_model,
+                    "allowed": sorted(vertexai_model_ids()),
+                },
+            )
+
     # 078-openai-key-ui: the curated allowlist is no longer a hard gate — OpenAI
     # models are listed live from the account now, so any non-empty model id is
     # accepted (mirrors Ollama, 074). A blank `req.model` was already rejected
@@ -1185,6 +1376,24 @@ async def patch_agent(agent_id: str, body: AgentPatch):
                 "allowed": sorted(provider_ids()),
             },
         )
+
+    # Validate model for vertexai provider
+    provider = patch.get("provider")
+    if provider is None:
+        existing = await get_store().get_agent(agent_id)
+        if existing:
+            provider = existing.get("provider")
+    if provider == "vertexai" and "model" in patch:
+        if patch["model"] not in vertexai_model_ids():
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "model not allowed for provider",
+                    "model": patch["model"],
+                    "allowed": sorted(vertexai_model_ids()),
+                },
+            )
+
     # 078-openai-key-ui: the curated allowlist is no longer a hard gate (models are
     # listed live now). Any non-empty model id is accepted for either provider; a
     # blank one is rejected so a PATCH can't wipe the required column.

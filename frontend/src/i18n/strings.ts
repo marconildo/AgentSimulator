@@ -1061,6 +1061,20 @@ export interface Strings {
       keyConnected: string;
       keyFailed: string;
       keyEnvNote: string;
+      // 089-vertex-ai-provider
+      vertexaiNote: string;
+      projectLabel: string;
+      projectPlaceholder: string;
+      locationLabel: string;
+      locationPlaceholder: string;
+      credentialsLabel: string;
+      credentialsPlaceholder: string;
+      credentialsSavedHint: string;
+      credentialsTooltip: string;
+      vertexaiSave: string;
+      vertexaiTesting: string;
+      vertexaiConnected: string;
+      vertexaiFailed: string;
     };
     model: {
       title: string;
@@ -1970,6 +1984,19 @@ const en: Strings = {
       keyConnected: "Connected — models loaded.",
       keyFailed: "Couldn't authenticate. Check the key.",
       keyEnvNote: "Falls back to the OPENAI_API_KEY env when empty.",
+      vertexaiNote: "Runs against Google Cloud Vertex AI.",
+      projectLabel: "GCP Project ID",
+      projectPlaceholder: "e.g. my-gcp-project",
+      locationLabel: "GCP Location",
+      locationPlaceholder: "e.g. us-central1",
+      credentialsLabel: "Google Service Account Key JSON",
+      credentialsPlaceholder: '{ "type": "service_account", ... }',
+      credentialsSavedHint: "Credentials are saved. Enter new JSON to replace.",
+      credentialsTooltip: "Access console.cloud.google.com\n\nSelect your project from the dropdown menu at the top of the page.\n\nIn the main menu (three lines in the top left corner), go to 'IAM & Admin' and then click 'Service Accounts'.\n\nSelect or create the account:\nIf you already have a service account configured for this agent, click on its email.\nIf not, click on '+ Create Service Account' at the top, give it a name, and in the permissions step, add the 'aiplatform.user' role.\n\nWith the service account open, click on the 'Keys' tab.\nClick 'Add Key' and choose 'Create new key'.\nSelect the JSON key type and click 'Create'.",
+      vertexaiSave: "Save & test",
+      vertexaiTesting: "Testing connection...",
+      vertexaiConnected: "Connected — settings saved.",
+      vertexaiFailed: "Connection test failed. Check settings and credentials.",
     },
     model: {
       title: "Model",
@@ -3186,6 +3213,19 @@ const pt: Strings = {
       keyConnected: "Conectado — modelos carregados.",
       keyFailed: "Não foi possível autenticar. Verifique a chave.",
       keyEnvNote: "Usa a env OPENAI_API_KEY quando vazio.",
+      vertexaiNote: "Roda no Google Cloud Vertex AI.",
+      projectLabel: "ID do Projeto no GCP",
+      projectPlaceholder: "ex: meu-projeto-gcp",
+      locationLabel: "GCP Região/Localização",
+      locationPlaceholder: "ex: us-central1",
+      credentialsLabel: "Chave JSON de Conta de Serviço do Google",
+      credentialsPlaceholder: '{ "type": "service_account", ... }',
+      credentialsSavedHint: "As credenciais estão salvas. Informe um novo JSON para substituir.",
+      credentialsTooltip: "Acesse console.cloud.google.com\n\nSelecione o seu projeto. Selecione-o no menu suspenso no topo da página.\n\nNo menu principal (as três linhas no canto superior esquerdo), vá em 'IAM e Administrador' e depois clique em 'Contas de serviço'.\n\nSelecione ou crie a conta:\nSe você já tem uma conta de serviço configurada para esse agente, clique no e-mail dela.\nSe não tem, clique em '+ Criar Conta de Serviço' no topo, dê um nome a ela e, no passo de permissões, adicione o papel 'aiplatform.user'\n\nCom a conta de serviço aberta, clique na aba 'Chaves'.\nClique em 'Adicionar Chave' e escolha 'Criar nova chave'.\nSelecione o tipo de chave JSON e clique em 'Criar'.",
+      vertexaiSave: "Salvar e testar",
+      vertexaiTesting: "Testando conexão...",
+      vertexaiConnected: "Conectado — configurações salvas.",
+      vertexaiFailed: "Falha no teste de conexão. Verifique as configurações e credenciais.",
     },
     model: {
       title: "Modelo",

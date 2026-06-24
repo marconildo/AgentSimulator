@@ -302,6 +302,9 @@ export interface AppConfig {
   // the "Server URL" field with (the live persisted value comes from
   // GET /api/settings/ollama).
   default_ollama_base_url?: string;
+  vertexai_models?: ModelInfo[];
+  default_vertexai_project?: string;
+  default_vertexai_location?: string;
   // 071-retrieval-metrics: labelled benchmark queries for one-click retrieval scoring.
   benchmark_queries?: { id: string; query: string }[];
   // 072-chunking-strategies: the chunker the live index was last built with + the
@@ -360,6 +363,28 @@ export const getOllamaModels = (baseUrl?: string): Promise<OllamaModelsResult> =
   const q = baseUrl ? `?base_url=${encodeURIComponent(baseUrl)}` : "";
   return api<OllamaModelsResult>(`/api/ollama/models${q}`);
 };
+
+// 089-vertex-ai-provider — Google Vertex AI credentials + settings
+export interface VertexAISettingsResult {
+  project: string;
+  location: string;
+  has_credentials: boolean;
+  masked_credentials: string | null;
+}
+export interface VertexAIPutSettingsResult extends VertexAISettingsResult {
+  ok: boolean;
+  error: string | null;
+}
+
+export const getVertexAISettings = (): Promise<VertexAISettingsResult> =>
+  isDemo()
+    ? Promise.resolve({ project: "demo-project", location: "us-central1", has_credentials: false, masked_credentials: null })
+    : api<VertexAISettingsResult>("/api/settings/vertexai");
+
+export const setVertexAISettings = (project: string, location: string, credentials?: string, model = "gemini-2.5-flash"): Promise<VertexAIPutSettingsResult> =>
+  isDemo()
+    ? Promise.resolve({ ok: true, error: null, project, location, has_credentials: !!credentials, masked_credentials: credentials ? "Credentials are saved." : null })
+    : jsonApi<VertexAIPutSettingsResult>("/api/settings/vertexai", "PUT", { project, location, credentials, model });
 
 // 078-openai-key-ui — OpenAI key (entered in the UI, saved server-side) + live
 // model listing. Reads never expose the full key (masked).

@@ -30,12 +30,13 @@ import asyncio
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from time import time
 from typing import Any
 
-from ..agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from ..config import get_settings
 
 # 043-persisted-agent: the seed default agent's user-visible identity. These
@@ -105,6 +106,8 @@ def _seed_default_agent_sync(conn: sqlite3.Connection) -> bool:
     Shared between the schema's first-run migration, the lifespan startup seed,
     and `_clear_all_sync` (which deletes every agent and then re-seeds).
     """
+    from ..agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
+
     existing = conn.execute("SELECT id FROM agents WHERE is_default = 1 LIMIT 1").fetchone()
     if existing is not None:
         return False
@@ -321,6 +324,16 @@ class ConversationStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Enable WAL journal mode so readers (e.g. the MCP stdio subprocess
+        # calling load_skill) never block on writer transactions in this process.
+        # WAL is a file-level setting; we set it once in a dedicated connection
+        # that is fully closed before any migration connections open, avoiding
+        # the "mode switch requires exclusive lock" clash on Windows.
+        _wal_conn = sqlite3.connect(self.path)
+        try:
+            _wal_conn.execute("PRAGMA journal_mode = WAL")
+        finally:
+            _wal_conn.close()
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
             self._migrate(conn)
@@ -414,12 +427,16 @@ class ConversationStore:
         exactly once per database.
         """
         target = ConversationStore._SCHEMA_VERSION_TOOL_SEMANTICS
-        with sqlite3.connect(path) as conn:
+        conn = sqlite3.connect(path)
+        try:
             current = conn.execute("PRAGMA user_version").fetchone()[0]
             if current >= target:
                 return
             conn.execute("UPDATE agents SET enabled_tools = 'null' WHERE enabled_tools = '[]'")
             conn.execute(f"PRAGMA user_version = {target}")
+            conn.commit()
+        finally:
+            conn.close()
 
     @staticmethod
     def _migrate_to_shared_catalog(conn: sqlite3.Connection) -> None:
@@ -619,7 +636,8 @@ class ConversationStore:
         upgrade path.
         """
         target = ConversationStore._SCHEMA_VERSION_PERSIST_TRACES
-        with sqlite3.connect(path) as conn:
+        conn = sqlite3.connect(path)
+        try:
             current = conn.execute("PRAGMA user_version").fetchone()[0]
             if current >= target:
                 return
@@ -642,6 +660,9 @@ class ConversationStore:
                 """
             )
             conn.execute(f"PRAGMA user_version = {target}")
+            conn.commit()
+        finally:
+            conn.close()
 
     @staticmethod
     def _migrate_to_ollama_provider(path: Path) -> None:
@@ -654,7 +675,8 @@ class ConversationStore:
         subsequent boots are no-ops.
         """
         target = ConversationStore._SCHEMA_VERSION_OLLAMA_PROVIDER
-        with sqlite3.connect(path) as conn:
+        conn = sqlite3.connect(path)
+        try:
             current = conn.execute("PRAGMA user_version").fetchone()[0]
             if current >= target:
                 return
@@ -667,14 +689,22 @@ class ConversationStore:
                 "CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
             )
             conn.execute(f"PRAGMA user_version = {target}")
+            conn.commit()
+        finally:
+            conn.close()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
         # FK constraints are off by default in SQLite; enable per connection so
         # deleting a session cascades to its messages and documents.
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     # --- sessions ------------------------------------------------------------
 

@@ -56,6 +56,16 @@ class MissingAPIKeyError(RuntimeError):
         )
 
 
+class MissingVertexAICredentialsError(RuntimeError):
+    """Raised when Vertex AI provider is used without service account key JSON."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Google Service Account Key JSON is required for Vertex AI provider. "
+            "Please configure and save it in settings first."
+        )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
@@ -84,6 +94,11 @@ class Settings(BaseSettings):
     # from the UI, so it survives restart. The backend (not the browser) connects
     # to this address; in Docker use `host.docker.internal`.
     ollama_base_url: str = "http://localhost:11434"
+
+    # --- Vertex AI (089-vertex-ai-provider) ---
+    vertexai_project: str = ""
+    vertexai_location: str = "global"
+    vertexai_credentials: str = ""
 
     # --- RAG ---
     rag_top_k: int = 4
