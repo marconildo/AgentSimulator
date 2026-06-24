@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **ID** | 094-e2e-build-simple-coverage |
-| **Status** | planned |
+| **Status** | in-progress |
 | **Author** | Reginaldo Silva |
 | **Date** | 2026-06-23 |
 
