@@ -99,6 +99,18 @@ services:
       BACKEND: "http://kong:8000"
       MODSEC_RULE_ENGINE: "On"
       PARANOIA: "1"
+      # CRS rule 911100 enforces tx.allowed_methods, which defaults to
+      # "GET HEAD POST OPTIONS" — so PATCH/PUT/DELETE get a 403 from the WAF.
+      # This is a REST API (agent rename = PATCH, settings save = PUT,
+      # agent delete = DELETE), so the WAF must allow those verbs too.
+      ALLOWED_METHODS: "GET HEAD POST OPTIONS PUT PATCH DELETE"
+    volumes:
+      # Narrow CRS exclusion for /api/settings/* — those endpoints legitimately
+      # carry opaque secret blobs (service-account JSON private key, API keys)
+      # that false-positive the LFI rule family (e.g. the "credentials" field
+      # name matches 930120). Loaded via the plugins *-after.conf include; see
+      # the file header for the full rationale. Real attacks stay blocked.
+      - ./infra/modsecurity/agentsim-settings-exclusion-after.conf:/opt/owasp-crs/plugins/zzz-agentsim-settings-exclusion-after.conf:ro
     depends_on:
       - kong
 
