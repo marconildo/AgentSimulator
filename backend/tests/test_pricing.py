@@ -29,3 +29,17 @@ def test_usage_metrics_shape():
     # 1000/1e6*0.15 + 500/1e6*0.60 = 0.00015 + 0.0003 = 0.00045
     assert abs(m["cost_usd"] - 0.00045) < 1e-9
     assert all(isinstance(v, float) for v in m.values())
+
+
+def test_vertexai_gemini_models_have_prices():
+    """094-vertex-ai — Gemini model ids resolve to non-zero prices."""
+    for model in (
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-3-flash-preview",
+        "gemini-3.5-flash",
+        "gemini-3.1-pro-preview",
+    ):
+        assert cost_usd(model, 1_000_000, 0) > 0, f"{model} input should be priced"
+        assert cost_usd(model, 0, 1_000_000) > 0, f"{model} output should be priced"

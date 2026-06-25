@@ -29,6 +29,12 @@ vi.mock("../lib/chatApi", () => ({
   getEmbeddingSettings: vi.fn().mockResolvedValue({ provider: "openai", model: "" }),
   setEmbeddingSettings: vi.fn().mockResolvedValue({ provider: "openai", model: "" }),
   getOllamaModels: vi.fn().mockResolvedValue({ reachable: false, base_url: "", models: [] }),
+  getVertexAISettings: vi.fn().mockResolvedValue({
+    project: "test-project",
+    location: "us-central1",
+    has_credentials: true,
+    masked_credentials: null,
+  }),
   reindexCorpus: vi.fn().mockResolvedValue({ chunk_count: 0 }),
   chunkPreview: vi.fn().mockResolvedValue({ sample_chars: 0, previews: [] }),
   getConfig: vi.fn().mockResolvedValue({
@@ -41,6 +47,9 @@ vi.mock("../lib/chatApi", () => ({
     tools: [],
     scenarios: [],
     failure_modes: ["none"],
+    vertexai_embedding_models: [
+      { id: "gemini-embedding-2", label: "gemini-embedding-2", description: "latest" },
+    ],
   }),
 }));
 

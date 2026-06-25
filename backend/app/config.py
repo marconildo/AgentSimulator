@@ -209,6 +209,17 @@ def _db_config(key: str) -> str:
         return ""
 
 
+async def _db_config_async(key: str) -> str:
+    """Read an `app_config` value asynchronously (lazy store import; swallow DB errors)."""
+    try:
+        from .db.store import get_store
+
+        val = await get_store().get_config(key)
+        return (val or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def effective_openai_key() -> str:
     return _db_config(OPENAI_KEY_CONFIG_KEY) or get_settings().openai_api_key.strip()
 
@@ -229,8 +240,18 @@ def effective_embedding_provider() -> str:
     return _db_config(EMBEDDING_PROVIDER_CONFIG_KEY) or get_settings().embedding_provider
 
 
+async def effective_embedding_provider_async() -> str:
+    return (
+        await _db_config_async(EMBEDDING_PROVIDER_CONFIG_KEY) or get_settings().embedding_provider
+    )
+
+
 def effective_embedding_model() -> str:
     return _db_config(EMBEDDING_MODEL_CONFIG_KEY) or get_settings().embedding_model
+
+
+async def effective_embedding_model_async() -> str:
+    return await _db_config_async(EMBEDDING_MODEL_CONFIG_KEY) or get_settings().embedding_model
 
 
 def effective_ollama_base_url() -> str:
@@ -244,3 +265,24 @@ def embedding_signature() -> str:
     for. Stored at build time + compared on boot so a provider/model change forces a
     rebuild even when the vector dimensions happen to coincide (075)."""
     return f"{effective_embedding_provider()}:{effective_embedding_model()}"
+
+
+# --- 094-vertex-ai-embeddings: effective Vertex AI config (DB precedes env) --
+
+VERTEXAI_PROJECT_CONFIG_KEY = "vertexai_project"
+VERTEXAI_LOCATION_CONFIG_KEY = "vertexai_location"
+VERTEXAI_CREDENTIALS_CONFIG_KEY = "vertexai_credentials"
+
+
+def effective_vertexai_project() -> str:
+    return _db_config(VERTEXAI_PROJECT_CONFIG_KEY) or get_settings().vertexai_project.strip()
+
+
+def effective_vertexai_location() -> str:
+    return _db_config(VERTEXAI_LOCATION_CONFIG_KEY) or get_settings().vertexai_location.strip()
+
+
+def effective_vertexai_credentials() -> str:
+    return (
+        _db_config(VERTEXAI_CREDENTIALS_CONFIG_KEY) or get_settings().vertexai_credentials.strip()
+    )

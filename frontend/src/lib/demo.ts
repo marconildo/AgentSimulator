@@ -235,6 +235,8 @@ export function demoHealth() {
     status: "ok" as const,
     llmProvider: "openai",
     llmModel: DEMO_CONFIG.default_model,
+    embeddingProvider: "openai",
+    embeddingModel: "text-embedding-3-small",
     hasKey: true,
   };
 }

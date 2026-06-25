@@ -10,11 +10,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const setEmbeddingSettings = vi.fn();
 const getEmbeddingSettings = vi.fn();
 const getOllamaModels = vi.fn();
+const getVertexAISettings = vi.fn();
+const getConfig = vi.fn();
 
 vi.mock("../lib/chatApi", () => ({
   getEmbeddingSettings: (...a: unknown[]) => getEmbeddingSettings(...a),
   setEmbeddingSettings: (...a: unknown[]) => setEmbeddingSettings(...a),
   getOllamaModels: (...a: unknown[]) => getOllamaModels(...a),
+  getVertexAISettings: (...a: unknown[]) => getVertexAISettings(...a),
+  getConfig: (...a: unknown[]) => getConfig(...a),
 }));
 
 import { SettingsEmbeddings } from "./SettingsEmbeddings";
@@ -31,6 +35,17 @@ beforeEach(() => {
   getOllamaModels
     .mockReset()
     .mockResolvedValue({ reachable: true, base_url: "", models: [{ id: "nomic-embed-text" }] });
+  getVertexAISettings.mockReset().mockResolvedValue({
+    project: "test-project",
+    location: "us-central1",
+    has_credentials: true,
+    masked_credentials: null,
+  });
+  getConfig.mockReset().mockResolvedValue({
+    vertexai_embedding_models: [
+      { id: "gemini-embedding-2", label: "gemini-embedding-2", description: "latest" },
+    ],
+  });
 });
 
 afterEach(() => {
@@ -63,5 +78,49 @@ describe("SettingsEmbeddings (075)", () => {
     getOllamaModels.mockResolvedValue({ reachable: false, base_url: "", models: [] });
     render(<SettingsEmbeddings />);
     expect(await screen.findByTestId("settings-embedding-hint")).toBeTruthy();
+  });
+
+  it("selecting Vertex AI persists the provider and shows curated models dropdown", async () => {
+    render(<SettingsEmbeddings />);
+    const vertexai = await screen.findByTestId("settings-embedding-provider-vertexai");
+    await act(async () => {
+      fireEvent.click(vertexai);
+    });
+    expect(setEmbeddingSettings).toHaveBeenCalledWith({ provider: "vertexai" });
+  });
+
+  it("lists curated Vertex AI embedding models when selected", async () => {
+    getEmbeddingSettings.mockResolvedValue({ provider: "vertexai", model: "gemini-embedding-2" });
+    render(<SettingsEmbeddings />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-embedding-model").tagName).toBe("SELECT"),
+    );
+    const select = screen.getByTestId("settings-embedding-model") as HTMLSelectElement;
+    expect(select.options.length).toBe(1);
+    expect(select.options[0].value).toBe("gemini-embedding-2");
+  });
+
+  it("shows the missing-credentials hint when has_credentials is false", async () => {
+    getEmbeddingSettings.mockResolvedValue({ provider: "vertexai", model: "gemini-embedding-2" });
+    getVertexAISettings.mockResolvedValue({
+      project: "",
+      location: "",
+      has_credentials: false,
+      masked_credentials: null,
+    });
+    render(<SettingsEmbeddings />);
+    expect(await screen.findByTestId("settings-embedding-hint")).toBeTruthy();
+  });
+
+  it("selecting OpenAI clears the model and persists both provider and empty model", async () => {
+    getEmbeddingSettings.mockResolvedValue({ provider: "ollama", model: "nomic-embed-text" });
+    render(<SettingsEmbeddings />);
+
+    const openai = await screen.findByTestId("settings-embedding-provider-openai");
+    await act(async () => {
+      fireEvent.click(openai);
+    });
+    expect(setEmbeddingSettings).toHaveBeenCalledWith({ provider: "openai", model: "" });
   });
 });

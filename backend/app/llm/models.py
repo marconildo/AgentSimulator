@@ -112,6 +112,15 @@ CURATED_VERTEXAI_MODELS: tuple[CuratedModel, ...] = (
 )
 
 
+CURATED_VERTEXAI_EMBEDDING_MODELS: tuple[CuratedModel, ...] = (
+    CuratedModel(
+        id="gemini-embedding-2",
+        label="gemini-embedding-2",
+        description="Vertex AI - Latest text embedding model (1536 dimensions).",
+    ),
+)
+
+
 @dataclass(frozen=True)
 class Provider:
     """One LLM provider the Agent Anatomy dialog can advertise.
@@ -175,3 +184,13 @@ def vertexai_models_payload() -> list[dict[str, str]]:
 def providers_payload() -> list[dict[str, str | bool]]:
     """JSON-shape the FE renders directly from ``/api/config.providers``."""
     return [p.to_dict() for p in PROVIDERS]
+
+
+def vertexai_embedding_model_ids() -> set[str]:
+    """The set of Vertex AI embedding model ids allowed."""
+    return {m.id for m in CURATED_VERTEXAI_EMBEDDING_MODELS}
+
+
+def vertexai_embedding_models_payload() -> list[dict[str, str]]:
+    """JSON-shape the FE renders for Vertex AI embedding models."""
+    return [m.to_dict() for m in CURATED_VERTEXAI_EMBEDDING_MODELS]

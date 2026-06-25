@@ -18,6 +18,8 @@ def test_health_reports_live_model_and_no_demo():
         assert "demo_mode" not in body
         assert body["llm_provider"] == "openai"
         assert body["llm_model"]
+        assert body["embedding_provider"]
+        assert body["embedding_model"]
 
 
 def test_config_endpoint_exposes_experiment_defaults():

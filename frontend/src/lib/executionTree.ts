@@ -107,6 +107,23 @@ function num(v: unknown): number | undefined {
 }
 
 /** The model name carried on any END event in the occurrence (agent.think). */
+function providerOf(events: TraceEvent[]): string | undefined {
+  for (const e of events) {
+    const request = e.data?.request as Record<string, unknown> | undefined;
+    const p = request?.provider;
+    if (typeof p === "string" && p) return p;
+  }
+  // Fallback: infer from model name
+  for (const e of events) {
+    const m = e.data?.model;
+    if (typeof m === "string" && m) {
+      if (m.startsWith("gemini-")) return "vertexai";
+      if (m.includes("gpt")) return "openai";
+    }
+  }
+  return undefined;
+}
+
 function modelOf(events: TraceEvent[]): string | undefined {
   for (const e of events) {
     const m = e.data?.model;
@@ -126,13 +143,20 @@ function sumMetric(events: TraceEvent[], key: string): number {
 }
 
 /** Derive the child rows of one occurrence, by node kind. */
-function childrenFor(occ: Occurrence, runStart: number): SpanChild[] {
+function childrenFor(occ: Occurrence, runStart: number, provider?: string): SpanChild[] {
   const children: SpanChild[] = [];
   const open = new Map<Stage, TraceEvent>(); // last START seen per stage
   const model = modelOf(occ.events);
   // The model call's figures are the node's figures (LangSmith shows them on both).
   const tokens = sumMetric(occ.events, "total_tokens") || undefined;
   const costUsd = sumMetric(occ.events, "cost_usd") || undefined;
+
+  let llmLabel = "ChatOpenAI";
+  if (provider === "vertexai") {
+    llmLabel = "ChatVertexAI";
+  } else if (provider === "ollama") {
+    llmLabel = "ChatOllama";
+  }
 
   for (const e of occ.events) {
     if (e.phase === "start") {
@@ -150,7 +174,7 @@ function childrenFor(occ: Occurrence, runStart: number): SpanChild[] {
       (occ.node === "think" || occ.node === "generate") &&
       (e.stage === "llm.prompt" || e.stage === "llm.generate")
     ) {
-      children.push({ label: "ChatOpenAI", model, offsetMs, durationMs, tokens, costUsd });
+      children.push({ label: llmLabel, model, offsetMs, durationMs, tokens, costUsd });
     } else if (occ.node === "tools" && e.stage === "mcp.call") {
       const tool = typeof e.data?.tool === "string" ? e.data.tool : "tool";
       children.push({ label: tool, offsetMs, durationMs });
@@ -208,6 +232,7 @@ export function executionTree(events: TraceEvent[]): ExecutionTree {
   const runStart = toMs(events[0].ts);
   const runEnd = toMs(events[events.length - 1].ts);
   const totalMs = Math.max(0, runEnd - runStart);
+  const provider = providerOf(events);
 
   const spans: TraceSpan[] = [];
   let cur: Occurrence | null = null;
@@ -223,7 +248,7 @@ export function executionTree(events: TraceEvent[]): ExecutionTree {
       durationMs: occ.lastTs - occ.firstTs,
       tokens: sumMetric(occ.events, "total_tokens") || undefined,
       costUsd: sumMetric(occ.events, "cost_usd") || undefined,
-      children: isDelegate ? delegateChildren(occ, runStart) : childrenFor(occ, runStart),
+      children: isDelegate ? delegateChildren(occ, runStart) : childrenFor(occ, runStart, provider),
     };
     if (isDelegate) span.detail = firstStr(occ, "subagent");
     else if (occ.node === "fs-write" || occ.node === "fs-read") span.detail = firstStr(occ, "path");

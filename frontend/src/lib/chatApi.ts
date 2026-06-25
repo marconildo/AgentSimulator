@@ -303,6 +303,7 @@ export interface AppConfig {
   // GET /api/settings/ollama).
   default_ollama_base_url?: string;
   vertexai_models?: ModelInfo[];
+  vertexai_embedding_models?: ModelInfo[];
   default_vertexai_project?: string;
   default_vertexai_location?: string;
   // 071-retrieval-metrics: labelled benchmark queries for one-click retrieval scoring.
@@ -426,7 +427,7 @@ export const getOpenAIModels = (): Promise<OpenAIModelsResult> =>
 // 075-ollama-embeddings — the instance-wide embedding provider + model. Embeddings
 // are NOT per-agent (one Chroma collection = one vector dimension).
 export interface EmbeddingSettings {
-  provider: string; // "openai" | "ollama"
+  provider: string; // "openai" | "ollama" | "vertexai"
   model: string;
   providers?: string[];
 }

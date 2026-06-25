@@ -11,13 +11,22 @@ from __future__ import annotations
 
 from .provider import TokenUsage
 
-# USD per 1,000,000 tokens: (input, output). Public list prices (2025).
+# USD per 1,000,000 tokens: (input, output). Public list prices (2025-2026).
+# A **labelled teaching approximation** — see module docstring.
 MODEL_PRICES: dict[str, tuple[float, float]] = {
+    # --- OpenAI ---
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
     "gpt-4.1": (2.00, 8.00),
     "gpt-4.1-mini": (0.40, 1.60),
     "gpt-4.1-nano": (0.10, 0.40),
+    # --- Vertex AI / Gemini ---
+    "gemini-2.5-flash-lite": (0.10, 0.40),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-3-flash-preview": (0.50, 3.00),
+    "gemini-3.5-flash": (1.50, 9.00),
+    "gemini-3.1-pro-preview": (2.00, 12.00),
 }
 
 

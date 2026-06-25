@@ -342,6 +342,8 @@ export interface Strings {
       provider: string;
       openai: string;
       ollama: string;
+      vertexai: string;
+      vertexaiHint: string;
       model: string;
       modelPlaceholder: string;
       rebuildNote: string;
@@ -1420,6 +1422,8 @@ const en: Strings = {
       provider: "Provider",
       openai: "OpenAI — cloud, needs an OpenAI key.",
       ollama: "Ollama (local) — deploy your own embedding model (e.g. nomic-embed-text).",
+      vertexai: "Vertex AI — Google Cloud native embeddings (e.g. gemini-embedding-2).",
+      vertexaiHint: "Google Service Account credentials are not configured. Go to the Agent Anatomy dialog on any Agent node to save them first.",
       model: "Embedding model",
       modelPlaceholder: "nomic-embed-text",
       rebuildNote: "Changing the embedding model rebuilds the whole index (next startup or re-ingest).",
@@ -2645,6 +2649,8 @@ const pt: Strings = {
       provider: "Provedor",
       openai: "OpenAI — nuvem, requer uma chave OpenAI.",
       ollama: "Ollama (local) — implante seu próprio modelo de embedding (ex.: nomic-embed-text).",
+      vertexai: "Vertex AI — embeddings nativos do Google Cloud (ex.: gemini-embedding-2).",
+      vertexaiHint: "As credenciais do Google Service Account não estão configuradas. Acesse o diálogo Configurar agente em qualquer nó Agent para salvá-las primeiro.",
       model: "Modelo de embedding",
       modelPlaceholder: "nomic-embed-text",
       rebuildNote: "Trocar o modelo de embedding reconstrói todo o índice (no próximo start ou reindexação).",

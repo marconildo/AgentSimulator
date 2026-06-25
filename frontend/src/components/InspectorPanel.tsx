@@ -10,6 +10,7 @@ import { deriveHopData, type EdgeChainSeg } from "../lib/hopDetail";
 import { useActiveModel } from "../lib/activeModel";
 import { useResolvedSelection } from "../lib/selection";
 import { useSettings } from "../lib/settings";
+import { useHealth } from "../lib/health";
 import {
   hopsFor,
   stationByIdFor,
@@ -178,6 +179,7 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
   // 074 follow-up: track the SELECTED agent's model+provider (e.g. an Ollama
   // model), not the server default — falls back to the health default.
   const { model: activeModel } = useActiveModel();
+  const activeEmbeddingModel = useHealth((s) => s.embeddingModel);
   const comms = useT().comms;
   const tier = tierByIdFor(lang)[meta.tier];
   const stationById = stationByIdFor(lang);
@@ -187,9 +189,11 @@ function TechSection({ meta, lang, i }: { meta: StationMeta; lang: Lang; i: I })
   return (
     <Section title={i.techInfra}>
       {meta.id === "llm" && <KeyVal k={i.model} v={activeModel ?? "—"} />}
-      {meta.tech.map((row) => (
-        <KeyVal key={row.k} k={row.k} v={row.v} />
-      ))}
+      {meta.tech.map((row) => {
+        const isEmbeddings = row.k === "embeddings";
+        const val = isEmbeddings && activeEmbeddingModel ? activeEmbeddingModel : row.v;
+        return <KeyVal key={row.k} k={row.k} v={val} />;
+      })}
       <div className="my-2 h-px bg-[var(--color-line)]" />
       <KeyVal k={i.tier} v={`${tier.title} · ${tier.alias}`} />
       <KeyVal k={i.role} v={meta.generic} />
