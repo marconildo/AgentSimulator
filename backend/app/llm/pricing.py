@@ -1,10 +1,10 @@
 """011-token-cost — model pricing.
 
-A small, explicit table of OpenAI list prices (US$ per 1M tokens, input/output).
-It is a **labelled teaching approximation**, not a billing source of truth — list
-prices drift, so the goal is to make the *shape* of cost visible (rounds × tokens
-× rate), not to be invoice-accurate. An unlisted model prices at 0 rather than
-guessing.
+A small, explicit table of provider list prices (US$ per 1M tokens, input/output)
+for OpenAI and Google Vertex AI (Gemini) models. It is a **labelled teaching
+approximation**, not a billing source of truth — list prices drift, so the goal is
+to make the *shape* of cost visible (rounds × tokens × rate), not to be
+invoice-accurate. An unlisted model prices at 0 rather than guessing.
 """
 
 from __future__ import annotations

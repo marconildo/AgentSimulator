@@ -18,7 +18,11 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+  // `list` prints each test + its named steps; `summary-reporter` adds one closing
+  // tally block (spec 094, AC2); `html` is the on-failure artifact in CI.
+  reporter: process.env.CI
+    ? [["list"], ["./e2e/summary-reporter.ts"], ["html", { open: "never" }]]
+    : [["list"], ["./e2e/summary-reporter.ts"]],
   // A whole user journey (send → real agent answer renders) can run ~90s.
   timeout: 120_000,
   expect: { timeout: 75_000 },
