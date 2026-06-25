@@ -30,7 +30,7 @@ def get_embeddings() -> Embeddings:
 
         return OllamaEmbeddings(model=model, base_url=effective_ollama_base_url())
 
-    # 094-vertex-ai-embeddings: Google Vertex AI embeddings — no OpenAI key required.
+    # 095-vertex-ai-embeddings: Google Vertex AI embeddings — no OpenAI key required.
     if provider == "vertexai":
         import json
 

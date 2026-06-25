@@ -1,4 +1,4 @@
-# Tasks: 094-vertex-ai-embeddings
+# Tasks: 095-vertex-ai-embeddings
 
 > **Spec**: [spec.md](spec.md) · **Plan**: [plan.md](plan.md)
 

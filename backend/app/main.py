@@ -706,7 +706,7 @@ async def set_embedding_settings(body: EmbeddingSettings) -> dict:
     if body.model is not None:
         await get_store().set_config("embedding_model", body.model.strip())
 
-    # 094-vertex-ai-embeddings: validate or default Vertex AI embedding model
+    # 095-vertex-ai-embeddings: validate or default Vertex AI embedding model
     provider = await effective_embedding_provider_async()
     model = await effective_embedding_model_async()
 

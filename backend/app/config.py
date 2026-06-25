@@ -267,7 +267,7 @@ def embedding_signature() -> str:
     return f"{effective_embedding_provider()}:{effective_embedding_model()}"
 
 
-# --- 094-vertex-ai-embeddings: effective Vertex AI config (DB precedes env) --
+# --- 095-vertex-ai-embeddings: effective Vertex AI config (DB precedes env) --
 
 VERTEXAI_PROJECT_CONFIG_KEY = "vertexai_project"
 VERTEXAI_LOCATION_CONFIG_KEY = "vertexai_location"

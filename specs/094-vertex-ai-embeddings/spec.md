@@ -2,7 +2,7 @@
 
 |            |                             |
 | ---------- | --------------------------- |
-| **ID**     | 094-vertex-ai-embeddings    |
+| **ID**     | 095-vertex-ai-embeddings    |
 | **Status** | done                        |
 | **Author** | Elizeu Reis                 |
 | **Date**   | 2026-06-24                  |

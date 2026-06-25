@@ -1,4 +1,4 @@
-"""094-vertex-ai-embeddings — embeddings may run on Google Vertex AI (DB-first,
+"""095-vertex-ai-embeddings — embeddings may run on Google Vertex AI (DB-first,
 env fallback) so RAG works with no OpenAI key.
 
 Keyless: env key forced empty, DB values driven directly. No real Vertex AI/OpenAI

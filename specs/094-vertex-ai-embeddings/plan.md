@@ -1,6 +1,6 @@
 # Plan: Vertex AI embeddings (GCP-native RAG)
 
-> **Spec**: [094-vertex-ai-embeddings](spec.md)
+> **Spec**: [095-vertex-ai-embeddings](spec.md)
 
 ## Approach
 
