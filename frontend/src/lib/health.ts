@@ -15,6 +15,8 @@ interface HealthState {
   status: HealthStatus;
   llmProvider: string | null;
   llmModel: string | null;
+  embeddingProvider: string | null;
+  embeddingModel: string | null;
   hasKey: boolean | null;
   load: () => Promise<void>;
 }
@@ -23,6 +25,8 @@ export const useHealth = create<HealthState>((set) => ({
   status: "loading",
   llmProvider: null,
   llmModel: null,
+  embeddingProvider: null,
+  embeddingModel: null,
   hasKey: null,
   load: async () => {
     // 058-online-demo-mode: a backend-less build reports a healthy keyed model so
@@ -39,10 +43,19 @@ export const useHealth = create<HealthState>((set) => ({
         status: "ok",
         llmProvider: h.llm_provider ?? null,
         llmModel: h.llm_model ?? null,
+        embeddingProvider: h.embedding_provider ?? null,
+        embeddingModel: h.embedding_model ?? null,
         hasKey: typeof h.has_key === "boolean" ? h.has_key : null,
       });
     } catch {
-      set({ status: "down", llmProvider: null, llmModel: null, hasKey: null });
+      set({
+        status: "down",
+        llmProvider: null,
+        llmModel: null,
+        embeddingProvider: null,
+        embeddingModel: null,
+        hasKey: null,
+      });
     }
   },
 }));

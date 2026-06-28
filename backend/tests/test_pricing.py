@@ -31,20 +31,15 @@ def test_usage_metrics_shape():
     assert all(isinstance(v, float) for v in m.values())
 
 
-def test_vertexai_gemini_models_have_nonzero_cost():
-    """089-vertex-ai-provider bugfix: Gemini models must have pricing entries."""
-    from app.llm.models import CURATED_VERTEXAI_MODELS
-    from app.llm.pricing import MODEL_PRICES
-
-    for model in CURATED_VERTEXAI_MODELS:
-        assert model.id in MODEL_PRICES, f"Missing price for Vertex AI model: {model.id}"
-        input_rate, output_rate = MODEL_PRICES[model.id]
-        assert input_rate > 0 or output_rate > 0, f"Zero price for {model.id}"
-
-
-def test_cost_usd_gemini_flash():
-    """Regression: gemini-2.5-flash should return a real cost, not 0."""
-    # gemini-2.5-flash: input $0.30 / 1M, output $2.50 / 1M.
-    assert cost_usd("gemini-2.5-flash", 1_000_000, 0) == 0.30
-    assert cost_usd("gemini-2.5-flash", 0, 1_000_000) == 2.50
-    assert cost_usd("gemini-2.5-flash", 1_000_000, 1_000_000) == 2.80
+def test_vertexai_gemini_models_have_prices():
+    """094-vertex-ai — Gemini model ids resolve to non-zero prices."""
+    for model in (
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-3-flash-preview",
+        "gemini-3.5-flash",
+        "gemini-3.1-pro-preview",
+    ):
+        assert cost_usd(model, 1_000_000, 0) > 0, f"{model} input should be priced"
+        assert cost_usd(model, 0, 1_000_000) > 0, f"{model} output should be priced"

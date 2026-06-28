@@ -26,8 +26,8 @@ from .agent import run_agent
 from .agent.prompts import AGENT_PROMPT, GUARDRAILS_PROMPT
 from .agent.tools import agent_tool_specs
 from .config import (
-    effective_embedding_model,
-    effective_embedding_provider,
+    effective_embedding_model_async,
+    effective_embedding_provider_async,
     effective_openai_key,
     get_settings,
     has_effective_openai_key,
@@ -47,6 +47,8 @@ from .llm.models import (
     models_payload,
     provider_ids,
     providers_payload,
+    vertexai_embedding_model_ids,
+    vertexai_embedding_models_payload,
     vertexai_model_ids,
     vertexai_models_payload,
 )
@@ -174,13 +176,28 @@ async def health() -> dict:
     # without a key (constructing the provider would fail fast). `has_key` lets
     # the frontend surface a clear "OpenAI key required" state.
     settings = get_settings()
+
+    provider = "openai"
+    model = settings.llm_model
+    try:
+        from .db.store import DEFAULT_AGENT_ID, get_store
+
+        agent = await get_store().get_agent(DEFAULT_AGENT_ID)
+        if agent:
+            provider = agent.get("provider", "openai")
+            model = agent.get("model", settings.llm_model)
+    except Exception:
+        pass
+
     return {
         "status": "ok",
-        "llm_provider": "openai",
-        "llm_model": settings.llm_model,
+        "llm_provider": provider,
+        "llm_model": model,
         # 078-openai-key-ui: reflect the EFFECTIVE key (UI/DB precedes env).
         "has_key": has_effective_openai_key(),
         "indexed": is_indexed(),
+        "embedding_provider": await effective_embedding_provider_async(),
+        "embedding_model": await effective_embedding_model_async(),
     }
 
 
@@ -293,12 +310,13 @@ async def config() -> dict:
         # GET /api/settings/ollama). Never hardcoded client-side.
         "default_ollama_base_url": settings.ollama_base_url,
         "vertexai_models": vertexai_models_payload(),
+        "vertexai_embedding_models": vertexai_embedding_models_payload(),
         "default_vertexai_project": settings.vertexai_project,
         "default_vertexai_location": settings.vertexai_location,
         # 075-ollama-embeddings: the effective embedding provider + model so the
         # Settings page prefills without hardcoding.
-        "embedding_provider": effective_embedding_provider(),
-        "embedding_model": effective_embedding_model(),
+        "embedding_provider": await effective_embedding_provider_async(),
+        "embedding_model": await effective_embedding_model_async(),
         # 088-network-layer: whether the real ingress chain (DNS · CDN · WAF · TLS/LB
         # · API-GW) is present (the Docker network stack is up). The Build "Network"
         # component is enabled only when True — a bare `uvicorn` run reports False
@@ -483,14 +501,18 @@ def validate_vertexai_connection(
     try:
         import json
 
-        from google.oauth2 import service_account
         from langchain_core.messages import HumanMessage
         from langchain_google_vertexai import ChatVertexAI
 
         gcp_creds = None
         if credentials_json and credentials_json.strip():
+            import google.auth
+
             creds_data = json.loads(credentials_json.strip())
-            gcp_creds = service_account.Credentials.from_service_account_info(creds_data)
+            gcp_creds, _ = google.auth.load_credentials_from_dict(
+                creds_data,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
 
         client = ChatVertexAI(
             model=model,
@@ -633,7 +655,7 @@ async def set_vertexai_settings(body: VertexAISettings) -> dict:
 
 # --- Embeddings provider (075-ollama-embeddings) ----------------------------
 
-_EMBEDDING_PROVIDERS = ("openai", "ollama")
+_EMBEDDING_PROVIDERS = ("openai", "ollama", "vertexai")
 
 
 class EmbeddingSettings(BaseModel):
@@ -647,9 +669,18 @@ class EmbeddingSettings(BaseModel):
 @app.get("/api/settings/embeddings")
 async def get_embedding_settings() -> dict:
     """The effective embedding provider + model (DB precedes env)."""
+    provider = await effective_embedding_provider_async()
+    db_model = await get_store().get_config("embedding_model")
+    if provider == "openai":
+        model_val = db_model if db_model is not None else ""
+    elif provider == "vertexai":
+        model_val = db_model or "gemini-embedding-2"
+    else:
+        model_val = db_model or ""
+
     return {
-        "provider": effective_embedding_provider(),
-        "model": effective_embedding_model(),
+        "provider": provider,
+        "model": model_val,
         "providers": list(_EMBEDDING_PROVIDERS),
     }
 
@@ -672,11 +703,39 @@ async def set_embedding_settings(body: EmbeddingSettings) -> dict:
                 },
             )
         await get_store().set_config("embedding_provider", body.provider)
-    if body.model is not None and body.model.strip():
+    if body.model is not None:
         await get_store().set_config("embedding_model", body.model.strip())
+
+    # 095-vertex-ai-embeddings: validate or default Vertex AI embedding model
+    provider = await effective_embedding_provider_async()
+    model = await effective_embedding_model_async()
+
+    if provider == "vertexai":
+        if model not in vertexai_embedding_model_ids():
+            if body.model is not None and body.model.strip() == model:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "model not allowed for provider",
+                        "model": model,
+                        "allowed": sorted(vertexai_embedding_model_ids()),
+                    },
+                )
+            else:
+                model = "gemini-embedding-2"
+                await get_store().set_config("embedding_model", model)
+
+    db_model = await get_store().get_config("embedding_model")
+    if provider == "openai":
+        model_val = db_model if db_model is not None else ""
+    elif provider == "vertexai":
+        model_val = db_model or "gemini-embedding-2"
+    else:
+        model_val = db_model or ""
+
     return {
-        "provider": effective_embedding_provider(),
-        "model": effective_embedding_model(),
+        "provider": provider,
+        "model": model_val,
     }
 
 

@@ -37,14 +37,18 @@ class VertexAIProvider(LLMProvider):
         # Lazy imports so we don't import GCP/Google libs unless needed at runtime.
         import json
 
-        from google.oauth2 import service_account
         from langchain_google_vertexai import ChatVertexAI
 
         gcp_creds = None
         if self._credentials and self._credentials.strip():
             try:
+                import google.auth
+
                 creds_data = json.loads(self._credentials.strip())
-                gcp_creds = service_account.Credentials.from_service_account_info(creds_data)
+                gcp_creds, _ = google.auth.load_credentials_from_dict(
+                    creds_data,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
             except Exception:
                 # If credentials are not valid JSON, let it fall back or try to raise later
                 pass

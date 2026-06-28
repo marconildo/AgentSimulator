@@ -397,3 +397,50 @@ describe("executionTree — DeepAgents steps as own spans (062)", () => {
     }
   });
 });
+
+describe("executionTree — provider label mapping", () => {
+  it("uses ChatVertexAI when the request provider is vertexai", () => {
+    const events = linearRun();
+    events[0].data = {
+      request: {
+        provider: "vertexai",
+        model: "gemini-3.5-flash",
+      },
+    };
+    const { spans } = executionTree(events);
+    const think = spans.find((s) => s.node === "think")!;
+    expect(think.children[0].label).toBe("ChatVertexAI");
+    const generate = spans.find((s) => s.node === "generate")!;
+    expect(generate.children[0].label).toBe("ChatVertexAI");
+  });
+
+  it("uses ChatOllama when the request provider is ollama", () => {
+    const events = linearRun();
+    events[0].data = {
+      request: {
+        provider: "ollama",
+        model: "llama3",
+      },
+    };
+    const { spans } = executionTree(events);
+    const think = spans.find((s) => s.node === "think")!;
+    expect(think.children[0].label).toBe("ChatOllama");
+  });
+
+  it("falls back to infer from model name (starts with gemini-)", () => {
+    const events = linearRun();
+    events[0].data = {};
+    const thinkEnd = events.find((e) => e.stage === "agent.think" && e.phase === "end")!;
+    thinkEnd.data = { model: "gemini-2.5-flash" };
+    const { spans } = executionTree(events);
+    const think = spans.find((s) => s.node === "think")!;
+    expect(think.children[0].label).toBe("ChatVertexAI");
+  });
+
+  it("defaults to ChatOpenAI", () => {
+    const events = linearRun();
+    const { spans } = executionTree(events);
+    const think = spans.find((s) => s.node === "think")!;
+    expect(think.children[0].label).toBe("ChatOpenAI");
+  });
+});
